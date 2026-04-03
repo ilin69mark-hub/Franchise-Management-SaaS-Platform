@@ -1,0 +1,45 @@
+# Multi-stage build for frontend
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Копируем package.json
+COPY frontend/package*.json ./
+
+# Устанавливаем зависимости
+RUN npm ci
+
+# Копируем исходный код
+COPY frontend/ .
+
+# Собираем приложение
+RUN npm run build
+
+# Production stage
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+# Создаем пользователя СРАЗУ (до копирования файлов)
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
+# Копируем package.json
+COPY --chown=nextjs:nodejs frontend/package*.json ./
+
+# Устанавливаем только production зависимости
+RUN npm ci --only=production && npm cache clean --force
+
+# Копируем результат сборки СРАЗУ С НУЖНЫМИ ПРАВАМИ (это быстро)
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.js ./next.config.js
+
+# Переключаемся на пользователя
+USER nextjs
+
+EXPOSE 3000
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+CMD ["npm", "start"]

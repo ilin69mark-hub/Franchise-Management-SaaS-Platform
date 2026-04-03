@@ -1,0 +1,92 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: franchise-postgres
+    ports:
+      - "5432:5432"
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # - ./backend/migrations:/docker-entrypoint-initdb.d  # <--- ЗАКОММЕНТИРОВАНО! Это мешало GORM
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - franchise-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: franchise-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - franchise-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      target: development  # <--- ЭТО ВКЛЮЧАЕТ AIR
+    container_name: franchise-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_ADDR=redis:6379
+      - GORM_LOG_LEVEL=info
+    volumes:
+      - ./backend:/app  # <--- ЭТОТ VOLUME СВЯЗЫВАЕТ ВАШ КОД С КОНТЕЙНЕРОМ
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - franchise-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: saas-b2b-b2c-frontend
+    container_name: franchise-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - franchise-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  franchise-network:
+    driver: bridge

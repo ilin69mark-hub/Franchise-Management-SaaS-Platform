@@ -1,0 +1,10 @@
+jwt_secret: CHANGE_ME_JWT_SECRET
+db_host: franchise-postgres
+db_port: 5432
+db_user: postgres
+db_password: postgres
+db_name: franchise_db
+port: 8080
+cors_allowed_origins:
+  - "http://localhost:3000"
+log_level: info

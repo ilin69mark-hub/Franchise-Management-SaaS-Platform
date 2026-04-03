@@ -1,0 +1,132 @@
+{
+	"id": "4486442a-c866-40ae-9c9d-78e7de99810d",
+	"name": "Франчайзер (Клиент)",
+	"timestamp": "2026-02-21T19:40:42.801Z",
+	"collection_id": "fc19e573-cd86-47f3-9241-527c43c33084",
+	"folder_id": 0,
+	"environment_id": "06e7ce60-cc66-453d-9451-ff0b15ed00f8",
+	"totalPass": 0,
+	"delay": 0,
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-02-21T19:40:39.774Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "e7a5e120-26e9-45ba-ba04-65b6a00ebea0",
+			"name": "Вход (Логин)",
+			"url": "http://localhost:8080/api/v1/auth/login",
+			"time": 82,
+			"responseCode": {
+				"code": 401,
+				"name": "Unauthorized"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				82
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "b41a56a6-fa8e-440c-a91e-3877020fdb99",
+			"name": "Список уведомлений",
+			"url": "http://localhost:8080/api/v1/notifications",
+			"time": 4,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "f9ae62e8-6be0-419c-b325-b8b8a0a4956a",
+			"name": "Прочитать все",
+			"url": "http://localhost:8080/api/v1/notifications/read-all",
+			"time": 4,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "4f7c8e8d-0b10-4108-bfb9-85913360c765",
+			"name": "Статус оплаты",
+			"url": "http://localhost:8080/api/v1/admin/tenants/payments",
+			"time": 4,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "3f5217a6-f356-4c37-8f37-46090e9b81ad",
+			"name": "Продлить подписку",
+			"url": "http://localhost:8080/api/v1/admin/tenants/",
+			"time": 3,
+			"responseCode": {
+				"code": 404,
+				"name": "Not Found"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				3
+			],
+			"allTests": [
+				{}
+			]
+		}
+	],
+	"count": 1,
+	"totalTime": 97,
+	"collection": {
+		"requests": [
+			{
+				"id": "e7a5e120-26e9-45ba-ba04-65b6a00ebea0",
+				"method": "POST"
+			},
+			{
+				"id": "b41a56a6-fa8e-440c-a91e-3877020fdb99",
+				"method": "GET"
+			},
+			{
+				"id": "f9ae62e8-6be0-419c-b325-b8b8a0a4956a",
+				"method": "POST"
+			},
+			{
+				"id": "4f7c8e8d-0b10-4108-bfb9-85913360c765",
+				"method": "GET"
+			},
+			{
+				"id": "3f5217a6-f356-4c37-8f37-46090e9b81ad",
+				"method": "PUT"
+			}
+		]
+	}
+}

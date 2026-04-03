@@ -1,0 +1,330 @@
+{
+	"id": "4e1f4417-3a08-4291-8368-67405ee68204",
+	"name": "Franchise SaaS API",
+	"timestamp": "2026-02-21T18:56:55.242Z",
+	"collection_id": "038d5629-b922-4b57-86cb-c0e0e9d5c01d",
+	"folder_id": 0,
+	"environment_id": "06e7ce60-cc66-453d-9451-ff0b15ed00f8",
+	"totalPass": 0,
+	"delay": 0,
+	"persist": true,
+	"status": "finished",
+	"startedAt": "2026-02-21T18:56:52.465Z",
+	"totalFail": 0,
+	"results": [
+		{
+			"id": "f5c4a1dd-17c0-4e78-9b26-202606330532",
+			"name": "Login (Admin)",
+			"url": "http://localhost:8080/api/v1/auth/login",
+			"time": 73,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				73
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "fdc05379-18f9-4c07-90d9-875929a77c03",
+			"name": "Login (User)",
+			"url": "http://localhost:8080/api/v1/auth/login",
+			"time": 73,
+			"responseCode": {
+				"code": 401,
+				"name": "Unauthorized"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				73
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "8a706974-3200-4364-99ae-e09068699977",
+			"name": "Get Profile (Me)",
+			"url": "http://localhost:8080/api/v1/auth/me",
+			"time": 5,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				5
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "4ef41437-54f4-40b8-9e0f-9c4742763cb2",
+			"name": "Get Stats",
+			"url": "http://localhost:8080/api/v1/admin/stats",
+			"time": 7,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				7
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "9d930719-7b90-4724-b5fd-8885d5773d36",
+			"name": "Get All Tenants",
+			"url": "http://localhost:8080/api/v1/admin/tenants",
+			"time": 6,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				6
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "953e4740-4c85-494d-a5aa-f95c0e38f90e",
+			"name": "Create Tenant",
+			"url": "http://localhost:8080/api/v1/admin/tenants",
+			"time": 186,
+			"responseCode": {
+				"code": 201,
+				"name": "Created"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				186
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "d837050b-e1ae-44df-8d00-ff98af39023c",
+			"name": "Get All Plans",
+			"url": "http://localhost:8080/api/v1/admin/plans",
+			"time": 4,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "6c2cbb35-b992-4216-9a17-de17a41b1577",
+			"name": "Create Plan",
+			"url": "http://localhost:8080/api/v1/admin/plans",
+			"time": 36,
+			"responseCode": {
+				"code": 201,
+				"name": "Created"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				36
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "237ffc26-8473-473f-8409-c18a4d8dc6a8",
+			"name": "Get All Checklists",
+			"url": "http://localhost:8080/api/v1/checklists",
+			"time": 5,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				5
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "a9729708-22bf-4070-b504-cdc0402880d8",
+			"name": "Create Checklist",
+			"url": "http://localhost:8080/api/v1/checklists",
+			"time": 39,
+			"responseCode": {
+				"code": 201,
+				"name": "Created"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				39
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "c8d231c3-0392-405e-a80f-a7eeee50159f",
+			"name": "Get Payments Status (Dynamic List)",
+			"url": "http://localhost:8080/api/v1/admin/tenants/payments",
+			"time": 5,
+			"responseCode": {
+				"code": 200,
+				"name": "OK"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				5
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "0c4237c2-5358-49dd-b6ba-a733d1d51149",
+			"name": "Update Tenant (Extend Subscription)",
+			"url": "http://localhost:8080/api/v1/admin/tenants/null",
+			"time": 4,
+			"responseCode": {
+				"code": 500,
+				"name": "Internal Server Error"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "a4b0a5a7-d283-47f3-9f99-0615cf41642f",
+			"name": "Get My Notifications",
+			"url": "http://localhost:8080/api/v1/notifications",
+			"time": 4,
+			"responseCode": {
+				"code": 500,
+				"name": "Internal Server Error"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				4
+			],
+			"allTests": [
+				{}
+			]
+		},
+		{
+			"id": "4d29064f-cc1a-4cf2-be5b-1034db24d5b2",
+			"name": "Mark All as Read",
+			"url": "http://localhost:8080/api/v1/notifications/read-all",
+			"time": 6,
+			"responseCode": {
+				"code": 500,
+				"name": "Internal Server Error"
+			},
+			"tests": {},
+			"testPassFailCounts": {},
+			"times": [
+				6
+			],
+			"allTests": [
+				{}
+			]
+		}
+	],
+	"count": 1,
+	"totalTime": 453,
+	"collection": {
+		"requests": [
+			{
+				"id": "f5c4a1dd-17c0-4e78-9b26-202606330532",
+				"method": "POST"
+			},
+			{
+				"id": "fdc05379-18f9-4c07-90d9-875929a77c03",
+				"method": "POST"
+			},
+			{
+				"id": "8a706974-3200-4364-99ae-e09068699977",
+				"method": "GET"
+			},
+			{
+				"id": "4ef41437-54f4-40b8-9e0f-9c4742763cb2",
+				"method": "GET"
+			},
+			{
+				"id": "9d930719-7b90-4724-b5fd-8885d5773d36",
+				"method": "GET"
+			},
+			{
+				"id": "953e4740-4c85-494d-a5aa-f95c0e38f90e",
+				"method": "POST"
+			},
+			{
+				"id": "d837050b-e1ae-44df-8d00-ff98af39023c",
+				"method": "GET"
+			},
+			{
+				"id": "6c2cbb35-b992-4216-9a17-de17a41b1577",
+				"method": "POST"
+			},
+			{
+				"id": "237ffc26-8473-473f-8409-c18a4d8dc6a8",
+				"method": "GET"
+			},
+			{
+				"id": "a9729708-22bf-4070-b504-cdc0402880d8",
+				"method": "POST"
+			},
+			{
+				"id": "c8d231c3-0392-405e-a80f-a7eeee50159f",
+				"method": "GET"
+			},
+			{
+				"id": "0c4237c2-5358-49dd-b6ba-a733d1d51149",
+				"method": "PUT"
+			},
+			{
+				"id": "a4b0a5a7-d283-47f3-9f99-0615cf41642f",
+				"method": "GET"
+			},
+			{
+				"id": "4d29064f-cc1a-4cf2-be5b-1034db24d5b2",
+				"method": "POST"
+			}
+		]
+	}
+}

@@ -1,0 +1,48 @@
+# === СТАДИЯ 1: DEVELOPMENT (с AIR) ===
+FROM golang:1.24-alpine AS development
+
+WORKDIR /app
+
+# === ИСПРАВЛЕНО: Новый адрес репозитория ===
+RUN go install github.com/air-verse/air@v1.52.3
+
+# Копируем зависимости
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+# Копируем весь код бэкенда
+COPY backend/ .
+
+# Копируем конфиг Air
+COPY backend/.air.toml .
+
+# Запускаем Air
+CMD ["air", "-c", ".air.toml"]
+
+
+# === СТАДИЯ 2: BUILDER (для продакшена) ===
+FROM golang:1.24-alpine AS builder
+
+RUN apk add --no-cache git
+WORKDIR /app
+
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ .
+COPY config.yaml .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/server/main.go
+
+
+# === СТАДИЯ 3: PRODUCTION (финальный образ) ===
+FROM alpine:latest AS production
+
+WORKDIR /root/
+
+COPY --from=builder /app/main /root/main
+COPY --from=builder /app/config.yaml /root/config.yaml
+
+EXPOSE 8080
+
+CMD ["./main"]

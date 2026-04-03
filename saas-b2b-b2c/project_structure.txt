@@ -1,0 +1,37 @@
+
+C:\Users\asus\Desktop\saas\saas-b2b-b2c
+├── 1
+├── admin_stage1_final.json
+├── APIDOCS.md
+├── backend
+├── config.yaml
+├── docker-compose.dev.yml
+├── docker-compose.yml
+├── Dockerfile.backend
+├── Dockerfile.frontend
+├── env.local
+├── Franchise SaaS API.postman_test_run.json
+├── frontend
+├── go.mod
+├── go.sum
+├── logs.txt
+├── make.zip
+├── Makefile
+├── nginx.conf
+├── node_modules
+├── package-lock.json
+├── package.json
+├── postman-collection franchiser HR.json
+├── postman-collection_admin.json
+├── postman-collection_Franchiser.json
+├── project_structure.txt
+├── README.md
+├── structure.txt
+├── [frontend
+└── Франчайзер (Клиент).postman_test_run.json
+
+directory: 3 file: 26
+
+
+
+[2K[1G

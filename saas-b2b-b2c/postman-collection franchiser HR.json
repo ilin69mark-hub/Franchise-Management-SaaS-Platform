@@ -1,0 +1,116 @@
+{
+    "info": {
+        "_postman_id": "hr-module-rus",
+        "name": "HR Модуль (Франчайзер)",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Авторизация (Франчайзер)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "var jsonData = pm.response.json();",
+                            "pm.test(\"Статус 200\", function () { pm.response.to.have.status(200); });",
+                            "if (jsonData.token) { pm.collectionVariables.set(\"token\", jsonData.token); }",
+                            "if (jsonData.user && jsonData.user.tenant_id) { pm.collectionVariables.set(\"tenant_id\", jsonData.user.tenant_id); }"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"email\": \"client@test.com\",\n    \"password\": \"123456789\"\n}",
+                    "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/v1/auth/login",
+                    "host": ["{{base_url}}"],
+                    "path": ["api", "v1", "auth", "login"]
+                }
+            }
+        },
+        {
+            "name": "2. Список сотрудников",
+            "request": {
+                "method": "GET",
+                "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/users",
+                    "host": ["{{base_url}}"],
+                    "path": ["api", "v1", "users"]
+                }
+            }
+        },
+        {
+            "name": "3. Создать сотрудника (Менеджер)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "var jsonData = pm.response.json();",
+                            "if (jsonData.id) { pm.collectionVariables.set(\"employee_id\", jsonData.id); }"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"email\": \"new.manager@test.com\",\n    \"password\": \"password123\",\n    \"first_name\": \"Иван\",\n    \"last_name\": \"Менеджер\",\n    \"role\": \"franchiser_manager\"\n}",
+                    "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/v1/users",
+                    "host": ["{{base_url}}"],
+                    "path": ["api", "v1", "users"]
+                }
+            }
+        },
+        {
+            "name": "4. Редактировать сотрудника",
+            "request": {
+                "method": "PUT",
+                "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"first_name\": \"Иван Обновленный\"\n}",
+                    "options": { "raw": { "language": "json" } }
+                },
+                "url": {
+                    "raw": "{{base_url}}/api/v1/users/{{employee_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["api", "v1", "users", "{{employee_id}}"]
+                }
+            }
+        },
+        {
+            "name": "5. Удалить сотрудника",
+            "request": {
+                "method": "DELETE",
+                "header": [ { "key": "Authorization", "value": "Bearer {{token}}" } ],
+                "url": {
+                    "raw": "{{base_url}}/api/v1/users/{{employee_id}}",
+                    "host": ["{{base_url}}"],
+                    "path": ["api", "v1", "users", "{{employee_id}}"]
+                }
+            }
+        }
+    ],
+    "variable": [
+        { "key": "base_url", "value": "http://localhost:8080" },
+        { "key": "token", "value": "" },
+        { "key": "tenant_id", "value": "" },
+        { "key": "employee_id", "value": "" }
+    ]
+}

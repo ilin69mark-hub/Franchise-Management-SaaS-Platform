@@ -1,0 +1,276 @@
+{
+    "info": {
+        "_postman_id": "stage-1-final-tests",
+        "name": "SaaS Stage 1: Full Check",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "0. Health Check",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Status is OK', () => pm.response.to.have.status(200));",
+                            "const json = pm.response.json();",
+                            "pm.test('Memory is stable', () => pm.expect(json.memory_mb).to.be.below(500));"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{base_url}}/../health",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "1. Create Plan",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Plan created', () => pm.response.to.have.status(201));",
+                            "const json = pm.response.json();",
+                            "pm.collectionVariables.set('plan_id', json.id);"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}",
+                        "type": "text"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Test Plan\",\n    \"price\": 5000,\n    \"max_users\": 10\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/admin/plans",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "2. Create Tenant (Network)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Tenant created', () => pm.response.to.have.status(201));",
+                            "const json = pm.response.json();",
+                            "pm.collectionVariables.set('tenant_id', json.id);"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Test Network\",\n    \"plan_id\": \"{{plan_id}}\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/admin/tenants",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "3. Create Invoice (MRR)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "pm.test('Invoice created', () => pm.response.to.have.status(201));",
+                            "const json = pm.response.json();",
+                            "pm.collectionVariables.set('invoice_id', json.id);"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"tenant_id\": \"{{tenant_id}}\",\n    \"amount\": 5000,\n    \"description\": \"Monthly subscription\",\n    \"due_date\": \"2025-12-31\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/admin/invoices",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "4. Pay Invoice",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/invoices/{{invoice_id}}/pay",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "5. Check Stats (Verify MRR)",
+            "event": [
+                {
+                    "listen": "test",
+                    "script": {
+                        "exec": [
+                            "const json = pm.response.json();",
+                            "pm.test('MRR is 5000', () => pm.expect(json.mrr).to.eql(5000));"
+                        ],
+                        "type": "text/javascript"
+                    }
+                }
+            ],
+            "request": {
+                "method": "GET",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/stats",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "6. Update Plan",
+            "request": {
+                "method": "PUT",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n    \"name\": \"Updated Plan\",\n    \"price\": 6000,\n    \"max_users\": 15\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                },
+                "url": {
+                    "raw": "{{base_url}}/admin/plans/{{plan_id}}",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "7. Delete Tenant (Soft Delete)",
+            "request": {
+                "method": "DELETE",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/tenants/{{tenant_id}}",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        },
+        {
+            "name": "8. Delete Plan",
+            "request": {
+                "method": "DELETE",
+                "header": [
+                    {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                    }
+                ],
+                "url": {
+                    "raw": "{{base_url}}/admin/plans/{{plan_id}}",
+                    "host": [
+                        "{{base_url}}"
+                    ]
+                }
+            },
+            "response": []
+        }
+    ]
+}

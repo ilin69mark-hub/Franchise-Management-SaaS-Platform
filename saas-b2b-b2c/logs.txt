@@ -1,0 +1,9 @@
+2026/02/16 09:56:41 📁 Current working directory: /root
+2026/02/16 09:56:41 📄 Files in current directory:
+2026/02/16 09:56:41    - config.yaml (288 bytes)
+2026/02/16 09:56:41    - main (36880270 bytes)
+2026/02/16 09:56:41 🔧 Loading DB config...
+2026/02/16 09:56:41 ✅ Successfully connected to database
+2026/02/16 09:56:41 🔧 [AuthService] Initializing...
+2026/02/16 09:56:41 🚀 Server started on port 8080
+^C
