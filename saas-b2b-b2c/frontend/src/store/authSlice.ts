@@ -20,34 +20,38 @@ const initialState: AuthState = {
   error: null,
 };
 
-// === АСИНХРОННЫЕ THUNK ===
-
+/* ---------- Асинхронные Thunk‑ы ---------- */
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials: { email: string; password: string }, { rejectWithValue }) => {
+  async (
+    credentials: { email: string; password: string },
+    { rejectWithValue },
+  ) => {
     try {
       const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
       return response.data;
     } catch (err: any) {
       return rejectWithValue(err.response?.data?.error || 'Ошибка входа');
     }
-  }
+  },
 );
 
 export const register = createAsyncThunk(
   'auth/register',
-  async (userData: { email: string; password: string; role?: string }, { rejectWithValue }) => {
+  async (
+    userData: { email: string; password: string; role?: string },
+    { rejectWithValue },
+  ) => {
     try {
       const response = await apiClient.post<AuthResponse>('/auth/register', userData);
       return response.data;
     } catch (err: any) {
       return rejectWithValue(err.response?.data?.error || 'Ошибка регистрации');
     }
-  }
+  },
 );
 
-// === SLICE ===
-
+/* ---------- Слайс ---------- */
 const authSlice = createSlice({
   name: 'auth',
   initialState,
@@ -61,52 +65,61 @@ const authSlice = createSlice({
       if (typeof window !== 'undefined') {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('user');
+        localStorage.removeItem('id');
+        localStorage.removeItem('role');
         localStorage.removeItem('reduxState');
       }
     },
     setAuthFromStorage: (state) => {
-        if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('accessToken');
-            const user = localStorage.getItem('user');
-            if (token && user) {
-                state.accessToken = token;
-                state.user = JSON.parse(user);
-                state.isAuthenticated = true;
-            }
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('accessToken');
+        const userStr = localStorage.getItem('user');
+        const id = localStorage.getItem('id');
+        const role = localStorage.getItem('role');
+        if (token && userStr) {
+          state.accessToken = token;
+          state.user = JSON.parse(userStr);
+          state.isAuthenticated = true;
+          // Если id/role есть в хранилище – восстанавливаем их в state
+          if (id) (state.user as any).id = id;
+          if (role) (state.user as any).role = role;
         }
-    }
+      }
+    },
   },
+
   extraReducers: (builder) => {
-    // Login
+    /* ---------- Login ---------- */
     builder.addCase(login.pending, (state) => {
       state.loading = true;
       state.error = null;
     });
-    builder.addCase(login.fulfilled, (state, action) => {
+    builder.addCase(login.fulfilled, (state, { payload }) => {
       state.loading = false;
       state.isAuthenticated = true;
-      
-      // ОТЛАДКА: Смотрим весь ответ от сервера
-      console.log('Login response payload:', action.payload);
 
-      // Приводим к any, чтобы обойти строгую типизацию
-      const payload: any = action.payload;
-      
-      // Ищем токен в разных форматах
-      const token = payload.Token || payload.accessToken || payload.token;
-      const refresh = payload.RefreshToken || payload.refreshToken || payload.refresh_token;
+      // Payload может быть в разных формах – приводим к any
+      const data: any = payload;
+
+      // Токены могут быть `token` / `accessToken` / `Token`
+      const token = data.Token || data.accessToken || data.token;
+      const refresh = data.RefreshToken || data.refreshToken || data.refresh_token;
 
       if (token) {
         state.accessToken = token;
         state.refreshToken = refresh || null;
-        state.user = payload.user;
+        state.user = data.user;
 
         if (typeof window !== 'undefined') {
           localStorage.setItem('accessToken', token);
-          localStorage.setItem('user', JSON.stringify(payload.user));
+          localStorage.setItem('user', JSON.stringify(data.user));
+
+          // **Сохраняем id и role в localStorage**
+          if (data.user?.id) localStorage.setItem('id', data.user.id);
+          if (data.user?.role) localStorage.setItem('role', data.user.role);
         }
       } else {
-        console.error('Token not found in response!', payload);
+        console.error('Token not found in login response', payload);
         state.error = 'Ошибка авторизации: токен не получен';
         state.isAuthenticated = false;
       }
@@ -116,23 +129,36 @@ const authSlice = createSlice({
       state.error = action.payload as string;
     });
 
-    // Register
+    /* ---------- Register ---------- */
     builder.addCase(register.pending, (state) => {
       state.loading = true;
       state.error = null;
     });
-    builder.addCase(register.fulfilled, (state, action) => {
+    builder.addCase(register.fulfilled, (state, { payload }) => {
       state.loading = false;
       state.isAuthenticated = true;
-      
-      const payload: any = action.payload;
-      const token = payload.Token || payload.accessToken || payload.token;
-      const refresh = payload.RefreshToken || payload.refreshToken;
+
+      const data: any = payload;
+      const token = data.Token || data.accessToken || data.token;
+      const refresh = data.RefreshToken || data.refreshToken || data.refresh_token;
 
       if (token) {
         state.accessToken = token;
         state.refreshToken = refresh || null;
-        state.user = payload.user;
+        state.user = data.user;
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('accessToken', token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+
+          // **Сохраняем id и role после регистрации**
+          if (data.user?.id) localStorage.setItem('id', data.user.id);
+          if (data.user?.role) localStorage.setItem('role', data.user.role);
+        }
+      } else {
+        console.error('Token not found in register response', payload);
+        state.error = 'Ошибка регистрации: токен не получен';
+        state.isAuthenticated = false;
       }
     });
     builder.addCase(register.rejected, (state, action) => {
