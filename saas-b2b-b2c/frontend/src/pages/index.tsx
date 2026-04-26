@@ -37,8 +37,8 @@ const DashboardPage: React.FC = () => {
     return null;
   }
 
-  if (user.role === 'franchiser' || user.role === 'franchiser_manager') {
-    const title = user.role === 'franchiser' ? 'Личный кабинет Франчайзера' : 'Личный кабинет Менеджера';
+  if (user.role === 'franchiser') {
+    const title = 'Личный кабинет Франчайзера';
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>{title}</title></Head>
@@ -50,11 +50,35 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Роутинг для Менеджера Салона
+  if (user.role === 'franchiser_manager') {
+    const title = 'Личный кабинет Менеджера';
+    return (
+      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+        <Head><title>{title}</title></Head>
+        <Header />
+        <Content style={{ padding: 0 }}>
+          <FranchiserDashboard user={user} title={title} />
+        </Content>
+      </Layout>
+    );
+  }
+
+  if (user.role === 'dealer') {
+    return (
+      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+        <Head><title>Личный кабинет дилера</title></Head>
+        <Header />
+        <Content style={{ padding: 0 }}>
+          <DealerDashboard user={user} title="Личный кабинет дилера" />
+        </Content>
+      </Layout>
+    );
+  }
+
   if (user.role === 'salon_manager') {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-        <Head><title>Личный кабинет  менеджера салона</title></Head>
+        <Head><title>Личный кабинет менеджера салона</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>
           <SalonManagerDashboard user={user} title="Личный кабинет менеджера салона" />
@@ -63,13 +87,12 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  // Для Дилера
   return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <Head><title>Личный кабинет дилера</title></Head>
+      <Head><title>Франчайзинг</title></Head>
       <Header />
       <Content style={{ padding: 0 }}>
-        <DealerDashboard user={user} title="Личный кабинет дилера" />
+        <FranchiserDashboard user={user} title="Панель управления" />
       </Content>
     </Layout>
   );

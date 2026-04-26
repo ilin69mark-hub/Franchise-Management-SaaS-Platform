@@ -1,11 +1,17 @@
-// src/store/index.ts
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
 import checklistReducer from './checklistSlice';
-// ИМПОРТИРУЕМ API SLICE
-import { apiSlice } from '@/services/api';
 
-// Безопасная обертка для localStorage (для SSR в Next.js)
+// ------------------------------------------------------------------
+//  RTK‑Query‑сервисы
+// ------------------------------------------------------------------
+import { apiSlice } from '@/services/api';          // общий API‑slice
+import { planApi } from '@/services/planApi';      // сервис тарифных планов
+import { goalApi } from '@/services/goalApi';      // <-- НОВОЕ: сервис целей (Goal)
+
+/* -----------------------------------------------------------------
+   Безопасная обертка localStorage (для SSR в Next.js)
+----------------------------------------------------------------- */
 const safeLocalStorage = {
   getItem: (key: string) => {
     if (typeof window === 'undefined') return null;
@@ -31,7 +37,7 @@ const safeLocalStorage = {
     } catch (error) {
       console.error('Error removing from localStorage', error);
     }
-  }
+  },
 };
 
 const loadState = () => {
@@ -40,8 +46,8 @@ const loadState = () => {
     if (!serializedState) return undefined;
     const parsed = JSON.parse(serializedState);
     if (!parsed || typeof parsed !== 'object') {
-        safeLocalStorage.removeItem('reduxState');
-        return undefined;
+      safeLocalStorage.removeItem('reduxState');
+      return undefined;
     }
     return parsed;
   } catch (err) {
@@ -53,21 +59,29 @@ const loadState = () => {
 
 const preloadedState = loadState();
 
+/* -----------------------------------------------------------------
+   Store
+----------------------------------------------------------------- */
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     checklist: checklistReducer,
-    // ДОБАВЛЯЕМ РЕДЮСЕР API
+    // RTK‑Query‑сервисы
     [apiSlice.reducerPath]: apiSlice.reducer,
+    [planApi.reducerPath]: planApi.reducer,
+    [goalApi.reducerPath]: goalApi.reducer,   // <-- НОВОЕ
   },
-  // ДОБАВЛЯЕМ MIDDLEWARE ДЛЯ RTK QUERY (ОБЯЗАТЕЛЬНО!)
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat(apiSlice.middleware),
-    
+    getDefaultMiddleware()
+      .concat(apiSlice.middleware)
+      .concat(planApi.middleware)
+      .concat(goalApi.middleware),            // <-- НОВОЕ
   preloadedState,
 });
 
-// Подписка на изменения
+/* -----------------------------------------------------------------
+   Сохранение части state в localStorage (auth‑данные)
+----------------------------------------------------------------- */
 if (typeof window !== 'undefined') {
   store.subscribe(() => {
     try {
@@ -79,7 +93,7 @@ if (typeof window !== 'undefined') {
             accessToken: state.auth.accessToken,
             refreshToken: state.auth.refreshToken,
             isAuthenticated: state.auth.isAuthenticated,
-          }
+          },
         });
         safeLocalStorage.setItem('reduxState', serializedState);
       }
@@ -89,5 +103,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/* -----------------------------------------------------------------
+   Types
+----------------------------------------------------------------- */
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

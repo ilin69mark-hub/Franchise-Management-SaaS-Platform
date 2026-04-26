@@ -14,41 +14,65 @@ import {
 export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
-    baseUrl: 'http://localhost:8080/api/v1',
+    // Берём URL из env‑переменной (для Docker – имя сервиса `backend`);
+    // fallback – localhost:8080 (для локального старта без Docker)
+    baseUrl: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1`,
     prepareHeaders: (headers, { getState }) => {
+      // Пытаемся взять токен из Redux‑стора
       let token = (getState() as any).auth?.accessToken;
 
+      // Если в сторе ничего, ищем в localStorage (на случай полной перезагрузки)
       if (!token && typeof window !== 'undefined') {
         const storedState = localStorage.getItem('reduxState');
         if (storedState) {
-            try {
-                const parsed = JSON.parse(storedState);
-                token = parsed?.auth?.accessToken;
-            } catch (e) {
-                console.error('Error parsing token', e);
-            }
+          try {
+            const parsed = JSON.parse(storedState);
+            token = parsed?.auth?.accessToken;
+          } catch (e) {
+            console.error('Error parsing reduxState from localStorage', e);
+          }
         }
       }
 
       if (token) {
-        headers.set('authorization', `Bearer ${token}`);
+        headers.set('Authorization', `Bearer ${token}`);
       }
       return headers;
     },
   }),
-  tagTypes: ['User', 'Checklist', 'Lead', 'Dealer', 'Auth', 'Employee', 'Notification', 'Salon'],
+  tagTypes: [
+    'User',
+    'Checklist',
+    'Lead',
+    'Dealer',
+    'Auth',
+    'Employee',
+    'Notification',
+    'Salon',
+  ],
   endpoints: (builder) => ({
     // === АВТОРИЗАЦИЯ ===
     login: builder.mutation<AuthResponse, LoginRequest>({
-      query: (credentials) => ({ url: '/auth/login', method: 'POST', body: credentials }),
+      query: (credentials) => ({
+        url: '/auth/login',
+        method: 'POST',
+        body: credentials,
+      }),
       invalidatesTags: ['Auth'],
     }),
     register: builder.mutation<AuthResponse, RegisterRequest>({
-      query: (userData) => ({ url: '/auth/register', method: 'POST', body: userData }),
+      query: (userData) => ({
+        url: '/auth/register',
+        method: 'POST',
+        body: userData,
+      }),
       invalidatesTags: ['Auth'],
     }),
     logout: builder.mutation<void, void>({
-      query: () => ({ url: '/auth/logout', method: 'POST' }),
+      query: () => ({
+        url: '/auth/logout',
+        method: 'POST',
+      }),
     }),
     getProfile: builder.query<User, void>({
       query: () => '/auth/me',
@@ -58,38 +82,59 @@ export const apiSlice = createApi({
     // === УВЕДОМЛЕНИЯ ===
     getNotifications: builder.query<any[], void>({
       query: () => '/notifications',
-      providesTags: ['Notification'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Notification' as const, id })), 'Notification'] : ['Notification'],
     }),
     readNotification: builder.mutation<void, string>({
-      query: (id) => ({ url: `/notifications/${id}/read`, method: 'POST' }),
+      query: (id) => ({
+        url: `/notifications/${id}/read`,
+        method: 'POST',
+      }),
       invalidatesTags: ['Notification'],
     }),
 
-    // === ЧЕК-ЛИСТЫ ===
+    // === ЧЕК‑ЛИСТЫ ===
     getChecklists: builder.query<Checklist[], void>({
       query: () => '/checklists',
-      providesTags: (result) => result ? [...result.map(({ id }) => ({ type: 'Checklist' as const, id })), 'Checklist'] : ['Checklist'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Checklist' as const, id })), 'Checklist'] : ['Checklist'],
     }),
     createChecklist: builder.mutation<Checklist, Omit<Checklist, 'id'>>({
-      query: (newChecklist) => ({ url: '/checklists', method: 'POST', body: newChecklist }),
+      query: (newChecklist) => ({
+        url: '/checklists',
+        method: 'POST',
+        body: newChecklist,
+      }),
       invalidatesTags: ['Checklist'],
     }),
     updateChecklist: builder.mutation<Checklist, Partial<Checklist> & Pick<Checklist, 'id'>>({
-      query: ({ id, ...patch }) => ({ url: `/checklists/${id}`, method: 'PUT', body: patch }),
+      query: ({ id, ...patch }) => ({
+        url: `/checklists/${id}`,
+        method: 'PUT',
+        body: patch,
+      }),
       invalidatesTags: (result, error, { id }) => [{ type: 'Checklist', id }],
     }),
     deleteChecklist: builder.mutation<void, string>({
-      query: (id) => ({ url: `/checklists/${id}`, method: 'DELETE' }),
+      query: (id) => ({
+        url: `/checklists/${id}`,
+        method: 'DELETE',
+      }),
       invalidatesTags: ['Checklist'],
     }),
 
     // === ЛИДЫ ===
     getLeads: builder.query<Lead[], void>({
       query: () => '/leads',
-      providesTags: (result) => result ? [...result.map(({ id }) => ({ type: 'Lead' as const, id })), 'Lead'] : ['Lead'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Lead' as const, id })), 'Lead'] : ['Lead'],
     }),
     createLead: builder.mutation<Lead, Omit<Lead, 'id'>>({
-      query: (newLead) => ({ url: '/leads', method: 'POST', body: newLead }),
+      query: (newLead) => ({
+        url: '/leads',
+        method: 'POST',
+        body: newLead,
+      }),
       invalidatesTags: ['Lead'],
     }),
     updateLeadStatus: builder.mutation<void, { id: string; status: string }>({
@@ -112,72 +157,113 @@ export const apiSlice = createApi({
     // === ДИЛЕРЫ ===
     getDealers: builder.query<Dealer[], void>({
       query: () => '/dealers',
-      providesTags: (result) => result ? [...result.map(({ id }) => ({ type: 'Dealer' as const, id })), 'Dealer'] : ['Dealer'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Dealer' as const, id })), 'Dealer'] : ['Dealer'],
     }),
 
     // === СОТРУДНИКИ (HR) ===
     getEmployees: builder.query<Employee[], void>({
       query: () => '/users',
-      providesTags: (result) => result ? [...result.map(({ id }) => ({ type: 'Employee' as const, id })), 'Employee'] : ['Employee'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Employee' as const, id })), 'Employee'] : ['Employee'],
     }),
     createEmployee: builder.mutation<Employee, Partial<Employee> & { password: string }>({
-      query: (newEmployee) => ({ url: '/users', method: 'POST', body: newEmployee }),
+      query: (newEmployee) => ({
+        url: '/users',
+        method: 'POST',
+        body: newEmployee,
+      }),
       invalidatesTags: ['Employee'],
     }),
     updateEmployee: builder.mutation<Employee, Partial<Employee> & Pick<Employee, 'id'>>({
-      query: ({ id, ...patch }) => ({ url: `/users/${id}`, method: 'PUT', body: patch }),
+      query: ({ id, ...patch }) => ({
+        url: `/users/${id}`,
+        method: 'PUT',
+        body: patch,
+      }),
       invalidatesTags: (result, error, { id }) => [{ type: 'Employee', id }],
     }),
     deleteEmployee: builder.mutation<void, string>({
-      query: (id) => ({ url: `/users/${id}`, method: 'DELETE' }),
+      query: (id) => ({
+        url: `/users/${id}`,
+        method: 'DELETE',
+      }),
       invalidatesTags: ['Employee'],
     }),
 
     // === САЛОНЫ ===
     getSalons: builder.query<Salon[], void>({
       query: () => '/salons',
-      providesTags: (result) => result ? [...result.map(({ id }) => ({ type: 'Salon' as const, id })), 'Salon'] : ['Salon'],
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'Salon' as const, id })), 'Salon'] : ['Salon'],
     }),
     createSalon: builder.mutation<Salon, { name: string; address: string }>({
-      query: (newSalon) => ({ url: '/salons', method: 'POST', body: newSalon }),
+      query: (newSalon) => ({
+        url: '/salons',
+        method: 'POST',
+        body: newSalon,
+      }),
       invalidatesTags: ['Salon'],
     }),
     assignManager: builder.mutation<void, { user_id: string; salon_id: string }>({
-      query: (body) => ({ url: '/salons/assign', method: 'POST', body }),
-      invalidatesTags: ['Employee', 'Salon'], // ВАЖНО: Сбрасываем кэш салонов и сотрудников
+      query: (body) => ({
+        url: '/salons/assign',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Employee', 'Salon'],
     }),
     updateSalon: builder.mutation<Salon, { id: string; data: { name: string; address: string } }>({
-      query: ({ id, data }) => ({ url: `/salons/${id}`, method: 'PUT', body: data }),
+      query: ({ id, data }) => ({
+        url: `/salons/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
       invalidatesTags: (result, error, { id }) => [{ type: 'Salon', id }],
     }),
     deleteSalon: builder.mutation<void, string>({
-      query: (id) => ({ url: `/salons/${id}`, method: 'DELETE' }),
+      query: (id) => ({
+        url: `/salons/${id}`,
+        method: 'DELETE',
+      }),
       invalidatesTags: ['Salon'],
     }),
   }),
 });
 
-
 export const {
+  // auth
   useLoginMutation,
   useRegisterMutation,
   useLogoutMutation,
   useGetProfileQuery,
+
+  // notifications
   useGetNotificationsQuery,
   useReadNotificationMutation,
+
+  // checklists
   useGetChecklistsQuery,
   useCreateChecklistMutation,
   useUpdateChecklistMutation,
   useDeleteChecklistMutation,
+
+  // leads
   useGetLeadsQuery,
   useCreateLeadMutation,
+  useUpdateLeadStatusMutation,
+  useAddLeadActivityMutation,
+
+  // dealers
   useGetDealersQuery,
+
+  // employees
   useGetEmployeesQuery,
   useCreateEmployeeMutation,
   useUpdateEmployeeMutation,
   useDeleteEmployeeMutation,
-  useUpdateLeadStatusMutation,
-  useAddLeadActivityMutation,
+
+  // salons
   useGetSalonsQuery,
   useCreateSalonMutation,
   useAssignManagerMutation,

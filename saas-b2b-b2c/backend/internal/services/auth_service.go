@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 
@@ -121,8 +122,10 @@ func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models
 		"exp":       time.Now().Add(time.Hour * 24).Unix(),
 	})
 
+	jti := uuid.New().String()
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID.String(),
+		"jti":     jti,
 		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(),
 	})
 
@@ -132,7 +135,7 @@ func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models
 	return accessStr, refreshStr, nil
 }
 
-// RefreshTokens - Обновление токенов
+// RefreshTokens - Обновление токенов с ротацией
 func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
 
@@ -151,6 +154,11 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 	userIDStr, ok := claims["user_id"].(string)
 	if !ok {
 		return "", "", errors.New("user_id not found in token")
+	}
+
+	tokenID, _ := claims["jti"].(string)
+	if tokenID != "" {
+		cache.RevokeRefreshToken(context.Background(), tokenID)
 	}
 
 	uid, _ := uuid.Parse(userIDStr)

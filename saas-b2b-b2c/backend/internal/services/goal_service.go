@@ -1,0 +1,105 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"franchise-saas-backend/internal/models"
+	"franchise-saas-backend/internal/repository"
+
+	"github.com/google/uuid"
+)
+
+type GoalService interface {
+	CreateGoal(ctx context.Context, dto CreateGoalDTO, assignerID, tenantID string) (*models.Goal, error)
+	GetMyGoal(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error)
+	GetVisibleGoals(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error)
+	DeleteGoal(ctx context.Context, id string) error
+}
+
+/* DTO – данные, получаемые от фронтенда */
+type CreateGoalDTO struct {
+	AssigneeID   string  `json:"assignee_id"` // ID получателя
+	Role         string  `json:"role"`         // роль получателя (franchise_manager, dealer, dealer_manager, salon_manager)
+	SalesPlan    float64 `json:"sales_plan"`
+	LeadsPlan    int     `json:"leads_plan"`
+	CallsPlan    int     `json:"calls_plan"`
+	MeetingsPlan int     `json:"meetings_plan"`
+	TargetDate   string  `json:"target_date"` // YYYY-MM-DD
+}
+
+/* Реализация */
+type goalService struct{ repo repository.GoalRepository }
+
+func NewGoalService(r repository.GoalRepository) GoalService { return &goalService{repo: r} }
+
+/* ---------- Проверка прав: кто может назначать план кому ---------- */
+func canAssign(assignerRole, assigneeRole string) bool {
+	allowed := map[string][]string{
+		"super_admin":       {"franchise_manager"},
+		"franchiser":       {"franchise_manager", "dealer", "dealer_manager", "salon_manager"},
+		"franchise_manager": {"dealer", "dealer_manager"},
+		"dealer":           {"salon_manager"},
+		"dealer_manager":   {"salon_manager"},
+	}
+	for _, r := range allowed[assignerRole] {
+		if r == assigneeRole {
+			return true
+		}
+	}
+	return false
+}
+
+/* ---------- CreateGoal ---------- */
+func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assignerID, tenantID string) (*models.Goal, error) {
+	// проверяем роль текущего пользователя (из контекста)
+	assignerRole, _ := ctx.Value("role").(string)
+	if !canAssign(assignerRole, dto.Role) {
+		return nil, errors.New("you are not allowed to assign a goal to this role")
+	}
+
+	// парсим UUID получателя
+	assigneeUUID, err := uuid.Parse(dto.AssigneeID)
+	if err != nil {
+		return nil, err
+	}
+	// парсим дату
+	td, _ := time.Parse("2006-01-02", dto.TargetDate)
+
+	// собираем модель Goal
+	goal := &models.Goal{
+		AssignerID:   uuid.MustParse(assignerID),
+		AssigneeID:   assigneeUUID,
+		Role:         dto.Role,
+		SalesPlan:    dto.SalesPlan,
+		LeadsPlan:    dto.LeadsPlan,
+		CallsPlan:    dto.CallsPlan,
+		MeetingsPlan: dto.MeetingsPlan,
+		TargetDate:   td,
+	}
+	// tenant_id (если есть)
+	if tenantID != "" {
+		tid, _ := uuid.Parse(tenantID)
+		goal.TenantID = &tid
+	}
+	if err := s.repo.Create(ctx, goal); err != nil {
+		return nil, err
+	}
+	return goal, nil
+}
+
+/* ---------- GetMyGoal – план текущего пользователя на конкретную дату ---------- */
+func (s *goalService) GetMyGoal(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error) {
+	return s.repo.GetByAssigneeAndDate(ctx, assigneeID, date)
+}
+
+/* ---------- GetVisibleGoals – список целей, которые видит пользователь ---------- */
+func (s *goalService) GetVisibleGoals(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error) {
+	return s.repo.ListVisibleForUser(ctx, userID, role, tenantID)
+}
+
+/* ---------- DeleteGoal ---------- */
+func (s *goalService) DeleteGoal(ctx context.Context, id string) error {
+	return s.repo.Delete(ctx, id)
+}

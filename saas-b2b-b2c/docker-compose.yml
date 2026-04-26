@@ -12,7 +12,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # - ./backend/migrations:/docker-entrypoint-initdb.d  # <--- ЗАКОММЕНТИРОВАНО! Это мешало GORM
+      - ./backend/migrations:/docker-entrypoint-initdb.d   # <-- теперь монтируется
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -23,16 +23,13 @@ services:
     networks:
       - franchise-network
 
+
+
   redis:
     image: redis:7-alpine
     container_name: franchise-redis
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
     networks:
       - franchise-network
@@ -41,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-      target: development  # <--- ЭТО ВКЛЮЧАЕТ AIR
+      target: development
     container_name: franchise-backend
     ports:
       - "8080:8080"
@@ -53,14 +50,15 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - JWT_SECRET=${JWT_SECRET}
-      - REDIS_ADDR=redis:6379
-      - GORM_LOG_LEVEL=info
+      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://frontend:3000}
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-admin@admin.ru}
+      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-qwerty}
     volumes:
-      - ./backend:/app  # <--- ЭТОТ VOLUME СВЯЗЫВАЕТ ВАШ КОД С КОНТЕЙНЕРОМ
+      - ./backend:/app
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -70,15 +68,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    image: saas-b2b-b2c-frontend
+      target: development
     container_name: franchise-frontend
+    stdin_open: true
+    tty: true
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://backend:8080
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     restart: unless-stopped
     networks:
       - franchise-network

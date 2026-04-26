@@ -7,15 +7,14 @@ import (
 )
 
 type Plan struct {
-	ID        uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Name      string    `json:"name" gorm:"not null"`
-	Price     float64   `json:"price"` // GORM сам сконвертирует numeric -> float64
-	MaxSalons int       `json:"max_salons"`
-	MaxUsers  int       `json:"max_users"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID  `json:"id" gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name      string     `json:"name" gorm:"size:255;not null"`
+	Price     float64    `json:"price" gorm:"type:numeric;not null"`
+	MaxSalons int        `json:"max_salons" gorm:"not null"`
+	MaxUsers  int        `json:"max_users" gorm:"not null"`
+	CreatedAt time.Time  `json:"created_at" gorm:"autoCreateTime"`
+	UpdatedAt time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
+	DeletedAt *time.Time `json:"-" gorm:"index"` // soft‑delete, не будет в JSON‑ответе
 }
 
-func (Plan) TableName() string {
-	return "plans"
-}
+func (Plan) TableName() string { return "plans" }

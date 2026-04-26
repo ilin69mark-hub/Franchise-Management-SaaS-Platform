@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: franchise-backend
+  namespace: franchise
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: franchise-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: franchise-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/REPLACE_WITH_ORG/franchise-saas/backend:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: franchise-secrets
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: franchise-config
+                  key: DB_HOST
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: franchise-backend
+  namespace: franchise
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: franchise-backend
