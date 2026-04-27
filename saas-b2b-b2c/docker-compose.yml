@@ -1,97 +1,62 @@
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: franchise-postgres
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
     ports:
-      - "5432:5432"
-    env_file:
-      - .env
+      - "3000:3000"
     environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d   # <-- теперь монтируется
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
+    depends_on:
+      - backend
     restart: unless-stopped
-    networks:
-      - franchise-network
-
-
-
-  redis:
-    image: redis:7-alpine
-    container_name: franchise-redis
-    ports:
-      - "6379:6379"
-    restart: unless-stopped
-    networks:
-      - franchise-network
 
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
       target: development
-    container_name: franchise-backend
     ports:
       - "8080:8080"
     environment:
+      - NODE_ENV=development
       - PORT=8080
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - JWT_SECRET=${JWT_SECRET}
-      - REDIS_ADDR=${REDIS_ADDR:-redis:6379}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://frontend:3000}
-      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-admin@admin.ru}
-      - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-qwerty}
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=franchise_db
+      - JWT_SECRET=CHANGE_ME_JWT_SECRET
     volumes:
       - ./backend:/app
+    command: go run cmd/server/main.go
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     restart: unless-stopped
-    networks:
-      - franchise-network
 
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-      target: development
-    container_name: franchise-frontend
-    stdin_open: true
-    tty: true
+  postgres:
+    image: postgres:15-alpine
     ports:
-      - "3000:3000"
+      - "5432:5432"
     environment:
-      - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://backend:8080
+      - POSTGRES_DB=franchise_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      backend:
-        condition: service_started
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
     restart: unless-stopped
-    networks:
-      - franchise-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
 
 volumes:
   postgres_data:
-    driver: local
-
-networks:
-  franchise-network:
-    driver: bridge

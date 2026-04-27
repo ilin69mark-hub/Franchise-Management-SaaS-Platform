@@ -21,7 +21,11 @@ func NewLeadHandler(service *services.LeadService) *LeadHandler {
 
 // GetMyLeads получает всех лидов текущего менеджера
 func (h *LeadHandler) GetMyLeads(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	leads, err := h.service.GetMyLeads(c.Request.Context(), currentUser.ID)
 	if err != nil {
@@ -35,7 +39,11 @@ func (h *LeadHandler) GetMyLeads(c *gin.Context) {
 // CreateLead создает нового лида
 func (h *LeadHandler) CreateLead(c *gin.Context) {
 	// Получаем текущего пользователя
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	// ОТЛАДКА: Выводим, что пришло в заголовке
 	log.Printf("DEBUG CreateLead: User ID: %s, Role: %s, SalonID: %v", currentUser.ID, currentUser.Role, currentUser.SalonID)
@@ -59,7 +67,11 @@ func (h *LeadHandler) CreateLead(c *gin.Context) {
 
 // GetLeadByID детальная информация по лиду + история
 func (h *LeadHandler) GetLeadByID(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	idStr := c.Param("id")
 	leadID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -81,7 +93,11 @@ func (h *LeadHandler) GetLeadByID(c *gin.Context) {
 
 // UpdateLeadStatus обновляет статус (Kanban drag-n-drop)
 func (h *LeadHandler) UpdateLeadStatus(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	idStr := c.Param("id")
 	leadID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -105,7 +121,11 @@ func (h *LeadHandler) UpdateLeadStatus(c *gin.Context) {
 
 // AddActivity добавляет заметку/звонок в историю
 func (h *LeadHandler) AddActivity(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	idStr := c.Param("id")
 	leadID, err := uuid.Parse(idStr)
 	if err != nil {

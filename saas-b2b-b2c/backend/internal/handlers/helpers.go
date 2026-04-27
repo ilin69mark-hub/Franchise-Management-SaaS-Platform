@@ -1,6 +1,8 @@
 package handlers
 
 import (
+    "errors"
+
     "franchise-saas-backend/internal/models"
 
     "github.com/gin-gonic/gin"
@@ -8,36 +10,38 @@ import (
     "gorm.io/gorm"
 )
 
+var ErrUserNotFound = errors.New("user not found")
+var ErrInvalidSession = errors.New("invalid session")
+
 // getCurrentUser - загружает пользователя из БД по ID из токена
-func getCurrentUser(c *gin.Context) *models.User {
-    // 1. Достаем ID из контекста (проверен middleware)
+func getCurrentUser(c *gin.Context) (*models.User, error) {
     userIDStr, exists := c.Get("userID")
     if !exists {
-        return nil
+        return nil, ErrInvalidSession
     }
 
     uid, err := uuid.Parse(userIDStr.(string))
     if err != nil {
-        return nil
+        return nil, err
     }
 
-    // 2. Достаем DB из контекста (добавлено в main.go)
     dbVal, exists := c.Get("db")
     if !exists {
-        return nil
+        return nil, errors.New("db not found in context")
     }
 
     db, ok := dbVal.(*gorm.DB)
     if !ok {
-        return nil
+        return nil, errors.New("invalid db type")
     }
 
-    // 3. Загружаем пользователя из БД
-    // Теперь мы получаем корректный SalonID!
     var user models.User
     if err := db.First(&user, "id = ?", uid).Error; err != nil {
-        return nil
+        if err == gorm.ErrRecordNotFound {
+            return nil, ErrUserNotFound
+        }
+        return nil, err
     }
 
-    return &user
+    return &user, nil
 }

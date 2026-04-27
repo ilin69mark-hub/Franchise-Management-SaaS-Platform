@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Table, Typography, Tag, Button, Space, Modal, Form, Input, Select, Tabs, message, Popconfirm, DatePicker, Progress } from 'antd';
+import { Card, Row, Col, Statistic, Table, Typography, Tag, Button, Space, Modal, Form, Input, Select, Tabs, message, Popconfirm, DatePicker, Progress, Layout } from 'antd';
 import { ShopOutlined, UserOutlined, DollarOutlined, DeleteOutlined, StopOutlined, PlusOutlined, EditOutlined, RiseOutlined, FallOutlined, CheckCircleOutlined, AimOutlined, ThunderboltOutlined, WarningOutlined, HeartOutlined, LineChartOutlined } from '@ant-design/icons';
 import Head from 'next/head';
 import apiClient from '@/api/axiosClient';
 import dayjs from 'dayjs';
 import { useGetEmployeesQuery, useCreateEmployeeMutation, useUpdateEmployeeMutation, useDeleteEmployeeMutation } from '@/services/api';
+import Header from '@/components/Dashboard/Header';
+
+const { Content } = Layout;
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -162,9 +165,11 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
+    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Head><title>Админ Панель</title></Head>
-      <Title level={2}>Панель Супер Администратора</Title>
+      <Header />
+      <Content style={{ padding: 24 }}>
+        <Title level={2}>Панель Супер Администратора</Title>
 
       {/* ЭТАП 1: Финансы */}
       <Title level={4} style={{ marginTop: 20 }}>Финансы и Сети</Title>
@@ -377,7 +382,8 @@ const AdminDashboard = () => {
           <Form.Item name="phone" label="Телефон"><Input /></Form.Item>
         </Form>
       </Modal>
-    </div>
+      </Content>
+    </Layout>
   );
 };
 

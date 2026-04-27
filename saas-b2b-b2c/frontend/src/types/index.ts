@@ -127,30 +127,21 @@ export interface Salon {
 
 /* ---------- Goal (цель / план) ---------- */
 export interface Goal {
-  /** UUID цели */
   id: string;
-
-  /** Кто поставил цель (UUID пользователя) */
   assigner_id: string;
-
-  /** Кому назначена цель (UUID получателя) */
   assignee_id: string;
-
-  /** Роль получателя */
-  role:
-    | 'franchise_manager'
-    | 'dealer'
-    | 'salon_manager'
-    | string;
-
-  /** План продаж (₽) */
+  role: string;
   sales_plan: number;
-  /** План лидов (кол‑во) */
   leads_plan: number;
-  /** План звонков (кол‑во) */
   calls_plan: number;
-  /** План встреч (кол‑во) */
   meetings_plan: number;
+  period: string;
+  start_date: string;
+  end_date: string;
+  target_date: string;
+  created_at: string;
+  updated_at: string;
+}
 
   /** Дата‑план (YYYY‑MM‑DD) */
   target_date: string;

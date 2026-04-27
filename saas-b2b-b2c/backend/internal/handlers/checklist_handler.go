@@ -21,7 +21,11 @@ func NewChecklistHandler(service *services.ChecklistService) *ChecklistHandler {
 }
 
 func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
-	currentUser := getCurrentUser(c) // Вызываем общую функцию
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	status := c.Query("status")
 	priority := c.Query("priority")
@@ -29,7 +33,6 @@ func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
 	log.Printf("DEBUG GetChecklists: User %s (Role: %s)", currentUser.Email, currentUser.Role)
 
 	var items []models.Checklist
-	var err error
 
 	if currentUser.Role == models.RoleSuperAdmin {
 		log.Println("DEBUG GetChecklists: Path -> SUPER ADMIN (Global)")
@@ -55,7 +58,11 @@ func (h *ChecklistHandler) CreateChecklist(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	item := models.Checklist{
 		Title:       req.Title,

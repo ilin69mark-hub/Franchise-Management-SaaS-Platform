@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -24,11 +25,12 @@ func (h *GoalHandler) SetGoal(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	// получаем assigner (текущий пользователь) и tenant из контекста
 	assignerID, _ := c.Get("userID")
+	userRole, _ := c.Get("role")
 	tenantID, _ := c.Get("tenantID")
 
-	goal, err := h.svc.CreateGoal(c.Request.Context(), dto, assignerID.(string), tenantID.(string))
+	ctx := context.WithValue(c.Request.Context(), "role", userRole)
+	goal, err := h.svc.CreateGoal(ctx, dto, assignerID.(string), tenantID.(string))
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
@@ -99,4 +101,23 @@ func (h *GoalHandler) DeleteGoal(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// PUT /goals/:id – обновить цель
+func (h *GoalHandler) UpdateGoal(c *gin.Context) {
+	id := c.Param("id")
+	var dto services.UpdateGoalDTO
+	if err := c.ShouldBindJSON(&dto); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	assignerID, _ := c.Get("userID")
+	tenantID, _ := c.Get("tenantID")
+
+	goal, err := h.svc.UpdateGoal(c.Request.Context(), id, dto, assignerID.(string), tenantID.(string))
+	if err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, goal)
 }

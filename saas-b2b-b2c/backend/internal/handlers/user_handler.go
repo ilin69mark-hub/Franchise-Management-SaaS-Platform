@@ -21,12 +21,15 @@ func NewUserHandler(service *services.UserService) *UserHandler {
 
 // GetEmployees
 func (h *UserHandler) GetEmployees(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session, please login again"})
+		return
+	}
 
 	log.Printf("DEBUG GetUsers: User %s (Role: %s)", currentUser.Email, currentUser.Role)
 
 	var users []models.User
-	var err error
 
 	if string(currentUser.Role) == string(models.RoleSuperAdmin) {
 		log.Println("DEBUG GetUsers: Path -> SUPER ADMIN (Global)")
@@ -52,13 +55,21 @@ func (h *UserHandler) GetEmployees(c *gin.Context) {
 
 // GetProfile
 func (h *UserHandler) GetProfile(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	c.JSON(http.StatusOK, currentUser)
 }
 
 // UpdateProfile
 func (h *UserHandler) UpdateProfile(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	var req models.UserUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -74,7 +85,11 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 
 // ChangePassword
 func (h *UserHandler) ChangePassword(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	var req struct {
 		OldPassword string `json:"old_password"`
 		NewPassword string `json:"new_password"`
@@ -97,7 +112,11 @@ func (h *UserHandler) CreateEmployee(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	// Определение TenantID
 	targetTenantID := uuid.Nil
@@ -135,7 +154,11 @@ func (h *UserHandler) UpdateEmployee(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	var tid uuid.UUID
 	if currentUser.TenantID != nil {
@@ -154,7 +177,11 @@ func (h *UserHandler) UpdateEmployee(c *gin.Context) {
 func (h *UserHandler) DeleteEmployee(c *gin.Context) {
 	idStr := c.Param("id")
 	userID, _ := uuid.Parse(idStr)
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	var tid uuid.UUID
 	if currentUser.TenantID != nil {
@@ -172,7 +199,11 @@ func (h *UserHandler) DeleteEmployee(c *gin.Context) {
 
 // CreateSalon
 func (h *UserHandler) CreateSalon(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	if currentUser.TenantID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to tenant"})
 		return
@@ -197,7 +228,11 @@ func (h *UserHandler) CreateSalon(c *gin.Context) {
 
 // GetMySalons
 func (h *UserHandler) GetMySalons(c *gin.Context) {
-	currentUser := getCurrentUser(c)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusOK, []models.Salon{})
+		return
+	}
 	if currentUser.TenantID == nil {
 		c.JSON(http.StatusOK, []models.Salon{})
 		return

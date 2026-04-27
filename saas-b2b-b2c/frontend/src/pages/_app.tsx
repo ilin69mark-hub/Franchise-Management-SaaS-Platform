@@ -3,7 +3,14 @@ import type { AppProps } from 'next/app';
 import { Provider } from 'react-redux';
 import { store } from '../store';
 import { useState, useEffect } from 'react';
-import { Spin } from 'antd';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
+import weekday from 'dayjs/plugin/weekday';
+import localeData from 'dayjs/plugin/localeData';
+
+dayjs.locale('ru');
+dayjs.extend(weekday);
+dayjs.extend(localeData);
 
 function MyApp({ Component, pageProps }: AppProps) {
   const [showChild, setShowChild] = useState(false);
@@ -13,7 +20,7 @@ function MyApp({ Component, pageProps }: AppProps) {
   }, []);
 
   if (!showChild) {
-    return null; // Возвращаем null, чтобы не было мигания спиннера, если загрузка быстрая
+    return null;
   }
 
   return (

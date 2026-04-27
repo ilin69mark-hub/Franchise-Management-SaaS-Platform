@@ -16,18 +16,11 @@ import (
 //
 // ---------------------------------------------------------------------
 type GoalRepository interface {
-	// Создать (или обновить) цель
 	Create(ctx context.Context, g *models.Goal) error
-
-	// Получить цель, назначенную конкретному пользователю на конкретную дату
+	Update(ctx context.Context, g *models.Goal) error
+	GetByID(ctx context.Context, id string) (*models.Goal, error)
 	GetByAssigneeAndDate(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error)
-
-	// Список целей, которые видит текущий пользователь
-	// role – роль текущего пользователя (super_admin, franchise_manager, dealer, dealer_manager, salon_manager)
-	// tenantID – id tenant'а (может быть пустым, тогда ищем по всему DB)
 	ListVisibleForUser(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error)
-
-	// Удалить цель по ID
 	Delete(ctx context.Context, id string) error
 }
 
@@ -42,6 +35,22 @@ func NewGoalRepository(db *gorm.DB) GoalRepository { return &goalRepo{db: db} }
 
 func (r *goalRepo) Create(ctx context.Context, g *models.Goal) error {
 	return r.db.WithContext(ctx).Create(g).Error
+}
+
+func (r *goalRepo) Update(ctx context.Context, g *models.Goal) error {
+	return r.db.WithContext(ctx).Save(g).Error
+}
+
+func (r *goalRepo) GetByID(ctx context.Context, id string) (*models.Goal, error) {
+	var g models.Goal
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := r.db.WithContext(ctx).First(&g, uid).Error; err != nil {
+		return nil, err
+	}
+	return &g, nil
 }
 
 // ---------------------------------------------------------------

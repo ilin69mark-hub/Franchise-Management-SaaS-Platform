@@ -24,7 +24,11 @@ func NewKPIHandler(kpiSvc *services.KPIService, schedSvc *services.ScheduleServi
 // --- KPI Stats ---
 
 func (h *KPIHandler) GetMyStats(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	if user.SalonID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
 		return
@@ -39,7 +43,11 @@ func (h *KPIHandler) GetMyStats(c *gin.Context) {
 }
 
 func (h *KPIHandler) GetSalonStats(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	salonIDStr := c.Query("salon_id")
 	salonID, err := uuid.Parse(salonIDStr)
 	if err != nil {
@@ -90,7 +98,11 @@ func (h *KPIHandler) SetGoal(c *gin.Context) {
 }
 
 func (h *KPIHandler) GetTeamAnalytics(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	period := c.DefaultQuery("period", "day")
 
 	data, err := h.kpiSvc.GetTeamAnalytics(c.Request.Context(), user.ID, period)
@@ -104,7 +116,11 @@ func (h *KPIHandler) GetTeamAnalytics(c *gin.Context) {
 // --- Schedule (Manager) ---
 
 func (h *KPIHandler) GetSchedule(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
 
 	events, err := h.schedSvc.GetUserSchedule(c.Request.Context(), user.ID, dateStr)
@@ -116,7 +132,11 @@ func (h *KPIHandler) GetSchedule(c *gin.Context) {
 }
 
 func (h *KPIHandler) CreateEvent(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	var req models.CreateScheduleEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -163,7 +183,11 @@ func (h *KPIHandler) UpdateEventStatus(c *gin.Context) {
 // --- Schedule (Dealer Admin) ---
 
 func (h *KPIHandler) GetAllSchedule(c *gin.Context) {
-	user := getCurrentUser(c)
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	dateStr := c.Query("date")
 
 	// Получаем ID всех менеджеров
@@ -172,8 +196,7 @@ func (h *KPIHandler) GetAllSchedule(c *gin.Context) {
 	db.(*gorm.DB).Model(&models.User{}).Where("managed_by = ?", user.ID).Pluck("id", &managerIDs)
 
 	var events []models.ScheduleEvent
-	// Используем метод сервиса для получения событий по списку ID
-	events, err := h.schedSvc.GetEventsByUsers(c.Request.Context(), managerIDs, dateStr)
+	events, err = h.schedSvc.GetEventsByUsers(c.Request.Context(), managerIDs, dateStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

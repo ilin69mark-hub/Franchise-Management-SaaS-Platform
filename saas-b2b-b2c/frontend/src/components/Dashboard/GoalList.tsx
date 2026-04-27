@@ -3,6 +3,7 @@ import { Table, Button, Space, Popconfirm, message } from 'antd';
 import {
   useGetVisibleGoalsQuery,
   useSetGoalMutation,
+  useUpdateGoalMutation,
   useDeleteGoalMutation,
 } from '@/services/goalApi';
 import type { Goal, Employee } from '@/types';
@@ -11,9 +12,7 @@ import dayjs from 'dayjs';
 import { getAssignableRoles, canSeeGoal } from '@/utils/rolePermissions';
 
 interface GoalListProps {
-  /** Список всех сотрудников (нужен для выпадающего списка) */
   employees?: Employee[];
-  /** Роли, которые текущий пользователь может назначать */
   assignableRoles?: string[];
 }
 
@@ -29,20 +28,18 @@ const GoalList: React.FC<GoalListProps> = ({
   } = useGetVisibleGoalsQuery();
 
   const [setGoal] = useSetGoalMutation();
+  const [updateGoal] = useUpdateGoalMutation();
   const [deleteGoal] = useDeleteGoalMutation();
 
-  /* ----- Информация о текущем пользователе ----- */
   const myId = typeof window !== 'undefined' ? localStorage.getItem('id') : null;
   const myRole = typeof window !== 'undefined' ? localStorage.getItem('role') : null;
 
   const assignableRoles = externalRoles ?? getAssignableRoles(myRole);
 
-  /* ----- Фильтрация целей, видимых текущему пользователю ----- */
   const visibleGoals = allGoals.filter((g: Goal) =>
     canSeeGoal(myRole, g.role, myId ?? '', g.assignee_id),
   );
 
-  /* ----- Модальное окно ---------- */
   const [modalVisible, setModalVisible] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
@@ -66,13 +63,38 @@ const GoalList: React.FC<GoalListProps> = ({
   };
 
   const handleOk = async (values: any) => {
+    let period = values.period || 'day';
+    let startDate = values.start_date?.format ? values.start_date.format('YYYY-MM-DD') : (values.start_date || null);
+    let endDate = values.end_date?.format ? values.end_date.format('YYYY-MM-DD') : (values.end_date || null);
+    
+    // Для period = week/month/year - вычисляем конечную дату автоматически
+    if (period === 'week' && startDate) {
+      const start = dayjs(startDate);
+      endDate = start.add(6, 'day').format('YYYY-MM-DD');
+    } else if (period === 'month' && startDate) {
+      const start = dayjs(startDate);
+      endDate = start.endOf('month').format('YYYY-MM-DD');
+    } else if (period === 'year' && startDate) {
+      const start = dayjs(startDate);
+      endDate = start.endOf('year').format('YYYY-MM-DD');
+    }
+
+    // Для "custom" периода - вычисляем количество дней
+    if (period === 'custom' && startDate && endDate) {
+      const days = dayjs(endDate).diff(dayjs(startDate), 'day') + 1;
+      period = `${days} дн.`;
+    }
+
     const payload = {
       ...values,
-      target_date: values.target_date.format('YYYY-MM-DD'),
+      target_date: values.target_date?.format ? values.target_date.format('YYYY-MM-DD') : values.target_date,
+      start_date: startDate,
+      end_date: endDate,
+      period: period,
     };
     try {
       if (editingGoal) {
-        await setGoal({ ...payload, id: editingGoal.id }).unwrap();
+        await updateGoal({ id: editingGoal.id, data: payload }).unwrap();
         message.success('Цель обновлена');
       } else {
         await setGoal(payload).unwrap();
@@ -85,18 +107,33 @@ const GoalList: React.FC<GoalListProps> = ({
     }
   };
 
+  const getPeriodLabel = (period: string) => {
+    if (period.includes(' дн.')) return period;
+    const labels: Record<string, string> = {
+      day: 'День',
+      week: 'Неделя',
+      month: 'Месяц',
+      year: 'Год',
+    };
+    return labels[period] || period;
+  };
+
   const columns = [
-    { title: 'ID получателя', dataIndex: 'assignee_id', key: 'assignee_id' },
-    { title: 'Роль получателя', dataIndex: 'role', key: 'role' },
+    { title: 'Роль', dataIndex: 'role', key: 'role' },
     { title: 'Продажи (₽)', dataIndex: 'sales_plan', key: 'sales_plan' },
     { title: 'Лиды', dataIndex: 'leads_plan', key: 'leads_plan' },
     { title: 'Звонки', dataIndex: 'calls_plan', key: 'calls_plan' },
     { title: 'Встречи', dataIndex: 'meetings_plan', key: 'meetings_plan' },
+    { title: 'Период', dataIndex: 'period', key: 'period', render: (p: string) => getPeriodLabel(p) },
     {
-      title: 'Дата',
-      dataIndex: 'target_date',
-      key: 'target_date',
-      render: (d: string) => dayjs(d).format('YYYY-MM-DD'),
+      title: 'Даты',
+      key: 'dates',
+      render: (_: any, rec: Goal) => {
+        const start = rec.start_date ? dayjs(rec.start_date).format('DD.MM.YYYY') : '';
+        const end = rec.end_date ? dayjs(rec.end_date).format('DD.MM.YYYY') : '';
+        if (start && end) return `${start} - ${end}`;
+        return rec.target_date ? dayjs(rec.target_date).format('DD.MM.YYYY') : '-';
+      },
     },
     {
       title: 'Действия',
@@ -104,11 +141,11 @@ const GoalList: React.FC<GoalListProps> = ({
       render: (_: any, rec: Goal) => (
         <Space>
           <Button size="small" onClick={() => openEdit(rec)}>
-            Edit
+            Изменить
           </Button>
           <Popconfirm title="Удалить цель?" onConfirm={() => handleDelete(rec.id)}>
             <Button danger size="small">
-              Delete
+              Удалить
             </Button>
           </Popconfirm>
         </Space>

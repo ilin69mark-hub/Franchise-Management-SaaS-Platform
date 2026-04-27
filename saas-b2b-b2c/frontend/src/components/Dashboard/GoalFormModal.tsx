@@ -5,25 +5,23 @@ import {
   InputNumber,
   Select,
   DatePicker,
+  Radio,
 } from 'antd';
 import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
 import type { Goal, Employee } from '@/types';
 
-/* ---------- Пропсы ---------- */
+dayjs.locale('ru');
+
 interface GoalFormModalProps {
   visible: boolean;
   onCancel: () => void;
-  /** Save callback */
   onOk: (values: any) => void;
-  /** Если редактируем – передаём объект Goal */
   initialValues?: Partial<Goal>;
-  /** Список всех сотрудников (для выбора получателя) */
   employees?: Employee[];
-  /** Роли, которые может назначать текущий пользователь */
   assignableRoles: string[];
 }
 
-/* ---------- Компонент ---------- */
 const GoalFormModal: React.FC<GoalFormModalProps> = ({
   visible,
   onCancel,
@@ -34,29 +32,39 @@ const GoalFormModal: React.FC<GoalFormModalProps> = ({
 }) => {
   const [form] = Form.useForm();
 
-  /* ----- При открытии заполняем форму ----- */
+  const now = dayjs();
+
   useEffect(() => {
     if (visible) {
       const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('id') : '';
       form.setFieldsValue({
         ...initialValues,
-        // Если цель создаётся «для себя», ставим свой ID в качестве получателя
         assignee_id: initialValues?.assignee_id ?? currentUserId,
         role: initialValues?.role ?? '',
-        target_date: initialValues?.target_date
-          ? dayjs(initialValues.target_date)
-          : dayjs(),
+        period: initialValues?.period || 'day',
+        target_date: initialValues?.target_date ? dayjs(initialValues.target_date) : now,
+        start_date: initialValues?.start_date ? dayjs(initialValues.start_date) : now,
+        end_date: initialValues?.end_date ? dayjs(initialValues.end_date) : now,
       });
     } else {
       form.resetFields();
     }
-  }, [visible, initialValues, form]);
+  }, [visible, initialValues, form, now]);
 
   const hasRoles = assignableRoles.length > 0;
+  const isEdit = !!initialValues?.id;
+
+  const periodOptions = [
+    { label: 'День', value: 'day' },
+    { label: 'Неделя', value: 'week' },
+    { label: 'Месяц', value: 'month' },
+    { label: 'Год', value: 'year' },
+    { label: 'Свой период', value: 'custom' },
+  ];
 
   return (
     <Modal
-      title={initialValues?.id ? 'Редактировать план' : 'Назначить план'}
+      title={isEdit ? 'Редактировать план' : 'Назначить план'}
       open={visible}
       onCancel={onCancel}
       onOk={async () => {
@@ -64,13 +72,13 @@ const GoalFormModal: React.FC<GoalFormModalProps> = ({
           const values = await form.validateFields();
           onOk(values);
         } catch {
-          // Ant‑Design уже покажет ошибки валидации
+          // Ant Design already shows validation errors
         }
       }}
       okButtonProps={{ disabled: !hasRoles }}
+      width={600}
     >
-      <Form form={form} layout="vertical">
-        {/* ---------- Выбор получателя (список сотрудников) ---------- */}
+      <Form form={form} layout="vertical" initialValues={{ period: 'day' }}>
         <Form.Item
           name="assignee_id"
           label="Получатель (сотрудник)"
@@ -85,7 +93,6 @@ const GoalFormModal: React.FC<GoalFormModalProps> = ({
           </Select>
         </Form.Item>
 
-        {/* ---------- Выбор роли получателя ---------- */}
         <Form.Item
           name="role"
           label="Роль получателя"
@@ -100,29 +107,75 @@ const GoalFormModal: React.FC<GoalFormModalProps> = ({
           </Select>
         </Form.Item>
 
-        {/* ---------- Плановые показатели ---------- */}
+        <Form.Item name="period" label="Период" initialValue="day">
+          <Radio.Group options={periodOptions} optionType="button" />
+        </Form.Item>
+
+        <Form.Item
+          noStyle
+          shouldUpdate={(prev, curr) => prev.period !== curr.period}
+        >
+          {({ getFieldValue }) => {
+            const period = getFieldValue('period');
+            if (period === 'day') {
+              return (
+                <Form.Item name="target_date" label="Дата">
+                  <DatePicker 
+                    format="DD.MM.YYYY" 
+                    style={{ width: '100%' }}
+                    placeholder="ДД.ММ.ГГГГ"
+                  />
+                </Form.Item>
+              );
+            } else if (period === 'custom') {
+              return (
+                <Form.Item label="Период">
+                  <Form.Item name="start_date" noStyle>
+                    <DatePicker
+                      format="DD.MM.YYYY"
+                      placeholder="ДД.ММ.ГГГГ"
+                      style={{ width: '45%' }}
+                    />
+                  </Form.Item>
+                  <span style={{ margin: '0 8px' }}>—</span>
+                  <Form.Item name="end_date" noStyle>
+                    <DatePicker
+                      format="DD.MM.YYYY"
+                      placeholder="ДД.ММ.ГГГГ"
+                      style={{ width: '45%' }}
+                    />
+                  </Form.Item>
+                </Form.Item>
+              );
+            } else {
+              return (
+                <Form.Item name="start_date" label="Дата начала">
+                  <DatePicker 
+                    format="DD.MM.YYYY" 
+                    style={{ width: '100%' }}
+                    placeholder="ДД.ММ.ГГГГ"
+                  />
+                </Form.Item>
+              );
+            }
+          }}
+        </Form.Item>
+
         <Form.Item name="sales_plan" label="Продажи (₽)" rules={[{ required: true, type: 'number' }]}>
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
-        <Form.Item name="leads_plan" label="Лиды" rules={[{ type: 'number' }]}>
+        <Form.Item name="leads_plan" label="Лиды">
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
-        <Form.Item name="calls_plan" label="Звонки" rules={[{ type: 'number' }]}>
+        <Form.Item name="calls_plan" label="Звонки">
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
 
-        <Form.Item name="meetings_plan" label="Встречи" rules={[{ type: 'number' }]}>
+        <Form.Item name="meetings_plan" label="Встречи">
           <InputNumber min={0} style={{ width: '100%' }} />
         </Form.Item>
-
-        {/* ---------- Дата плана ---------- */}
-        <Form.Item name="target_date" label="Дата плана" rules={[{ required: true }]}>
-          <DatePicker format="YYYY-MM-DD" style={{ width: '100%' }} />
-        </Form.Item>
-
-        {/* Прогноз удалён – поле не выводим */}
       </Form>
     </Modal>
   );

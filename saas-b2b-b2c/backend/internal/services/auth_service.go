@@ -72,7 +72,6 @@ func (s *AuthService) CreateUser(user *models.User, password string) (*models.Us
 }
 
 // Authenticate - Проверка логина/пароля
-// ИСПРАВЛЕНО: Добавлено принудительное обновление данных после проверки пароля
 func (s *AuthService) Authenticate(email, password string) (*models.User, error) {
 	user, err := s.userRepo.GetUserByEmail(context.Background(), email)
 	if err != nil {

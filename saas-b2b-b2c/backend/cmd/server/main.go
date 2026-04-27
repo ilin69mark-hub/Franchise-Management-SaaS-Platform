@@ -124,6 +124,7 @@ func main() {
 		protected.GET("/goals/visible", goalHandler.GetVisibleGoals)
 		protected.GET("/goals/by-date/:date", goalHandler.GetGoalByDate)
 		protected.DELETE("/goals/:id", goalHandler.DeleteGoal)
+		protected.PUT("/goals/:id", goalHandler.UpdateGoal)
 
 		protected.GET("/schedule", kpiHandler.GetSchedule)
 		protected.POST("/schedule", kpiHandler.CreateEvent)
