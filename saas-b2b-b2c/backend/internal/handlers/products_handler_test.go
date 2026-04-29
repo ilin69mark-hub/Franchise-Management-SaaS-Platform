@@ -157,8 +157,8 @@ func TestDashboardProductsResponse(t *testing.T) {
 	kpiHandler := &KPIHandler{}
 	kpiHandler.GetDashboardProducts(c)
 
-	// Should return 400 for unauthenticated user (no salon)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// Should return 401 for unauthenticated user
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 	var response map[string]string
 	err := json.Unmarshal(w.Body.Bytes(), &response)

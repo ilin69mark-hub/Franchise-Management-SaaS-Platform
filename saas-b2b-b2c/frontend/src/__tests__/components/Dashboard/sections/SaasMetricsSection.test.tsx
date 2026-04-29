@@ -52,6 +52,8 @@ jest.mock('@/store/saasMetricsStore', () => ({
     setCashflow: jest.fn(),
     setTariffs: jest.fn(),
     setLoading: jest.fn(),
+    fetchAnalytics: jest.fn().mockResolvedValue(undefined),
+    fetchPaymentStatus: jest.fn().mockResolvedValue(undefined),
   }),
 }));
 

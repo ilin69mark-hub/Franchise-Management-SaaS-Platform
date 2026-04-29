@@ -18,6 +18,7 @@ import { logout } from '@/store/authSlice';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { useDealerDashboardStore } from '@/store/dealerDashboardStore';
+import apiClient from '@/api/axiosClient';
 
 dayjs.locale('ru');
 

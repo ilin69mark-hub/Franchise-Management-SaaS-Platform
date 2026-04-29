@@ -86,7 +86,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService)
 	notifHandler := handlers.NewNotificationHandler(notifService)
 	leadHandler := handlers.NewLeadHandler(leadService)
-	kpiHandler := handlers.NewKPIHandler(kpiService, scheduleService, alertService)
+	kpiHandler := handlers.NewKPIHandler(db, kpiService, scheduleService, alertService)
 	goalHandler := handlers.NewGoalHandler(goalService)
 
 	r := gin.Default()
@@ -156,6 +156,59 @@ func main() {
 		protected.PATCH("/alerts/:id/read", kpiHandler.MarkAlertRead)
 		protected.GET("/manager/targets", kpiHandler.GetManagerTargets)
 
+		// Dashboard Dealer
+		protected.GET("/dealer/summary", kpiHandler.GetDealerSummary)
+		protected.GET("/dealer/finance", kpiHandler.GetDealerFinance)
+		protected.GET("/dealer/funnel", kpiHandler.GetDealerFunnel)
+		protected.GET("/dealer/products", kpiHandler.GetDealerProducts)
+		protected.GET("/dealer/tasks", kpiHandler.GetDealerTasks)
+		protected.PATCH("/dealer/tasks/:id", kpiHandler.UpdateDealerTask)
+		protected.GET("/dealer/requests", kpiHandler.GetDealerRequests)
+		protected.POST("/dealer/requests", kpiHandler.CreateDealerRequest)
+		protected.GET("/dealer/marketing-budget", kpiHandler.GetDealerMarketingBudget)
+		protected.GET("/dealer/alerts", kpiHandler.GetDealerAlerts)
+		protected.PATCH("/dealer/alerts/:id/read", kpiHandler.MarkDealerAlertRead)
+		protected.PATCH("/dealer/alerts/read-all", kpiHandler.MarkAllDealerAlertsRead)
+
+		// Dashboard Franchiser
+		protected.GET("/franchiser/summary", kpiHandler.GetFranchiserSummary)
+		protected.GET("/franchiser/network", kpiHandler.GetFranchiserNetwork)
+		protected.GET("/franchiser/network/territories", kpiHandler.GetTerritoriesHeatmap)
+		protected.GET("/franchiser/health", kpiHandler.GetFranchiserHealth)
+		protected.GET("/franchiser/team", kpiHandler.GetFranchiserTeam)
+		protected.GET("/franchiser/team/:id/dynamics", kpiHandler.GetManagerDynamics)
+		protected.GET("/franchiser/team/:id/dealers", kpiHandler.GetManagerDealers)
+		protected.POST("/franchiser/team/plans", kpiHandler.SetManagerPlans)
+		protected.GET("/franchiser/team/plans", kpiHandler.GetManagerPlans)
+		protected.GET("/franchiser/dealers", kpiHandler.GetFranchiserDealers)
+		protected.GET("/franchiser/dealers/health", kpiHandler.GetDealersHealth)
+		protected.GET("/franchiser/dealers/migration", kpiHandler.GetDealersMigration)
+		protected.GET("/franchiser/dealers/system-issues", kpiHandler.GetSystemIssues)
+		protected.GET("/franchiser/dealers/geography", kpiHandler.GetDealersGeography)
+		protected.GET("/franchiser/dealers/marketing-roi", kpiHandler.GetMarketingROI)
+		protected.GET("/franchiser/requests", kpiHandler.GetFranchiserRequests)
+		protected.GET("/franchiser/alerts", kpiHandler.GetFranchiserAlerts)
+		protected.PATCH("/franchiser/alerts/:id/read", kpiHandler.MarkFranchiserAlertRead)
+		protected.PATCH("/franchiser/alerts/read-all", kpiHandler.MarkAllFranchiserAlertsRead)
+		protected.PATCH("/franchiser/alerts/:id/assign", kpiHandler.AssignAlert)
+		protected.GET("/franchiser/alert-settings", kpiHandler.GetAlertSettings)
+		protected.PUT("/franchiser/alert-settings", kpiHandler.UpdateAlertSettings)
+
+		// Report B2B
+		protected.GET("/franchiser/report/data", kpiHandler.GetReportData)
+		protected.POST("/franchiser/report/generate-pdf", kpiHandler.GeneratePDF)
+		protected.POST("/franchiser/report/send", kpiHandler.SendReport)
+		protected.GET("/franchiser/report/history", kpiHandler.GetReportHistory)
+		protected.POST("/franchiser/report/draft", kpiHandler.SaveDraft)
+		protected.GET("/franchiser/report/draft", kpiHandler.GetDraft)
+
+		// Dashboard Territory Manager
+		protected.GET("/territory/summary", kpiHandler.GetTerritorySummary)
+		protected.GET("/territory/funnel", kpiHandler.GetTerritoryFunnel)
+		protected.GET("/territory/planfact", kpiHandler.GetTerritoryPlanFact)
+		protected.GET("/territory/communications", kpiHandler.GetTerritoryCommunications)
+		protected.GET("/territory/benchmarks", kpiHandler.GetTerritoryBenchmarks)
+
 		protected.GET("/stats/team/analytics", kpiHandler.GetTeamAnalytics)
 		protected.GET("/schedule/all", kpiHandler.GetAllSchedule)
 		protected.POST("/schedule/manager", kpiHandler.CreateEventForManager)
@@ -208,9 +261,11 @@ func main() {
 
 		admin.GET("/tenants", adminHandler.GetAllTenants)
 		admin.GET("/tenants/payments", adminHandler.GetTenantsPaymentStatus)
+		admin.GET("/tenants/:id", adminHandler.GetTenantByID)
 		admin.POST("/tenants", adminHandler.CreateTenant)
 		admin.PUT("/tenants/:id", adminHandler.UpdateTenant)
 		admin.POST("/tenants/:id/block", adminHandler.BlockTenant)
+		admin.POST("/tenants/:id/unblock", adminHandler.UnblockTenant)
 		admin.DELETE("/tenants/:id", adminHandler.DeleteTenant)
 
 		admin.GET("/plans", adminHandler.GetAllPlans)
@@ -219,6 +274,7 @@ func main() {
 		admin.DELETE("/plans/:id", adminHandler.DeletePlan)
 
 		admin.POST("/invoices", adminHandler.CreateInvoice)
+		admin.GET("/invoices", adminHandler.GetAllInvoices)
 		admin.PUT("/invoices/:id/pay", adminHandler.PayInvoice)
 	}
 

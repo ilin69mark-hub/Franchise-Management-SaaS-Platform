@@ -20,6 +20,7 @@ import {
   message,
   Drawer,
   Checkbox,
+  Statistic,
 } from 'antd';
 import {
   PlusOutlined,
@@ -159,20 +160,27 @@ const TenantsSection: React.FC = () => {
 
   const handleCreateTenant = async (values: any) => {
     try {
-      await apiClient.post('/admin/tenants', values);
+      await apiClient.post('/admin/tenants', {
+        name: values.name,
+        legal_entity: values.legalEntity,
+        inn: values.inn,
+        max_users: values.licenseLimit ? parseInt(values.licenseLimit, 10) : 10,
+        contact_name: values.contactName,
+        contact_email: values.contactEmail,
+      });
       message.success('Тенант создан');
       setShowCreateModal(false);
       createForm.resetFields();
       fetchTenants();
-    } catch {
-      message.error('Ошибка создания');
+    } catch (err: any) {
+      message.error(err?.response?.data?.error || 'Ошибка создания');
     }
   };
 
   const handleSuspend = async () => {
     if (!selectedTenantForAction) return;
     try {
-      await apiClient.post(`/admin/tenants/${selectedTenantForAction.id}/suspend`, {
+      await apiClient.post(`/admin/tenants/${selectedTenantForAction.id}/block`, {
         reason: suspendReason,
       });
       message.success('Тенант приостановлен');
@@ -187,12 +195,8 @@ const TenantsSection: React.FC = () => {
   const handleTerminate = async () => {
     if (!selectedTenantForAction) return;
     try {
-      await apiClient.post(`/admin/tenants/${selectedTenantForAction.id}/terminate`, {
-        reason: terminateReason,
-        exportData,
-        deleteDelay: parseInt(deleteDelay),
-      });
-      message.success('Тенант расторгнут');
+      await apiClient.delete(`/admin/tenants/${selectedTenantForAction.id}`);
+      message.success('Тенант удалён');
       setShowTerminateModal(false);
       fetchTenants();
     } catch {
@@ -231,8 +235,8 @@ const TenantsSection: React.FC = () => {
   const getTenantStatusTag = (status: string) => {
     const config = {
       active: { color: 'green', text: 'Активен' },
-      suspended: { color: 'gold', text: 'Приостановлен' },
-      terminated: { color: 'default', text: 'Отключён' },
+      blocked: { color: 'red', text: 'Приостановлен' },
+      churned: { color: 'default', text: 'Удалён' },
     };
     const c = config[status as keyof typeof config] || config.active;
     return <Tag color={c.color}>{c.text}</Tag>;
@@ -262,37 +266,18 @@ const TenantsSection: React.FC = () => {
       onFilter: (value: any, record: any) => record.tariff === value,
     },
     {
-      title: 'Дилеров',
-      dataIndex: 'dealers',
-      key: 'dealers',
-      sorter: (a: any, b: any) => a.dealers - b.dealers,
-    },
-    {
       title: 'Пользователей',
       dataIndex: 'users',
       key: 'users',
-      render: (users: number, record: any) =>
-        `${users}/${record.licenseLimit}`,
-      sorter: (a: any, b: any) => a.users - b.users,
+      render: (_: number, record: any) => `${record.users || 0}/${record.licenseLimit || 10}`,
+      sorter: (a: any, b: any) => (a.users || 0) - (b.users || 0),
     },
     {
       title: 'MRR',
       dataIndex: 'mrr',
       key: 'mrr',
-      render: (v: number) => `${v.toLocaleString()} ₽`,
-      sorter: (a: any, b: any) => a.mrr - b.mrr,
-    },
-    {
-      title: 'Оплата',
-      dataIndex: 'paymentStatus',
-      key: 'paymentStatus',
-      render: (v: string) => getPaymentStatusTag(v),
-    },
-    {
-      title: 'След. платёж',
-      dataIndex: 'nextPaymentDate',
-      key: 'nextPaymentDate',
-      render: (d: string) => (d ? dayjs(d).format('DD.MM.YYYY') : '-'),
+      render: (v: number) => v ? `${v.toLocaleString()} ₽` : '-',
+      sorter: (a: any, b: any) => (a.mrr || 0) - (b.mrr || 0),
     },
     {
       title: 'Статус',
@@ -348,7 +333,7 @@ const TenantsSection: React.FC = () => {
 
   const handleResume = async (id: string) => {
     try {
-      await apiClient.post(`/admin/tenants/${id}/resume`);
+      await apiClient.post(`/admin/tenants/${id}/unblock`);
       message.success('Возобновлён');
       fetchTenants();
     } catch {
@@ -489,9 +474,12 @@ const TenantsSection: React.FC = () => {
       )}
 
       <Drawer
-        title={selectedTenant?.name}
-        open={showCard}
-        onClose={() => setShowCard(false)}
+        title={selectedTenant?.name || 'Детали тенанта'}
+        open={showCard && !!selectedTenant}
+        onClose={() => {
+          setShowCard(false);
+          setSelectedTenant(null);
+        }}
         width={600}
       >
         {selectedTenant && (
@@ -505,11 +493,11 @@ const TenantsSection: React.FC = () => {
                     <Row gutter={16}>
                       <Col span={12}>
                         <Text type="secondary">Юрлицо</Text>
-                        <div>{selectedTenant.legalEntity || '-'}</div>
+                        <div>{selectedTenant?.legalEntity || '-'}</div>
                       </Col>
                       <Col span={12}>
                         <Text type="secondary">ИНН</Text>
-                        <div>{selectedTenant.inn || '-'}</div>
+                        <div>{selectedTenant?.inn || '-'}</div>
                       </Col>
                     </Row>
                     <Row gutter={16} style={{ marginTop: 16 }}>
@@ -517,8 +505,8 @@ const TenantsSection: React.FC = () => {
                         <Text type="secondary">Тариф</Text>
                         <div>
                           <Select
-                            defaultValue={selectedTenant.tariff}
-                            onChange={(v) => handleChangeTariff(selectedTenant.id, v)}
+                            value={selectedTenant?.tariff || 'Start'}
+                            onChange={(v) => handleChangeTariff(selectedTenant!.id, v)}
                             style={{ width: '100%' }}
                           >
                             <Option value="Start">Start</Option>
@@ -532,11 +520,11 @@ const TenantsSection: React.FC = () => {
                         <div>
                           <InputForm
                             type="number"
-                            defaultValue={selectedTenant.licenseLimit}
+                            defaultValue={selectedTenant?.licenseLimit || 10}
                             onPressEnter={(e: any) =>
                               handleChangeLicenses(
-                                selectedTenant.id,
-                                parseInt(e.target.value)
+                                selectedTenant!.id,
+                                parseInt(e.target.value) || 10
                               )
                             }
                           />
@@ -544,53 +532,36 @@ const TenantsSection: React.FC = () => {
                       </Col>
                     </Row>
                     <Row gutter={16} style={{ marginTop: 16 }}>
-                      <Col span={24}>
-                        <Text type="secondary">Использование лицензий</Text>
-                        <Progress
-                          percent={Math.round(
-                            (selectedTenant.users / selectedTenant.licenseLimit) * 100
-                          )}
-                          status={
-                            selectedTenant.users / selectedTenant.licenseLimit > 0.9
-                              ? 'exception'
-                              : 'normal'
-                          }
-                        />
+                      <Col span={12}>
+                        <Text type="secondary">След. платёж</Text>
+                        <div>
+                          {selectedTenant?.nextPaymentDate
+                            ? dayjs(selectedTenant.nextPaymentDate).format('DD.MM.YYYY')
+                            : 'Не запланирован'}
+                        </div>
+                      </Col>
+                      <Col span={12}>
+                        <Text type="secondary">Статус</Text>
+                        <div>
+                          {getTenantStatusTag(selectedTenant?.status || 'active')}
+                        </div>
                       </Col>
                     </Row>
                   </div>
                 ),
               },
               {
-                key: 'payments',
-                label: 'Платежи',
+                key: 'stats',
+                label: 'Метрики',
                 children: (
-                  <Table
-                    dataSource={[]}
-                    columns={[
-                      { title: 'Дата', dataIndex: 'date' },
-                      { title: 'Счёт', dataIndex: 'invoiceNumber' },
-                      { title: 'Сумма', dataIndex: 'amount' },
-                      { title: 'Статус', dataIndex: 'status' },
-                    ]}
-                    locale={{ emptyText: 'Нет данных' }}
-                  />
-                ),
-              },
-              {
-                key: 'users',
-                label: 'Пользователи',
-                children: (
-                  <Table
-                    dataSource={[]}
-                    columns={[
-                      { title: 'ФИО', render: () => '-' },
-                      { title: 'Роль', dataIndex: 'role' },
-                      { title: 'Email', dataIndex: 'email' },
-                      { title: 'Последний вход', dataIndex: 'lastLogin' },
-                    ]}
-                    locale={{ emptyText: 'Нет данных' }}
-                  />
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Statistic title="Пользователей" value={selectedTenant?.users || 0} />
+                    </Col>
+                    <Col span={12}>
+                      <Statistic title="MRR" value={selectedTenant?.mrr || 0} prefix="₽" />
+                    </Col>
+                  </Row>
                 ),
               },
               {
@@ -667,21 +638,15 @@ const TenantsSection: React.FC = () => {
         </Form>
       </Modal>
 
-      <Modal
-        title="Приостановить тенанта"
-        open={showSuspendModal}
-        onCancel={() => setShowSuspendModal(false)}
-        onOk={handleSuspend}
-        okText="Приостановить"
+<Modal
+        title="Удалить тенанта"
+        open={showTerminateModal}
+        onCancel={() => setShowTerminateModal(false)}
+        onOk={handleTerminate}
+        okText="Удалить"
         okButtonProps={{ danger: true }}
       >
-        <p>Все пользователи тенанта потеряют доступ к системе.</p>
-        <InputForm
-          placeholder="Причина приостановки"
-          value={suspendReason}
-          onChange={(e) => setSuspendReason(e.target.value)}
-          style={{ marginTop: 16 }}
-        />
+        <p>Вы уверены? Это действие необратимо.</p>
       </Modal>
 
       <Modal

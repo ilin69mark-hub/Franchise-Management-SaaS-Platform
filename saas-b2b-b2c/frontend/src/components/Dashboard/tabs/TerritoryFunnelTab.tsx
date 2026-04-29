@@ -1,5 +1,5 @@
 // src/components/Dashboard/tabs/TerritoryFunnelTab.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Select, Button, List, Collapse, Tooltip, Segmented, Spin, Empty } from 'antd';
 import { UserAddOutlined, ShopOutlined, DollarOutlined, PercentageOutlined, RiseOutlined, FallOutlined, WarningOutlined, AlertOutlined, SearchOutlined, LineChartOutlined, TableOutlined, UserOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';

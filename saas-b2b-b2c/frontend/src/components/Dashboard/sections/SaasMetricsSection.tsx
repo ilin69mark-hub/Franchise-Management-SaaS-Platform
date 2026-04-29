@@ -13,11 +13,8 @@ const SaasMetricsSection: React.FC = () => {
     cashflow,
     tariffs,
     isLoading,
-    setOverview,
-    setMrrDynamics,
-    setCashflow,
-    setTariffs,
-    setLoading,
+    fetchAnalytics,
+    fetchPaymentStatus,
   } = useSaasMetricsStore();
 
   const [localLoading, setLocalLoading] = useState(true);
@@ -27,70 +24,33 @@ const SaasMetricsSection: React.FC = () => {
   }, []);
 
   const fetchData = async () => {
-    setLoading(true);
     setLocalLoading(true);
     try {
-      const [overviewRes, dynamicsRes, cashflowRes, tariffsRes] = await Promise.all([
-        apiClient.get('/admin/saas/overview'),
-        apiClient.get('/admin/saas/mrr-dynamics?months=12'),
-        apiClient.get('/admin/saas/cashflow'),
-        apiClient.get('/admin/saas/tariffs'),
+      const [analyticsRes, paymentsRes, plansRes] = await Promise.all([
+        apiClient.get('/admin/analytics').catch(() => ({ data: {} })),
+        apiClient.get('/admin/tenants/payments').catch(() => ({ data: [] })),
+        apiClient.get('/admin/plans').catch(() => ({ data: [] })),
       ]);
 
-      setOverview(overviewRes.data || {});
-      setMrrDynamics(dynamicsRes.data || []);
-      setCashflow(cashflowRes.data || {});
-      setTariffs(tariffsRes.data || []);
+      const analytics = analyticsRes.data as Record<string, unknown> || {};
+      const payments = paymentsRes.data as Array<Record<string, unknown>> || [];
+const plans = plansRes.data as Array<Record<string, unknown>> || [];
+
+      if (tariffs.length === 0 && plans.length > 0) {
+        const tariffData = plans.map((plan: Record<string, unknown>) => ({
+          name: (plan.name as string) || '',
+          count: (plan.tenant_count as number) || 0,
+          mrr: (plan.price as number) || 0,
+          avgCheck: (plan.price as number) || 0,
+          growth: 0,
+        }));
+      }
+
+      fetchAnalytics();
+      fetchPaymentStatus();
     } catch {
-      setOverview({
-        mrr: 2500000,
-        mrrChange: 12.5,
-        arr: 30000000,
-        churnRate: 5.2,
-        overdueAmount: 150000,
-        overdueCount: 3,
-        arpu: 15000,
-      });
-      setMrrDynamics([
-        { month: '2025-05', newMrr: 80000, expansionMrr: 40000, churnMrr: 15000, netMrr: 2100000 },
-        { month: '2025-06', newMrr: 90000, expansionMrr: 45000, churnMrr: 20000, netMrr: 2210000 },
-        { month: '2025-07', newMrr: 100000, expansionMrr: 50000, churnMrr: 18000, netMrr: 2350000 },
-        { month: '2025-08', newMrr: 110000, expansionMrr: 55000, churnMrr: 22000, netMrr: 2490000 },
-        { month: '2025-09', newMrr: 95000, expansionMrr: 48000, churnMrr: 25000, netMrr: 2605000 },
-        { month: '2025-10', newMrr: 120000, expansionMrr: 60000, churnMrr: 20000, netMrr: 2765000 },
-        { month: '2025-11', newMrr: 130000, expansionMrr: 65000, churnMrr: 18000, netMrr: 2935000 },
-        { month: '2025-12', newMrr: 140000, expansionMrr: 70000, churnMrr: 22000, netMrr: 3115000 },
-        { month: '2026-01', newMrr: 150000, expansionMrr: 75000, churnMrr: 25000, netMrr: 3300000 },
-        { month: '2026-02', newMrr: 160000, expansionMrr: 80000, churnMrr: 28000, netMrr: 3480000 },
-        { month: '2026-03', newMrr: 170000, expansionMrr: 85000, churnMrr: 30000, netMrr: 3665000 },
-        { month: '2026-04', newMrr: 180000, expansionMrr: 90000, churnMrr: 35000, netMrr: 3850000 },
-      ]);
-      setCashflow({
-        expected: [
-          { date: '2026-04-30', tenant: 'ООО Техно', amount: 50000 },
-          { date: '2026-04-30', tenant: 'ООО Бизнес', amount: 30000 },
-          { date: '2026-05-01', tenant: 'АО Инвест', amount: 75000 },
-          { date: '2026-05-03', tenant: 'ИП Сидоров', amount: 15000 },
-        ],
-        overdue: [
-          { date: '2026-04-15', tenant: 'ООО Долг', amount: 25000, daysOverdue: 14 },
-          { date: '2026-04-01', tenant: 'ЗАО Проблема', amount: 50000, daysOverdue: 28 },
-          { date: '2026-03-20', tenant: 'ООО Просрочка', amount: 35000, daysOverdue: 39 },
-        ],
-        risks: [
-          { date: '2026-05-01', tenant: 'ООО Истекает', amount: 45000 },
-        ],
-        totalExpected: 170000,
-        atRisk: 185000,
-      });
-      setTariffs([
-        { name: 'Start', count: 12, mrr: 120000, avgCheck: 10000, growth: 15 },
-        { name: 'Pro', count: 8, mrr: 320000, avgCheck: 40000, growth: 8 },
-        { name: 'Business', count: 5, mrr: 500000, avgCheck: 100000, growth: -5 },
-        { name: 'Enterprise', count: 2, mrr: 600000, avgCheck: 300000, growth: 0 },
-      ]);
-    } finally {
-      setLoading(false);
+      fetchAnalytics();
+} finally {
       setLocalLoading(false);
     }
   };

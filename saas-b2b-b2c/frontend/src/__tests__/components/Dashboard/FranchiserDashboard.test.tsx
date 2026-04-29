@@ -14,7 +14,8 @@ jest.mock('@/store/franchiserStore', () => ({
     },
     isLoading: false,
     alertCount: 2,
-    fetchSummary: jest.fn(),
+    fetchSummary: jest.fn().mockResolvedValue(undefined),
+    fetchNetwork: jest.fn().mockResolvedValue(undefined),
   }),
 }));
 

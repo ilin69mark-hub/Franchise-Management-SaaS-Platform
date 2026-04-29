@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import apiClient from '@/api/axiosClient';
 
 interface Tenant {
   id: string;
@@ -81,9 +82,10 @@ interface TenantsState {
   setShowCard: (show: boolean) => void;
   setFilters: (filters: Partial<TenantsState['filters']>) => void;
   setOnboarding: (onboarding: OnboardingTenant[]) => void;
+  fetchTenants: () => Promise<void>;
 }
 
-export const useTenantsStore = create<TenantsState>((set) => ({
+export const useTenantsStore = create<TenantsState>((set, get) => ({
   tenants: [],
   selectedTenant: null,
   tenantsLoading: false,
@@ -113,4 +115,35 @@ export const useTenantsStore = create<TenantsState>((set) => ({
   setShowCard: (show) => set({ showCard: show }),
   setFilters: (filters) => set((state) => ({ filters: { ...state.filters, ...filters } })),
   setOnboarding: (onboarding) => set({ onboarding }),
+  fetchTenants: async () => {
+    const { setTenants, setTenantsLoading } = get();
+    setTenantsLoading(true);
+    try {
+      const res = await apiClient.get('/admin/tenants');
+      const data = res.data as Array<Record<string, unknown>> || [];
+      const tenants: Tenant[] = data.map((item) => ({
+        id: String(item.id),
+        name: (item.name as string) || '',
+        legalEntity: (item.legal_entity as string) || undefined,
+        inn: (item.inn as string) || undefined,
+        tariff: (item.plan_name as string) || 'Start',
+        dealers: (item.dealer_count as number) || 0,
+        users: (item.user_count as number) || 0,
+        licenseLimit: (item.max_users as number) || 0,
+        mrr: (item.mrr as number) || 0,
+        paymentStatus: (item.payment_status as Tenant['paymentStatus']) || 'paid',
+        nextPaymentDate: (item.paid_until as string) || '',
+        status: (item.status as Tenant['status']) || 'active',
+        contactName: (item.contact_name as string) || undefined,
+        contactEmail: (item.contact_email as string) || undefined,
+        contractStartDate: (item.created_at as string) || undefined,
+        contractEndDate: undefined,
+      }));
+      setTenants(tenants);
+    } catch {
+      setTenants([]);
+    } finally {
+      setTenantsLoading(false);
+    }
+  },
 }));

@@ -9,10 +9,17 @@ import (
 
 type Tenant struct {
     ID     uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-    Name   string     `json:"name" gorm:"not null"`
+    Name   string    `json:"name" gorm:"not null"`
     PlanID *uuid.UUID `json:"plan_id" gorm:"type:uuid"`
-    Status string     `json:"status" gorm:"default:'active'"`
-
+    Status string    `json:"status" gorm:"default:'active'"`
+    
+    // Реквизиты
+    LegalEntity string `json:"legal_entity"`
+    INN         string `json:"inn"`
+    
+    // Лимиты
+    MaxUsers int `json:"max_users" gorm:"default:10"`
+    
     // Биллинг
     PaidUntil       *time.Time `json:"paid_until"`
     GracePeriodDays int        `json:"grace_period_days" gorm:"default:7"`

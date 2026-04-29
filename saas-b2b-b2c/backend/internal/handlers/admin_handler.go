@@ -47,17 +47,34 @@ func (h *AdminHandler) GetTenantsPaymentStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+// GetTenantByID - получить тенант по ID
+func (h *AdminHandler) GetTenantByID(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant ID"})
+		return
+	}
+	tenant, err := h.service.GetTenantByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
+		return
+	}
+	c.JSON(http.StatusOK, tenant)
+}
+
 // CreateTenant - создать сеть
 func (h *AdminHandler) CreateTenant(c *gin.Context) {
-	var req struct {
-		Name   string     `json:"name" binding:"required"`
-		PlanID *uuid.UUID `json:"plan_id"`
-	}
+	var req services.CreateTenantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	tenant, err := h.service.CreateTenant(req.Name, req.PlanID)
+	if req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	tenant, err := h.service.CreateTenant(&req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -96,6 +113,17 @@ func (h *AdminHandler) BlockTenant(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Blocked"})
+}
+
+// UnblockTenant - разблокировать
+func (h *AdminHandler) UnblockTenant(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := uuid.Parse(idStr)
+	if err := h.service.UnblockTenant(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Unblocked"})
 }
 
 // DeleteTenant - удалить
@@ -193,6 +221,16 @@ func (h *AdminHandler) CreateInvoice(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, inv)
+}
+
+// GetAllInvoices - получить все счета
+func (h *AdminHandler) GetAllInvoices(c *gin.Context) {
+	invoices, err := h.service.GetAllInvoices()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, invoices)
 }
 
 // PayInvoice - оплатить счет

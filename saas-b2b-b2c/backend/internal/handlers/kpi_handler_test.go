@@ -27,6 +27,17 @@ func TestGetDashboardMain_Unauthorized(t *testing.T) {
 	assert.Contains(t, response["error"], "Invalid session")
 }
 
+func calcPercentVal(plan, fact float64) int {
+	if plan == 0 {
+		return 0
+	}
+	p := int((fact / plan) * 100)
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
 func TestKPICalculation(t *testing.T) {
 	tests := []struct {
 		name     string

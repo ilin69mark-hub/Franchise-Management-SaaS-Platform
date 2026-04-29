@@ -6,6 +6,7 @@ import (
     "log"
     "time"
 
+    "github.com/google/uuid"
     "franchise-saas-backend/internal/models"
     "franchise-saas-backend/internal/services"
 )
@@ -23,8 +24,8 @@ func (j *PaymentJob) Run() {
     log.Println("Running Payment Check Job...")
     ctx := context.Background()
 
-    // Передаем ctx в функцию
-    tenants, err := j.tenantService.GetAllTenants(ctx)
+    // Используем отдельный метод для job
+    tenants, err := j.tenantService.GetTenantsWithPaidUntil(ctx)
     if err != nil {
         log.Printf("Error fetching tenants: %v", err)
         return
@@ -33,25 +34,36 @@ func (j *PaymentJob) Run() {
     now := time.Now()
 
     for _, t := range tenants {
-        if t.PaidUntil == nil {
+        paidUntil, ok := t["paid_until"].(time.Time)
+        if !ok {
             continue
         }
 
-        hoursLeft := t.PaidUntil.Sub(now).Hours()
+        hoursLeft := paidUntil.Sub(now).Hours()
         daysLeft := int(hoursLeft / 24)
+        
+        tenantID, ok := t["id"].(string)
+        if !ok {
+            continue
+        }
+        
+        id, err := uuid.Parse(tenantID)
+        if err != nil {
+            continue
+        }
 
         if daysLeft >= 0 && daysLeft <= 3 {
             msg := fmt.Sprintf("До окончания подписки осталось %d дней. Пожалуйста, продлите оплату.", daysLeft)
-            err := j.notifService.CreateNotification(ctx, t.ID, models.NotificationTypePayment, "Окончание подписки", msg)
+            err := j.notifService.CreateNotification(ctx, id, models.NotificationTypePayment, "Окончание подписки", msg)
             if err != nil {
-                log.Printf("Error creating notification for tenant %s: %v", t.ID, err)
+                log.Printf("Error creating notification for tenant %s: %v", tenantID, err)
             }
         }
 
         if daysLeft < 0 {
-            err := j.notifService.CreateNotification(ctx, t.ID, models.NotificationTypePayment, "Подписка просрочена", "Ваша подписка просрочена. Оплатите для возобновления доступа.")
+            err := j.notifService.CreateNotification(ctx, id, models.NotificationTypePayment, "Подписка просрочена", "Ваша подписка просрочена. Оплатите для возобновления доступа.")
             if err != nil {
-                log.Printf("Error creating overdue notification for tenant %s: %v", t.ID, err)
+                log.Printf("Error creating overdue notification for tenant %s: %v", id, err)
             }
         }
     }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import apiClient from '@/api/axiosClient';
 
 export interface FranchiserSummary {
   planPercent: number;
@@ -46,9 +47,12 @@ interface FranchiserState {
   setActiveTab: (tab: string) => void;
   setLoading: (loading: boolean) => void;
   fetchSummary: () => Promise<void>;
+  fetchNetwork: () => Promise<void>;
+  fetchHealth: () => Promise<any>;
+  fetchTeam: () => Promise<any>;
 }
 
-const mockSummary: FranchiserSummary = {
+const defaultSummary: FranchiserSummary = {
   planPercent: 78,
   forecastPercent: 85,
   activeDealers: 24,
@@ -56,42 +60,86 @@ const mockSummary: FranchiserSummary = {
   avgMargin: 32,
 };
 
-const mockDealers: DealerMetrics[] = [
-  { dealerId: '1', dealerName: 'Дилер Север', salonCount: 3, planPercent: 92, forecastPercent: 95, conversion: 14, margin: 35, status: 'green', plan: 5000000, fact: 4600000 },
-  { dealerId: '2', dealerName: 'Дилер Юг', salonCount: 2, planPercent: 65, forecastPercent: 70, conversion: 10, margin: 28, status: 'yellow', plan: 3000000, fact: 1950000 },
-  { dealerId: '3', dealerName: 'Дилер Запад', salonCount: 4, planPercent: 45, forecastPercent: 55, conversion: 8, margin: 22, status: 'red', plan: 8000000, fact: 3600000 },
-];
-
-const mockAlerts: FranchiseAlert[] = [
-  { id: '1', type: 'critical', message: 'Дилер Юг: падение конверсии >20%', dealerId: '2', createdAt: new Date().toISOString() },
-  { id: '2', type: 'warning', message: 'Дилер Запад: выполнение плана <50%', dealerId: '3', createdAt: new Date().toISOString() },
-];
-
 export const useFranchiserStore = create<FranchiserState>()(
   persist(
-    (set, get) => ({
-      summary: mockSummary,
-      dealers: mockDealers,
-      alerts: mockAlerts,
-      alertCount: mockAlerts.filter(a => a.type === 'critical').length,
+    (set) => ({
+      summary: defaultSummary,
+      dealers: [],
+      alerts: [],
+      alertCount: 0,
       activeTab: 'network',
       isLoading: false,
 
       setSummary: (summary) => set({ summary }),
       setDealers: (dealers) => set({ dealers }),
-      setAlerts: (alerts) => set({ alerts, alertCount: alerts.filter(a => a.type === 'critical').length }),
+      setAlerts: (alerts) => set({ alerts, alertCount: alerts.filter((a: FranchiseAlert) => a.type === 'critical').length }),
       setAlertCount: (alertCount) => set({ alertCount }),
       setActiveTab: (activeTab) => set({ activeTab }),
       setLoading: (isLoading) => set({ isLoading }),
 
       fetchSummary: async () => {
         set({ isLoading: true });
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const { alerts } = get();
-        set({ 
-          isLoading: false,
-          alertCount: alerts.filter(a => a.type === 'critical').length 
-        });
+        try {
+          const res = await apiClient.get('/franchiser/summary');
+          const data = res.data;
+          set({
+            summary: {
+              planPercent: data.planPercent || 0,
+              forecastPercent: data.forecastPercent || 0,
+              activeDealers: data.activeDealers || 0,
+              avgConversion: data.avgConversion || 0,
+              avgMargin: data.avgMargin || 0,
+            },
+            isLoading: false,
+          });
+        } catch (e) {
+          console.error('Error fetching franchiser summary:', e);
+          set({ isLoading: false });
+        }
+      },
+
+      fetchNetwork: async () => {
+        try {
+          const res = await apiClient.get('/franchiser/network?period=month');
+          const data = res.data;
+          
+          const dealers: DealerMetrics[] = (data.network_data || []).map((d: any) => ({
+            dealerId: d.id,
+            dealerName: d.name || '',
+            salonCount: d.salon_count || 0,
+            planPercent: d.plan_percent || 0,
+            forecastPercent: d.plan_percent >= 80 ? 100 : d.plan_percent >= 50 ? 70 : 30,
+            conversion: d.conversion || 0,
+            margin: d.margin || 0,
+            status: d.forecast || 'green',
+            plan: d.plan || 0,
+            fact: d.fact || 0,
+          }));
+          
+          set({ dealers });
+        } catch (e) {
+          console.error('Error fetching network:', e);
+        }
+      },
+
+      fetchHealth: async () => {
+        try {
+          const res = await apiClient.get('/franchiser/health');
+          return res.data;
+        } catch (e) {
+          console.error('Error fetching health:', e);
+          return null;
+        }
+      },
+
+      fetchTeam: async () => {
+        try {
+          const res = await apiClient.get('/franchiser/team');
+          return res.data;
+        } catch (e) {
+          console.error('Error fetching team:', e);
+          return null;
+        }
       },
     }),
     {

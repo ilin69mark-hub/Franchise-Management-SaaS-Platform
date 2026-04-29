@@ -86,6 +86,7 @@ func migrateUsers(db *gorm.DB) error {
 			email VARCHAR(255) NOT NULL,
 			password_hash TEXT,
 			role VARCHAR(50) NOT NULL,
+			status VARCHAR(50) DEFAULT 'active',
 			tenant_id UUID,
 			salon_id UUID,
 			managed_by UUID,
@@ -99,26 +100,49 @@ func migrateUsers(db *gorm.DB) error {
 	`).Error; err != nil {
 		return err
 	}
-
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id UUID`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS salon_id UUID`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID`)
-
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`)
 	return nil
 }
 
 func migrateTenants(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS tenants (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name VARCHAR(255) NOT NULL,
 			status VARCHAR(50) DEFAULT 'active',
-			plan_id UUID,
+			plan_id UUID REFERENCES plans(id),
+			legal_entity TEXT,
+			inn VARCHAR(20),
+			max_users INTEGER DEFAULT 10,
+			paid_until TIMESTAMP,
+			grace_period_days INTEGER DEFAULT 7,
+			deleted_at TIMESTAMP,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	// Удалить FK если есть проблемы
+	db.Exec(`ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_plan_id_fkey`)
+	// Добавить колонки если таблица уже существует
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity TEXT`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS inn VARCHAR(20)`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_users INTEGER DEFAULT 10`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS paid_until TIMESTAMP`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS grace_period_days INTEGER DEFAULT 7`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	// Сделать plan_id nullable без constraint
+	db.Exec(`ALTER TABLE tenants ALTER COLUMN plan_id DROP NOT NULL`)
+	return nil
 }
 
 func migrateSalons(db *gorm.DB) error {

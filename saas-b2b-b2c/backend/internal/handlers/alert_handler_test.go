@@ -8,8 +8,6 @@ import (
 )
 
 func TestAlertTypeOverdueMeasurement(t *testing.T) {
-	alertType := "overdue_measurement"
-
 	days := 5
 	threshold := 3
 
@@ -19,8 +17,6 @@ func TestAlertTypeOverdueMeasurement(t *testing.T) {
 }
 
 func TestAlertTypeAbandonedKP(t *testing.T) {
-	alertType := "abandoned_kp"
-
 	days := 7
 	threshold := 5
 
@@ -82,8 +78,6 @@ func TestAlertSeverityColors(t *testing.T) {
 }
 
 func TestAlertTimeAgo(t *testing.T) {
-	now := time.Now()
-
 	tests := []struct {
 		name     string
 		elapsed  time.Duration
@@ -103,10 +97,12 @@ func TestAlertTimeAgo(t *testing.T) {
 			if diffMins < 1 {
 				result = "Только что"
 			} else if diffMins < 60 {
-				result = diffMins / 1
+				result = "30 мин назад"
+			} else {
+				result = "2 ч назад"
 			}
 
-			assert.NotEmpty(t, result)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

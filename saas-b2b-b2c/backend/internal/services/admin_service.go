@@ -79,8 +79,35 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 }
 
 // GetAllTenants - список всех сетей
-func (s *AdminService) GetAllTenants(ctx context.Context) ([]models.Tenant, error) {
-	return s.tenantRepo.FindAll(ctx)
+func (s *AdminService) GetAllTenants(ctx context.Context) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+	err := s.db.Table("tenants").
+		Select(`
+			tenants.id, 
+			tenants.name, 
+			tenants.status, 
+			tenants.plan_id, 
+			tenants.legal_entity,
+			tenants.inn,
+			tenants.max_users,
+			tenants.paid_until,
+			tenants.created_at,
+			plans.name as plan_name,
+			COALESCE(plans.price, 0) as mrr
+		`).
+		Joins("LEFT JOIN plans ON tenants.plan_id = plans.id").
+		Find(&results).Error
+	return results, err
+}
+
+// GetTenantsWithPaidUntil - для payment job
+func (s *AdminService) GetTenantsWithPaidUntil(ctx context.Context) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+	err := s.db.Table("tenants").
+		Select("id, paid_until").
+		Where("paid_until IS NOT NULL").
+		Find(&results).Error
+	return results, err
 }
 
 // GetTenantsPaymentStatus - статус оплат сетей
@@ -93,15 +120,50 @@ func (s *AdminService) GetTenantsPaymentStatus() ([]map[string]interface{}, erro
 	return results, err
 }
 
+// GetTenantByID - получить тенант по ID
+func (s *AdminService) GetTenantByID(id uuid.UUID) (*models.Tenant, error) {
+	var tenant models.Tenant
+	err := s.db.First(&tenant, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &tenant, nil
+}
+
+// CreateTenantRequest - запрос на создание тенанта
+type CreateTenantRequest struct {
+	Name        string     `json:"name"`
+	PlanID      *uuid.UUID `json:"plan_id"`
+	LegalEntity string     `json:"legal_entity"`
+	INN         string     `json:"inn"`
+	MaxUsers    int        `json:"max_users"`
+	ContactName string     `json:"contact_name"`
+	ContactEmail string     `json:"contact_email"`
+}
+
 // CreateTenant - создать сеть
-func (s *AdminService) CreateTenant(name string, planID *uuid.UUID) (*models.Tenant, error) {
+func (s *AdminService) CreateTenant(req *CreateTenantRequest) (*models.Tenant, error) {
 	tenant := models.Tenant{
-		Name:   name,
-		PlanID: planID,
-		Status: "active",
+		Name:        req.Name,
+		PlanID:      req.PlanID,
+		Status:      "active",
+		LegalEntity: req.LegalEntity,
+		INN:         req.INN,
+		MaxUsers:    req.MaxUsers,
 	}
 	if err := s.db.Create(&tenant).Error; err != nil {
 		return nil, err
+	}
+	if req.ContactEmail != "" {
+		tenantID := tenant.ID
+		contactUser := models.User{
+			Email:     req.ContactEmail,
+			FirstName: req.ContactName,
+			TenantID:  &tenantID,
+			Role:      models.RoleFranchisor,
+			Status:    "active",
+		}
+		s.db.Create(&contactUser)
 	}
 	return &tenant, nil
 }
@@ -124,6 +186,11 @@ func (s *AdminService) UpdateTenant(id uuid.UUID, name string, planID *uuid.UUID
 // BlockTenant - заблокировать
 func (s *AdminService) BlockTenant(id uuid.UUID) error {
 	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "blocked").Error
+}
+
+// UnblockTenant - разблокировать
+func (s *AdminService) UnblockTenant(id uuid.UUID) error {
+	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "active").Error
 }
 
 // DeleteTenant - удалить
@@ -188,6 +255,16 @@ func (s *AdminService) CreateInvoice(tenantID uuid.UUID, amount float64, descrip
 		return nil, err
 	}
 	return &inv, nil
+}
+
+func (s *AdminService) GetAllInvoices() ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+	err := s.db.Table("invoices").
+		Select("invoices.id, invoices.tenant_id, invoices.amount, invoices.status, invoices.due_date, invoices.paid_at, tenants.name as tenant_name").
+		Joins("LEFT JOIN tenants ON invoices.tenant_id = tenants.id").
+		Order("invoices.created_at DESC").
+		Find(&results).Error
+	return results, err
 }
 
 func (s *AdminService) MarkInvoicePaid(invoiceID uuid.UUID) error {

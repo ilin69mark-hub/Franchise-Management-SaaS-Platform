@@ -22,6 +22,7 @@ type User struct {
 	Email        string    `json:"email" gorm:"not null"`
 	PasswordHash string    `json:"-" gorm:"column:password_hash"`
 	Role         Role      `json:"role" gorm:"type:varchar(50);not null"`
+	Status      string    `json:"status" gorm:"default:'active'"`
 
 	TenantID  *uuid.UUID `json:"tenant_id" gorm:"type:uuid"`
 	SalonID   *uuid.UUID `json:"salon_id" gorm:"type:uuid;index"`
