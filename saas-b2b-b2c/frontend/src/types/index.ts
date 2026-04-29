@@ -139,31 +139,46 @@ export interface Goal {
   start_date: string;
   end_date: string;
   target_date: string;
-  created_at: string;
-  updated_at: string;
-}
-
-  /** Дата‑план (YYYY‑MM‑DD) */
-  target_date: string;
-
-  /** Фактические результаты (опциональны) */
   sales_fact?: number;
   leads_fact?: number;
   calls_fact?: number;
   meetings_fact?: number;
-
-  /** Прогноз (может вводить пользователь) */
   forecast?: number;
+  created_at: string;
+  updated_at: string;
+}
 
-  /** Даты создания/изменения */
+/* ---------- Unit-экономика (калькулятор) ---------- */
+export interface UnitEconomyInput {
+  salePrice: number;
+  purchasePrice: number;
+  managerPercent: number;
+  deliveryCost: number;
+  acquiringPercent: number;
+  rentAmortization: number;
+  additionalServices: number;
+}
+
+export interface UnitEconomyResult {
+  marginalProfit: number;
+  netProfit: number;
+  profitability: number;
+  priceAfterDiscount: number;
+}
+
+export interface UnitTemplate {
+  id?: string;
+  name: string;
+  category: 'sofa' | 'kitchen' | 'wardrobe' | 'other';
+  input: UnitEconomyInput;
   created_at?: string;
-  updated_at?: string;
 }
 
 /* -------------------------------------------------
    Всё готово к импорту:
    import type {
      User, AuthResponse, Employee, Checklist, Lead, LeadActivity,
-     CreateLeadRequest, Dealer, Plan, Salon, Goal
+     CreateLeadRequest, Dealer, Plan, Salon, Goal,
+     UnitEconomyInput, UnitEconomyResult, UnitTemplate
    } from '@/types';
    ------------------------------------------------- */
