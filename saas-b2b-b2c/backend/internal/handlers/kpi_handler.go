@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -15,10 +16,11 @@ import (
 type KPIHandler struct {
 	kpiSvc   *services.KPIService
 	schedSvc *services.ScheduleService
+	alertSvc *services.AlertService
 }
 
-func NewKPIHandler(kpiSvc *services.KPIService, schedSvc *services.ScheduleService) *KPIHandler {
-	return &KPIHandler{kpiSvc: kpiSvc, schedSvc: schedSvc}
+func NewKPIHandler(kpiSvc *services.KPIService, schedSvc *services.ScheduleService, alertSvc *services.AlertService) *KPIHandler {
+	return &KPIHandler{kpiSvc: kpiSvc, schedSvc: schedSvc, alertSvc: alertSvc}
 }
 
 // --- KPI Stats ---
@@ -261,4 +263,227 @@ func (h *KPIHandler) DeleteEvent(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+}
+
+// --- Dashboard Main (Salon Manager) ---
+
+func (h *KPIHandler) GetDashboardMain(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+
+	data, err := h.kpiSvc.GetDashboardMain(c.Request.Context(), user.ID, dateStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// TopBar - верхняя панель дашборда
+func (h *KPIHandler) GetTopBar(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	type TopBarResponse struct {
+		SalonName       string  `json:"salon_name"`
+		PlanPercent     int     `json:"plan_percent"`
+		AvgCheck        float64 `json:"avg_check"`
+		PrepaymentsSum  float64 `json:"prepayments_sum"`
+		AlertsCount     int     `json:"alerts_count"`
+	}
+
+	resp := TopBarResponse{
+		SalonName: "Мой салон",
+		PlanPercent: 0,
+		AvgCheck: 0,
+		PrepaymentsSum: 0,
+		AlertsCount: 0,
+	}
+
+	data, err := h.kpiSvc.GetDashboardMain(c.Request.Context(), user.ID, time.Now().Format("2006-01-02"))
+	if err == nil {
+		resp.SalonName = "Салон №1"
+		resp.PlanPercent = data.PlanPercent
+		resp.AvgCheck = data.AvgCheck
+		resp.PrepaymentsSum = data.PrepaymentsSum
+		resp.AlertsCount = len(data.PendingPayments)
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetDashboardFunnel - воронка продаж
+func (h *KPIHandler) GetDashboardFunnel(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+
+	data, err := h.kpiSvc.GetDashboardFunnel(c.Request.Context(), user.ID, dateStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GetDashboardTeam - команда (рейтинг продавцов)
+func (h *KPIHandler) GetDashboardTeam(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	period := c.DefaultQuery("period", "month")
+	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+
+	data, err := h.kpiSvc.GetDashboardTeam(c.Request.Context(), user.ID, period, dateStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GetSalesRepHistory - история продавца
+func (h *KPIHandler) GetSalesRepHistory(c *gin.Context) {
+	idStr := c.Param("id")
+	managerID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid manager ID"})
+		return
+	}
+
+	months := 6
+	if m := c.Query("months"); m != "" {
+		if parsed, _ := strconv.Atoi(m); parsed > 0 && parsed <= 12 {
+			months = parsed
+		}
+	}
+
+	data, err := h.kpiSvc.GetSalesRepHistory(c.Request.Context(), managerID, months)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GetDashboardProducts - товары
+func (h *KPIHandler) GetDashboardProducts(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+
+	data, err := h.kpiSvc.GetDashboardProducts(c.Request.Context(), user.ID, dateStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+// GetAlerts - получить алерты
+func (h *KPIHandler) GetAlerts(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	// Сначала генерируем алерты
+	h.alertSvc.GenerateAlertsForUser(c.Request.Context(), user.ID)
+
+	alerts, count, err := h.alertSvc.GetUnreadAlerts(c.Request.Context(), user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	type AlertResponse struct {
+		Alerts     []models.Notification `json:"alerts"`
+		UnreadCount int                   `json:"unread_count"`
+	}
+
+	c.JSON(http.StatusOK, AlertResponse{Alerts: alerts, UnreadCount: count})
+}
+
+// MarkAlertRead - пометить алерт прочитанным
+func (h *KPIHandler) MarkAlertRead(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	alertID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid alert ID"})
+		return
+	}
+
+	if err := h.alertSvc.MarkAsRead(c.Request.Context(), user.ID, alertID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Alert marked as read"})
+}
+
+// GetManagerTargets - директивы от дилера
+func (h *KPIHandler) GetManagerTargets(c *gin.Context) {
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if user.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User not assigned to salon"})
+		return
+	}
+
+	dateStr := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+
+	data, err := h.kpiSvc.GetManagerTargets(c.Request.Context(), user.ID, dateStr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
 }

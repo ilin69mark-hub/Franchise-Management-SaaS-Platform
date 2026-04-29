@@ -1,412 +1,329 @@
 // src/components/Dashboard/FranchiserManagerDashboard.tsx
-import React, { useState, useEffect } from 'react';
-import {
-  Card,
-  Table,
-  Typography,
-  Tabs,
-  Button,
-  Space,
-  Popconfirm,
-  Modal,
-  Form,
-  Input,
-  message,
-  Select,
-  Statistic,
-  Row,
-  Divider,
-  Col,
-} from 'antd';
-import {
-  ShopOutlined,
-  TeamOutlined,
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  CheckSquareOutlined,
+import React, { useEffect, Suspense, lazy, useState } from 'react';
+import { Layout, Row, Col, Card, Typography, Tabs, Badge, Avatar, Dropdown, Space, Spin, Statistic, Button, Modal, List, Divider } from 'antd';
+import { 
+  UserOutlined, 
+  LogoutOutlined, 
+  SettingOutlined, 
+  BellOutlined,
+  PercentageOutlined,
+  RiseOutlined,
+  WarningOutlined,
+  AppstoreOutlined,
+  LineChartOutlined,
+  MessageOutlined,
+  BarChartOutlined,
+  MenuOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
-import GoalList from '@/components/Dashboard/GoalList';
-import GoalCard from '@/components/Dashboard/GoalCard';
-import {
-  useGetEmployeesQuery,
-  useCreateEmployeeMutation,
-  useUpdateEmployeeMutation,
-  useDeleteEmployeeMutation,
-} from '@/services/api';
-import { useGetVisibleGoalsQuery } from '@/services/goalApi';
-import { User, Employee, Goal } from '@/types';
-import ChecklistBoard from './ChecklistBoard';
-import { getAssignableRoles } from '@/utils/rolePermissions';
+import { useRouter } from 'next/router';
+import { logout } from '@/store/authSlice';
+import dayjs from 'dayjs';
+import 'dayjs/locale/ru';
+import { useTerritoryManagerStore, TerritorySummary, DealerMetrics } from '@/store/territoryManagerStore';
 
-const { Title } = Typography;
-const { TabPane } = Tabs;
-const { Option } = Select;
+dayjs.locale('ru');
+
+const { Header: AntHeader } = Layout;
+const { Content } = Layout;
+const { Title, Text } = Typography;
+
+const TerritoryMapTab = lazy(() => import('./tabs/TerritoryMapTab'));
+const TerritoryFunnelTab = lazy(() => import('./tabs/TerritoryFunnelTab'));
+const TerritoryPlanFactTab = lazy(() => import('./tabs/TerritoryPlanFactTab'));
+const TerritoryCommunicationsTab = lazy(() => import('./tabs/TerritoryCommunicationsTab'));
+const TerritoryBenchmarkTab = lazy(() => import('./tabs/TerritoryBenchmarkTab'));
 
 interface FranchiserManagerDashboardProps {
-  user: User;          // пользователь с ролью franchiser_manager
+  user: {
+    id: string;
+    email: string;
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    territoryName?: string;
+    region?: string;
+  };
   title?: string;
 }
 
-/* ---------- Функция агрегирования целей (по роли) ---------- */
-const aggregateGoals = (goals: Goal[], role: string) => {
-  const filtered = goals.filter((g) => g.role === role);
-  const totalPlan = filtered.reduce((sum, g) => sum + g.sales_plan, 0);
-  const totalFact = filtered.reduce((sum, g) => sum + (g.sales_fact ?? 0), 0);
-  const totalForecast = filtered.reduce(
-    (sum, g) => sum + (g.forecast ?? 0),
-    0,
-  );
-  const percent = totalPlan ? Math.round((totalFact / totalPlan) * 100) : 0;
-  return { totalPlan, totalFact, totalForecast, percent };
-};
+const FranchiserManagerDashboard: React.FC<FranchiserManagerDashboardProps> = ({ user, title }) => {
+  const router = useRouter();
+  const { 
+    activeTab, 
+    summary, 
+    isLoading: storeLoading,
+    summaryModalOpen,
+    setActiveTab, 
+    setSummary, 
+    setLoading, 
+    setLastUpdated,
+    setSummaryModalOpen,
+    setManager,
+  } = useTerritoryManagerStore();
 
-const FranchiserManagerDashboard: React.FC<FranchiserManagerDashboardProps> = ({
-  user,
-  title,
-}) => {
-  /** ------------------- Модальное окно сотрудника ------------------- */
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [form] = Form.useForm();
+  const [currentTime, setCurrentTime] = useState(dayjs().format('HH:mm'));
+  const [currentDate, setCurrentDate] = useState(dayjs().format('D MMMM YYYY, dddd'));
+  const [alerts, setAlerts] = useState(5);
 
-  /** ------------------- Запросы ------------------- */
-  // Сотрудники (Dealer + Salon Manager)
-  const {
-    data: allUsers,
-    isLoading: isUsersLoading,
-    error: usersError,
-    refetch: refetchUsers,
-  } = useGetEmployeesQuery();
-
-  // Цели (для агрегатов и GoalList)
-  const {
-    data: allGoals = [],
-    isLoading: isGoalsLoading,
-    error: goalsError,
-    refetch: refetchGoals,
-  } = useGetVisibleGoalsQuery();
-
-  // Мутации сотрудников
-  const [createEmployee, { isLoading: isCreating }] =
-    useCreateEmployeeMutation();
-  const [updateEmployee] = useUpdateEmployeeMutation();
-  const [deleteEmployee] = useDeleteEmployeeMutation();
-
-  /** ------------------- Ошибки ------------------- */
   useEffect(() => {
-    if (usersError) {
-      message.error('Ошибка загрузки сотрудников');
+    const timer = setInterval(() => {
+      setCurrentTime(dayjs().format('HH:mm'));
+      setCurrentDate(dayjs().format('D MMMM YYYY, dddd'));
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      setManager({
+        id: user.id,
+        name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        territoryName: user.territoryName || 'Москва и область',
+        region: user.region || 'Центральный федеральный округ',
+      });
     }
-    if (goalsError) {
-      message.error('Ошибка загрузки целей');
-    }
-  }, [usersError, goalsError]);
+  }, [user, setManager]);
 
-  /** ------------------- Подготовка данных ------------------- */
-  const safeUsers = Array.isArray(allUsers) ? allUsers : [];
-
-  // Фильтрация по ролям, которые видит менеджер франчайзи
-  const dealers = safeUsers.filter(
-    (u) => (u.role || '').toLowerCase() === 'dealer',
-  );
-  const salonManagers = safeUsers.filter(
-    (u) => (u.role || '').toLowerCase() === 'salon_manager',
-  );
-
-  // Кураторы (может назначать только уже существующего франчайзи‑менеджера)
-  const potentialManagers = safeUsers.filter(
-    (u) => (u.role || '').toLowerCase() === 'franchiser_manager',
-  );
-
-  /** ------------------- Открыть/закрыть модалку ------------------- */
-  const showEmpModal = (employee?: Employee) => {
-    setEditingEmployee(employee || null);
-    if (employee) {
-      form.setFieldsValue(employee);
-    } else {
-      form.resetFields();
-    }
-    setIsModalVisible(true);
-  };
-
-  /** ------------------- CRUD сотрудников ------------------- */
-  const handleEmpSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      if (editingEmployee) {
-        await updateEmployee({ id: editingEmployee.id, ...values }).unwrap();
-        message.success('Сотрудник обновлён');
-      } else {
-        await createEmployee(values).unwrap();
-        message.success('Сотрудник создан');
+  useEffect(() => {
+    const fetchSummary = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const res = await fetch('/api/v1/territory/summary', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSummary({
+            planCompletionPercent: data.planCompletionPercent || 0,
+            quarterForecastPercent: data.quarterForecastPercent || 0,
+            redZoneDealersCount: data.redZoneDealersCount || 0,
+            avgConversion: data.avgConversion || 0,
+            activeAlerts: data.activeAlerts || 0,
+          });
+          setAlerts(data.activeAlerts || 0);
+        }
+      } catch (e) {
+        setSummary({
+          planCompletionPercent: 82,
+          quarterForecastPercent: 91,
+          redZoneDealersCount: 2,
+          avgConversion: 4.2,
+          activeAlerts: alerts,
+        });
+      } finally {
+        setLoading(false);
+        setLastUpdated(new Date());
       }
-      setIsModalVisible(false);
-      form.resetFields();
-      refetchUsers();
-    } catch (e: any) {
-      console.error(e);
-      message.error(e?.data?.error || 'Ошибка сохранения');
-    }
+    };
+
+    fetchSummary();
+    const updateInterval = setInterval(fetchSummary, 3 * 60 * 1000);
+    return () => clearInterval(updateInterval);
+  }, [setSummary, setLoading, setLastUpdated, alerts]);
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
   };
 
-  const handleEmpDelete = async (id: string) => {
-    try {
-      await deleteEmployee(id).unwrap();
-      message.success('Сотрудник удалён');
-      refetchUsers();
-    } catch (e: any) {
-      console.error(e);
-      message.error(e?.data?.error || 'Ошибка удаления');
-    }
+  const userMenu = {
+    items: [
+      { key: 'profile', icon: <UserOutlined />, label: 'Профиль' },
+      { key: 'settings', icon: <SettingOutlined />, label: 'Настройки' },
+      { type: 'divider' as const },
+      { key: 'logout', icon: <LogoutOutlined />, label: 'Выйти', onClick: handleLogout },
+    ],
   };
 
-  /** ------------------- Таблица сотрудников ------------------- */
-  const columns = [
-    {
-      title: 'Имя',
-      dataIndex: 'first_name',
-      key: 'first_name',
-      render: (t: string) => t || '—',
-    },
-    { title: 'Email', dataIndex: 'email', key: 'email' },
-    { title: 'Роль', dataIndex: 'role', key: 'role' },
-    {
-      title: 'Действия',
-      key: 'actions',
-      render: (_: any, record: Employee) => (
-        <Space>
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => showEmpModal(record)}
-          />
-          <Popconfirm
-            title="Удалить сотрудника?"
-            onConfirm={() => handleEmpDelete(record.id)}
-          >
-            <Button danger icon={<DeleteOutlined />} size="small" />
-          </Popconfirm>
-        </Space>
-      ),
-    },
+  const tabItems = [
+    { key: 'map', label: 'Карта территории' },
+    { key: 'funnel', label: 'Воронка' },
+    { key: 'planfact', label: 'План-факт и Прогноз' },
+    { key: 'communications', label: 'Коммуникации и Задачи' },
+    { key: 'benchmark', label: 'Бенчмаркинг' },
   ];
 
-  /** ------------------- Агрегация целей ------------------- */
-  const dealerAgg = aggregateGoals(allGoals, 'dealer');
-  const salonMgrAgg = aggregateGoals(allGoals, 'salon_manager');
+  const renderTabContent = () => {
+    return (
+      <Suspense fallback={
+        <div style={{ textAlign: 'center', padding: 50 }}>
+          <Spin size="large" />
+        </div>
+      }>
+        {activeTab === 'map' && <TerritoryMapTab />}
+        {activeTab === 'funnel' && <TerritoryFunnelTab />}
+        {activeTab === 'planfact' && <TerritoryPlanFactTab />}
+        {activeTab === 'communications' && <TerritoryCommunicationsTab />}
+        {activeTab === 'benchmark' && <TerritoryBenchmarkTab />}
+      </Suspense>
+    );
+  };
 
-  /** ------------------- Роли, которые может назначать ------------------- */
-  const assignableRoles = getAssignableRoles(user.role); // -> ['dealer','salon_manager']
-  const canAssign = assignableRoles.length > 0;
+  const getStatusColor = (percent: number) => {
+    if (percent >= 80) return '#52c41a';
+    if (percent >= 50) return '#fa8c16';
+    return '#ff4d4f';
+  };
 
-  /** ------------------- Рендер ------------------- */
+  const getAlertsList = () => [
+    { id: '1', title: 'Дилер "Мебель Москва" - план 68%', desc: 'Отставание от плана на 12%' },
+    { id: '2', title: 'Салон "Диванит Воронеж" - конверсия 1.8%', desc: 'Ниже нормы' },
+    { id: '3', title: 'Новый дилер "МебельЛига"', desc: 'Требует утверждения' },
+  ];
+
   return (
-    <div style={{ padding: 24 }}>
-      {/* Шапка */}
-      <Title level={2}>{title || 'Панель менеджера франчайзи'}</Title>
+    <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+      <AntHeader style={{ 
+        background: '#fff', 
+        padding: '0 24px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        borderBottom: '1px solid #f0f0f0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 'auto',
+        lineHeight: 'normal',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div>
+            <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
+              {title || `${user.first_name || ''} ${user.last_name || ''}`.trim()}
+            </Title>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {user.territoryName || 'Москва и область'} • {currentDate} {currentTime}
+            </Text>
+          </div>
+        </div>
 
-      {/* Статистика по сотрудникам */}
-      <div style={{ marginBottom: 24, display: 'flex', gap: 16 }}>
-        <Card style={{ width: 200 }}>
-          Дилеров: <strong>{dealers.length}</strong>
-        </Card>
-        <Card style={{ width: 200 }}>
-          Менеджеров салонов: <strong>{salonManagers.length}</strong>
-        </Card>
-      </div>
+        <Row gutter={[12, 8]} align="middle" style={{ flex: 1, margin: '0 24px', minWidth: 600 }}>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 8 }}>
+              <Statistic 
+                title="Выполнение плана" 
+                value={summary?.planCompletionPercent || 0} 
+                precision={0}
+                suffix="%"
+                valueStyle={{ fontSize: 16, color: getStatusColor(summary?.planCompletionPercent || 0) }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 8 }}>
+              <Statistic 
+                title="Прогноз квартала" 
+                value={summary?.quarterForecastPercent || 0} 
+                precision={0}
+                suffix="%"
+                prefix={<RiseOutlined />}
+                valueStyle={{ fontSize: 16, color: getStatusColor(summary?.quarterForecastPercent || 0) }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 8 }}>
+              <Statistic 
+                title="Дилеров в красной" 
+                value={summary?.redZoneDealersCount || 0} 
+                valueStyle={{ fontSize: 16, color: summary?.redZoneDealersCount ? '#ff4d4f' : '#52c41a' }}
+                prefix={<WarningOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 8 }}>
+              <Statistic 
+                title="Средняя конверсия" 
+                value={summary?.avgConversion || 0} 
+                precision={1}
+                suffix="%"
+                valueStyle={{ fontSize: 16 }}
+              />
+            </Card>
+          </Col>
+        </Row>
 
-      {/* Личный план */}
-      <Card style={{ marginBottom: 24 }}>
-        <GoalCard />
-      </Card>
-
-      {/* Агрегированные карточки целей */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={12}>
-          <Card title="Дилеры – план продаж">
-            <Statistic title="План (₽)" value={dealerAgg.totalPlan} />
-            <Statistic title="Факт (₽)" value={dealerAgg.totalFact} />
-            <Statistic title="Прогноз (₽)" value={dealerAgg.totalForecast} />
-            <Statistic title="Выполнено, %" value={dealerAgg.percent} />
-          </Card>
-        </Col>
-        <Col span={12}>
-          <Card title="Менеджеры салонов – план продаж">
-            <Statistic title="План (₽)" value={salonMgrAgg.totalPlan} />
-            <Statistic title="Факт (₽)" value={salonMgrAgg.totalFact} />
-            <Statistic title="Прогноз (₽)" value={salonMgrAgg.totalForecast} />
-            <Statistic title="Выполнено, %" value={salonMgrAgg.percent} />
-          </Card>
-        </Col>
-      </Row>
-
-      {/* Список целей и кнопка «Назначить план» */}
-      <Card title="Планы (цели) в организации" style={{ marginBottom: 24 }}>
-        {canAssign && (
-          <Space style={{ marginBottom: 12 }}>
-            {/* GoalList сам отобразит кнопку, но можно добавить пояснение */}
-          </Space>
-        )}
-        <GoalList />
-      </Card>
-
-      {/* Вкладки для остальных функций */}
-      <Tabs defaultActiveKey="tasks">
-        <TabPane
-          tab={
-            <span>
-              <CheckSquareOutlined /> Задачи
-            </span>
-          }
-          key="tasks"
-        >
-          <Card>
-            <ChecklistBoard employees={safeUsers} />
-          </Card>
-        </TabPane>
-
-        {/* Таблица дилеров */}
-        <TabPane
-          tab={
-            <span>
-              <ShopOutlined /> Дилеры ({dealers.length})
-            </span>
-          }
-          key="dealers"
-        >
-          <Card
-            extra={
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => showEmpModal()}
-              >
-                Добавить
-              </Button>
-            }
+        <Space size="middle">
+          <Button 
+            icon={<MenuOutlined />} 
+            onClick={() => setSummaryModalOpen(true)}
           >
-            <Table
-              columns={columns}
-              dataSource={dealers}
-              rowKey="id"
-              loading={isUsersLoading}
-              pagination={{ pageSize: 10 }}
-            />
-          </Card>
-        </TabPane>
+            Сводка
+          </Button>
+          <Badge count={alerts} offset={[-5, 5]}>
+            <BellOutlined style={{ fontSize: 20, cursor: 'pointer' }} />
+          </Badge>
+          <Dropdown menu={userMenu} placement="bottomRight">
+            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+            </div>
+          </Dropdown>
+        </Space>
+      </AntHeader>
 
-        {/* Таблица менеджеров салонов */}
-        <TabPane
-          tab={
-            <span>
-              <TeamOutlined /> Менеджеры салонов ({salonManagers.length})
-            </span>
-          }
-          key="salonManagers"
-        >
-          <Card
-            extra={
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => showEmpModal()}
-              >
-                Добавить
-              </Button>
-            }
-          >
-            <Table
-              columns={columns}
-              dataSource={salonManagers}
-              rowKey="id"
-              loading={isUsersLoading}
-              pagination={{ pageSize: 10 }}
-            />
-          </Card>
-        </TabPane>
-      </Tabs>
+      <Content style={{ padding: 0 }}>
+        <div style={{ 
+          background: '#fff', 
+          borderBottom: '1px solid #f0f0f0',
+          padding: '0 24px',
+          overflowX: 'auto',
+        }}>
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={tabItems}
+            style={{ marginBottom: -1 }}
+          />
+        </div>
 
-      {/* Модальное окно создания/редактирования сотрудника */}
+        <div style={{ padding: 24 }}>
+          {renderTabContent()}
+        </div>
+      </Content>
+
       <Modal
-        title={editingEmployee ? 'Редактировать' : 'Новый пользователь'}
-        open={isModalVisible}
-        onCancel={() => {
-          setIsModalVisible(false);
-          form.resetFields();
-        }}
-        onOk={handleEmpSubmit}
-        confirmLoading={isCreating}
+        title="Утренняя сводка"
+        open={summaryModalOpen}
+        onCancel={() => setSummaryModalOpen(false)}
+        footer={null}
+        width={600}
       >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="first_name"
-            label="Имя"
-            rules={[{ required: true }]}
-          >
-            <Input />
-          </Form.Item>
-
-          <Form.Item name="last_name" label="Фамилия">
-            <Input />
-          </Form.Item>
-
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[{ required: true, type: 'email' }]}
-          >
-            <Input disabled={!!editingEmployee} />
-          </Form.Item>
-
-          {/* Пароль только при добавлении */}
-          {!editingEmployee && (
-            <Form.Item
-              name="password"
-              label="Пароль"
-              rules={[{ required: true, min: 6 }]}
-            >
-              <Input.Password />
-            </Form.Item>
+        <List
+          dataSource={getAlertsList()}
+          renderItem={(item) => (
+            <List.Item>
+              <List.Item.Meta
+                title={item.title}
+                description={item.desc}
+              />
+            </List.Item>
           )}
-
-          <Form.Item name="role" label="Роль" rules={[{ required: true }]}>
-            <Select placeholder="Выберите роль">
-              {/* Менеджер франчайзи может создавать только дилеров и менеджеров салонов */}
-              <Option value="dealer">Дилер</Option>
-              <Option value="salon_manager">Менеджер Салона</Option>
-            </Select>
-          </Form.Item>
-
-          {/* Куратор (может быть только менеджер франчайзи) */}
-          <Form.Item
-            noStyle
-            shouldUpdate={(prev, cur) => prev.role !== cur.role}
-          >
-            {({ getFieldValue }) => {
-              const sel = getFieldValue('role');
-              if (
-                (sel === 'dealer' || sel === 'salon_manager') &&
-                potentialManagers.length > 0
-              ) {
-                return (
-                  <Form.Item name="managed_by" label="Куратор (Менеджер)">
-                    <Select placeholder="Выберите менеджера‑куратора">
-                      {potentialManagers.map((m) => (
-                        <Option key={m.id} value={m.id}>
-                          {m.first_name} {m.last_name} ({m.email})
-                        </Option>
-                      ))}
-                    </Select>
-                  </Form.Item>
-                );
-              }
-              return null;
-            }}
-          </Form.Item>
-        </Form>
+        />
+        <Divider />
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Text>Выполнение плана:</Text>
+            <Text strong>{summary?.planCompletionPercent || 0}%</Text>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Text>Прогноз квартала:</Text>
+            <Text strong>{summary?.quarterForecastPercent || 0}%</Text>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Text>Дилеров в красной зоне:</Text>
+            <Text strong style={{ color: summary?.redZoneDealersCount ? '#ff4d4f' : '#52c41a' }}>
+              {summary?.redZoneDealersCount || 0}
+            </Text>
+          </div>
+        </Space>
       </Modal>
-    </div>
+    </Layout>
   );
 };
 

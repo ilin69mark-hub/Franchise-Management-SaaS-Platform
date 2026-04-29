@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Header from '@/components/Dashboard/Header';
 import FranchiserDashboard from '@/components/Dashboard/FranchiserDashboard';
+import FranchiserManagerDashboard from '@/components/Dashboard/FranchiserManagerDashboard';
 import DealerDashboard from '@/components/Dashboard/DealerDashboard';
 import SalonManagerDashboard from '@/components/Dashboard/SalonManagerDashboard';
 
@@ -57,7 +58,7 @@ const DashboardPage: React.FC = () => {
         <Head><title>{title}</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>
-          <FranchiserDashboard user={user} title={title} />
+          <FranchiserManagerDashboard user={user} title={title} />
         </Content>
       </Layout>
     );
@@ -87,7 +88,7 @@ const DashboardPage: React.FC = () => {
     );
   }
 
-  return (
+return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Head><title>Франчайзинг</title></Head>
       <Header />

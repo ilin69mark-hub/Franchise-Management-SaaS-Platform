@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Header from '@/components/Dashboard/Header';
 import FranchiserDashboard from '@/components/Dashboard/FranchiserDashboard';
+import FranchiserManagerDashboard from '@/components/Dashboard/FranchiserManagerDashboard';
 
 const { Content } = Layout;
 
@@ -50,7 +51,7 @@ const FranchiserManagerPage: React.FC = () => {
         <Head><title>{title}</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>
-          <FranchiserDashboard user={user} title={title} />
+          <FranchiserManagerDashboard user={user} title={title} />
         </Content>
       </Layout>
     );

@@ -34,6 +34,20 @@ func main() {
 		log.Fatalf("Database connection failed: %v", err)
 	}
 
+	// Seed data
+	if err := database.SeedUsers(db); err != nil {
+		log.Printf("Seed users error: %v", err)
+	}
+	if err := database.SeedGoals(db); err != nil {
+		log.Printf("Seed goals error: %v", err)
+	}
+	if err := database.SeedChecklists(db); err != nil {
+		log.Printf("Seed checklists error: %v", err)
+	}
+	if err := database.SeedAlerts(db); err != nil {
+		log.Printf("Seed alerts error: %v", err)
+	}
+
 	_, err = cache.ConnectRedis()
 	if err != nil {
 		log.Printf("Warning: Redis not available, rate limiting will use in-memory store")
@@ -57,6 +71,7 @@ func main() {
 	scheduleService := services.NewScheduleService(scheduleRepo)
 	kpiService := services.NewKPIService(db, kpiRepo, scheduleRepo)
 	goalService := services.NewGoalService(goalRepo)
+	alertService := services.NewAlertService(notifRepo, db)
 
 	c := cron.New()
 	paymentJob := jobs.NewPaymentJob(adminService, notifService)
@@ -71,7 +86,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService)
 	notifHandler := handlers.NewNotificationHandler(notifService)
 	leadHandler := handlers.NewLeadHandler(leadService)
-	kpiHandler := handlers.NewKPIHandler(kpiService, scheduleService)
+	kpiHandler := handlers.NewKPIHandler(kpiService, scheduleService, alertService)
 	goalHandler := handlers.NewGoalHandler(goalService)
 
 	r := gin.Default()
@@ -129,6 +144,17 @@ func main() {
 		protected.GET("/schedule", kpiHandler.GetSchedule)
 		protected.POST("/schedule", kpiHandler.CreateEvent)
 		protected.PUT("/schedule/:id/status", kpiHandler.UpdateEventStatus)
+
+		// Dashboard Main (Salon Manager)
+		protected.GET("/dashboard/main", kpiHandler.GetDashboardMain)
+		protected.GET("/salon-manager/top-bar", kpiHandler.GetTopBar)
+		protected.GET("/dashboard/funnel", kpiHandler.GetDashboardFunnel)
+		protected.GET("/dashboard/team", kpiHandler.GetDashboardTeam)
+		protected.GET("/dashboard/team/:id/history", kpiHandler.GetSalesRepHistory)
+		protected.GET("/dashboard/products", kpiHandler.GetDashboardProducts)
+		protected.GET("/alerts", kpiHandler.GetAlerts)
+		protected.PATCH("/alerts/:id/read", kpiHandler.MarkAlertRead)
+		protected.GET("/manager/targets", kpiHandler.GetManagerTargets)
 
 		protected.GET("/stats/team/analytics", kpiHandler.GetTeamAnalytics)
 		protected.GET("/schedule/all", kpiHandler.GetAllSchedule)

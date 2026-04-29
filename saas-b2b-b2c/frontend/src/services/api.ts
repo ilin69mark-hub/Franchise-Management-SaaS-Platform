@@ -9,7 +9,9 @@ import {
   RegisterRequest,
   Employee,
   Salon,
+  UnitTemplate,
 } from '@/types';
+import dayjs from 'dayjs';
 
 export const apiSlice = createApi({
   reducerPath: 'api',
@@ -49,6 +51,22 @@ export const apiSlice = createApi({
     'Employee',
     'Notification',
     'Salon',
+    'UnitTemplate',
+    'DealerPlanFact',
+    'DealerFunnel',
+    'DealerBenchmark',
+    'TopManagers',
+    'Inventory',
+    'LostSales',
+    'Returns',
+    'Tasks',
+    'Requests',
+    'MarketingBudget',
+    'Interactions',
+    'ReportData',
+    'Reports',
+    'Alerts',
+    'AlertSettings',
   ],
   endpoints: (builder) => ({
     // === АВТОРИЗАЦИЯ ===
@@ -228,6 +246,165 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Salon'],
     }),
+
+    // === ШАБЛОНЫ UNIT-ЭКОНОМИКИ ===
+    getUnitTemplates: builder.query<UnitTemplate[], void>({
+      query: () => '/dealer/unit-templates',
+      providesTags: (result) =>
+        result ? [...result.map(({ id }) => ({ type: 'UnitTemplate' as const, id })), 'UnitTemplate'] : ['UnitTemplate'],
+    }),
+    createUnitTemplate: builder.mutation<UnitTemplate, Omit<UnitTemplate, 'id'>>({
+      query: (newTemplate) => ({
+        url: '/dealer/unit-templates',
+        method: 'POST',
+        body: newTemplate,
+      }),
+      invalidatesTags: ['UnitTemplate'],
+    }),
+    deleteUnitTemplate: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `/dealer/unit-templates/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['UnitTemplate'],
+    }),
+
+    // === ПЛАН-ФАКТ ДИЛЕРА ===
+    getDealerPlanFact: builder.query<any, { period: string; date: string }>({
+      query: ({ period, date }) => `/dealer/plan-fact?period=${period}&date=${date}`,
+      providesTags: ['DealerPlanFact'],
+    }),
+
+    // === ВОРОНКА СЕТИ ===
+    getDealerFunnel: builder.query<any, string>({
+      query: (date) => `/dealer/funnel?date=${date}`,
+      providesTags: ['DealerFunnel'],
+    }),
+
+    // === БЕНЧМАРКИ ОТ ФРАНЧАЙЗЕРА ===
+    getDealerBenchmark: builder.query<any, string>({
+      query: (metric) => `/dealer/benchmark?metric=${metric}`,
+      providesTags: ['DealerBenchmark'],
+    }),
+
+    // === ТОП-МЕНЕДЖЕРЫ ===
+    getTopManagers: builder.query<any, { period: string; limit: number }>({
+      query: ({ period, limit }) => `/dealer/top-managers?period=${period}&limit=${limit}`,
+      providesTags: ['TopManagers'],
+    }),
+
+    // === СКЛАД И ИНВЕНТАРИ ===
+    getInventory: builder.query<any, { period: string; store: string }>({
+      query: ({ period, store }) => `/dealer/inventory?period=${period}&store=${store}`,
+      providesTags: ['Inventory'],
+    }),
+
+    // === УПУЩЕННЫЕ ПРОДАЖИ ===
+    getLostSales: builder.query<any, string>({
+      query: (period) => `/dealer/lost-sales?period=${period}`,
+      providesTags: ['LostSales'],
+    }),
+
+    // === ВОЗВРАТЫ ===
+    getReturns: builder.query<any, string>({
+      query: (period) => `/dealer/returns?period=${period}`,
+      providesTags: ['Returns'],
+    }),
+
+    // === ЗАДАЧИ ОТ ФРАНЧАЙЗЕРА ===
+    getTasks: builder.query<any, void>({
+      query: () => '/dealer/tasks',
+      providesTags: ['Tasks'],
+    }),
+    updateTaskStatus: builder.mutation<any, { id: string; status: string }>({
+      query: ({ id, status }) => ({
+        url: `/dealer/tasks/${id}`,
+        method: 'PATCH',
+        body: { status },
+      }),
+      invalidatesTags: ['Tasks'],
+    }),
+    addTaskComment: builder.mutation<any, { id: string; comment: string }>({
+      query: ({ id, comment }) => ({
+        url: `/dealer/tasks/${id}/comments`,
+        method: 'POST',
+        body: { comment },
+      }),
+      invalidatesTags: ['Tasks'],
+    }),
+
+    // === ЗАПРОСЫ К БРЕНДУ ===
+    getRequests: builder.query<any, void>({
+      query: () => '/dealer/requests',
+      providesTags: ['Requests'],
+    }),
+    createRequest: builder.mutation<any, any>({
+      query: (body) => ({
+        url: '/dealer/requests',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Requests'],
+    }),
+
+    // === МАРКЕТИНГОВЫЙ БЮДЖЕТ ===
+    getMarketingBudget: builder.query<any, string>({
+      query: (quarter) => `/dealer/marketing-budget?quarter=${quarter}`,
+      providesTags: ['MarketingBudget'],
+    }),
+
+    // === ИСТОРИЯ ВЗАИМОДЕЙСТВИЙ ===
+    getInteractions: builder.query<any, string>({
+      query: (managerId) => `/dealer/interactions?manager_id=${managerId}`,
+      providesTags: ['Interactions'],
+    }),
+
+    // === ОТЧЁТЫ ДЛЯ БРЕНДА ===
+    getReportData: builder.query<any, { period: string; date: string }>({
+      query: ({ period, date }) => `/dealer/report-data?period=${period}&date=${date}`,
+      providesTags: ['ReportData'],
+    }),
+    createReport: builder.mutation<any, any>({
+      query: (body) => ({
+        url: '/dealer/reports',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Reports'],
+    }),
+    getReportHistory: builder.query<any, number>({
+      query: (limit) => `/dealer/reports?limit=${limit}`,
+      providesTags: ['Reports'],
+    }),
+
+    // === АЛЕРТЫ ===
+    getAlerts: builder.query<any, void>({
+      query: () => '/dealer/alerts',
+      providesTags: ['Alerts'],
+    }),
+    getUnreadAlerts: builder.query<any, void>({
+      query: () => '/dealer/alerts/unread',
+      providesTags: ['Alerts'],
+    }),
+    markAlertRead: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/dealer/alerts/${id}/read`,
+        method: 'PATCH',
+      }),
+      invalidatesTags: ['Alerts'],
+    }),
+    getAlertSettings: builder.query<any, void>({
+      query: () => '/dealer/alert-settings',
+      providesTags: ['AlertSettings'],
+    }),
+    updateAlertSettings: builder.mutation<any, any>({
+      query: (body) => ({
+        url: '/dealer/alert-settings',
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['AlertSettings'],
+    }),
   }),
 });
 
@@ -269,4 +446,57 @@ export const {
   useAssignManagerMutation,
   useUpdateSalonMutation,
   useDeleteSalonMutation,
+
+  // unit templates
+  useGetUnitTemplatesQuery,
+  useCreateUnitTemplateMutation,
+  useDeleteUnitTemplateMutation,
+
+  // dealer plan-fact
+  useGetDealerPlanFactQuery,
+
+  // dealer funnel
+  useGetDealerFunnelQuery,
+
+  // dealer benchmark
+  useGetDealerBenchmarkQuery,
+
+  // top managers
+  useGetTopManagersQuery,
+
+  // inventory
+  useGetInventoryQuery,
+
+  // lost sales
+  useGetLostSalesQuery,
+
+  // returns
+  useGetReturnsQuery,
+
+  // tasks
+  useGetTasksQuery,
+  useUpdateTaskStatusMutation,
+  useAddTaskCommentMutation,
+
+  // requests
+  useGetRequestsQuery,
+  useCreateRequestMutation,
+
+  // marketing budget
+  useGetMarketingBudgetQuery,
+
+  // interactions
+  useGetInteractionsQuery,
+
+  // dealer reports
+  useGetReportDataQuery,
+  useCreateReportMutation,
+  useGetReportHistoryQuery,
+
+  // alerts
+  useGetAlertsQuery,
+  useGetUnreadAlertsQuery,
+  useMarkAlertReadMutation,
+  useGetAlertSettingsQuery,
+  useUpdateAlertSettingsMutation,
 } = apiSlice;

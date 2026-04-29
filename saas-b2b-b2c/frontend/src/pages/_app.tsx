@@ -1,3 +1,4 @@
+import React from 'react';
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
 import { Provider } from 'react-redux';
@@ -16,6 +17,20 @@ function MyApp({ Component, pageProps }: AppProps) {
   const [showChild, setShowChild] = useState(false);
 
   useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    const userStr = localStorage.getItem('user');
+    if (token && userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user && user.role) {
+          store.dispatch({
+            type: 'auth/setAuthFromStorage',
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse user', e);
+      }
+    }
     setShowChild(true);
   }, []);
 

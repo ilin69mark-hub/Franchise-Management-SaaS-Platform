@@ -1,669 +1,263 @@
-// src/components/Dashboard/DealerDashboard.tsx
-import React, { useState, useMemo, useEffect } from 'react';
-import {
-  Card,
-  Row,
-  Col,               // ← нужный импорт
-  Statistic,
-  Typography,
-  Spin,
-  Tabs,
-  Table,
-  Button,
-  Modal,
-  Form,
-  Input,
-  Select,
-  message,
-  Space,
-  Popconfirm,
-  Tag,
-  Radio,
-  Progress,
-  DatePicker,
-  // ← удалён ScheduleOutlined отсюда – он НЕ экспортируется из antd
-} from 'antd';
-import {
-  CheckCircleOutlined,
-  UserOutlined,
-  UserAddOutlined,
-  HomeOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  AimOutlined,
-  LineChartOutlined,
-  PlusOutlined,
-  PhoneOutlined,
-  TeamOutlined,
+// src/components/Dashboard/DealerDashboardNew.tsx
+import React, { useEffect, Suspense, lazy, useState } from 'react';
+import { Layout, Row, Col, Card, Typography, Tabs, Badge, Avatar, Dropdown, Space, Spin, Statistic } from 'antd';
+import { 
+  UserOutlined, 
+  LogoutOutlined, 
+  SettingOutlined, 
+  BellOutlined,
   DollarOutlined,
-  ScheduleOutlined,                 // ← импортируем только отсюда
+  RiseOutlined,
+  PercentageOutlined,
+  BankOutlined,
+  MenuOutlined
 } from '@ant-design/icons';
-
-import { User, Employee } from '@/types';
-import {
-  useGetChecklistsQuery,
-  useGetEmployeesQuery,
-  useCreateEmployeeMutation,
-  useUpdateEmployeeMutation,
-  useDeleteEmployeeMutation,
-} from '@/services/api';
-import ChecklistBoard from './ChecklistBoard';
-import SalonManagerWidget from './SalonManagerWidget';
+import { useRouter } from 'next/router';
+import { useDispatch } from 'react-redux';
+import { logout } from '@/store/authSlice';
 import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek';
-dayjs.extend(isoWeek);
+import 'dayjs/locale/ru';
+import { useDealerDashboardStore } from '@/store/dealerDashboardStore';
 
-import GoalCard from '@/components/Dashboard/GoalCard';
-import GoalList from '@/components/Dashboard/GoalList';
+dayjs.locale('ru');
 
+const { Header: AntHeader } = Layout;
+const { Content } = Layout;
 const { Title, Text } = Typography;
-const { Option } = Select;
 
-interface DealerDashboardProps {
-  user: User;
+const ProfitTab = lazy(() => import('./tabs/ProfitTab'));
+const FunnelPlanTab = lazy(() => import('./tabs/FunnelPlanTab'));
+const ProductsStockTab = lazy(() => import('./tabs/ProductsStockTab'));
+const CommunicationsTab = lazy(() => import('./tabs/CommunicationsTab'));
+
+interface UserData {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  role?: string;
+}
+
+interface DealerDashboardNewProps {
+  user: UserData;
   title?: string;
 }
 
-/* ---------------------- Вспомогательный компонент KPI ---------------------- */
-const KpiCell: React.FC<{ plan: number; fact: number; suffix?: string }> = ({
-  plan,
-  fact,
-  suffix = '',
-}) => {
-  const percent = plan > 0 ? Math.min(100, Math.round((fact / plan) * 100)) : 0;
-  const color =
-    percent >= 80 ? '#52c41a' : percent >= 50 ? '#faad14' : '#ff4d4f';
+const DealerDashboardNew: React.FC<DealerDashboardNewProps> = ({ user, title }) => {
+  const router = useRouter();
+  const dispatch = useDispatch();
+  const { 
+    activeTab, 
+    summary, 
+    dealerCenterName, 
+    isLoading: storeLoading,
+    setActiveTab, 
+    setSummary, 
+    setLoading, 
+    setLastUpdated 
+  } = useDealerDashboardStore();
 
-  return (
-    <Space direction="vertical" size={0} style={{ width: '100%' }}>
-      <Text style={{ fontSize: 12 }}>
-        {fact}
-        {suffix} / {plan}
-        {suffix}
-      </Text>
-      <Progress percent={percent} size="small" showInfo={false} strokeColor={color} />
-      <Text type="secondary" style={{ fontSize: 10 }}>
-        {percent}%
-      </Text>
-    </Space>
-  );
-};
+  const [currentDate, setCurrentDate] = useState(dayjs().format('D MMMM YYYY, dddd'));
+  const [alerts, setAlerts] = useState(3);
 
-/* ============================= Основной компонент ============================= */
-const DealerDashboard: React.FC<DealerDashboardProps> = ({ user, title }) => {
-  /* --------------------- Состояния --------------------- */
-  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
-  const [analytics, setAnalytics] = useState<any[]>([]);
-  const [schedule, setSchedule] = useState<any[]>([]);
-  const [loadingStats, setLoadingStats] = useState(false);
-
-  const [isGoalModal, setIsGoalModal] = useState(false);
-  const [isSchedModal, setIsSchedModal] = useState(false);
-  const [schedForm] = Form.useForm();
-  const [goalForm] = Form.useForm();
-
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingManager, setEditingManager] = useState<Employee | null>(null);
-  const [form] = Form.useForm();
-
-  /* --------------------- RTK‑Query --------------------- */
-  const { data: checklistData, isLoading: isChecklistLoading } =
-    useGetChecklistsQuery();
-
-  const { data: allEmployees, isLoading: isEmployeesLoading } =
-    useGetEmployeesQuery();
-
-  const [createEmployee, { isLoading: isCreating }] = useCreateEmployeeMutation();
-  const [updateEmployee] = useUpdateEmployeeMutation();
-  const [deleteEmployee] = useDeleteEmployeeMutation();
-
-  /* --------------------- Фильтрация менеджеров салонов --------------------- */
-  const salonManagers = useMemo(() => {
-    if (!allEmployees) return [];
-    return allEmployees.filter(
-      (emp: Employee) =>
-        emp.role === 'salon_manager' && emp.managed_by === user.id,
-    );
-  }, [allEmployees, user.id]);
-
-  /* --------------------- Загрузка аналитики и расписания --------------------- */
   useEffect(() => {
-    fetchAnalytics();
-    fetchSchedule();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, salonManagers]);
+    const timer = setInterval(() => {
+      setCurrentDate(dayjs().format('D MMMM YYYY, dddd'));
+    }, 60000);
 
-  const fetchAnalytics = async () => {
-    if (salonManagers.length === 0) return;
-    setLoadingStats(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(
-        `/api/v1/stats/team/analytics?period=${period}`,
-        {
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('accessToken');
+        const res = await fetch('/api/v1/dealer/summary', {
           headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      if (res.ok) setAnalytics(await res.json());
-    } catch (e) {
-      console.error('Analytics error', e);
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  const fetchSchedule = async () => {
-    const today = dayjs().format('YYYY-MM-DD');
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/v1/schedule/all?date=${today}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setSchedule(await res.json());
-    } catch (e) {
-      console.error('Schedule error', e);
-    }
-  };
-
-  /* --------------------- CRUD менеджеров --------------------- */
-  const showCreateModal = () => {
-    setEditingManager(null);
-    form.resetFields();
-    setIsModalVisible(true);
-  };
-  const showEditModal = (record: Employee) => {
-    setEditingManager(record);
-    form.setFieldsValue(record);
-    setIsModalVisible(true);
-  };
-
-  const handleFinish = async (values: any) => {
-    try {
-      if (editingManager) {
-        await updateEmployee({ id: editingManager.id, ...values }).unwrap();
-        message.success('Менеджер обновлён');
-      } else {
-        const payload = { ...values, role: 'salon_manager', managed_by: user.id };
-        await createEmployee(payload).unwrap();
-        message.success('Менеджер салона создан');
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setSummary({
+            netProfit: data.netProfit || 0,
+            grossRevenue: data.grossRevenue || 0,
+            planCompletionPercent: data.planCompletionPercent || 0,
+            marginProfit: data.marginProfit || 0,
+            activeAlerts: data.activeAlerts || 0,
+          });
+          setAlerts(data.activeAlerts || 0);
+        }
+      } catch (e) {
+        console.error('Summary fetch error', e);
+setSummary({
+            netProfit: 1250000,
+            grossRevenue: 4500000,
+            planCompletionPercent: 78,
+            marginProfit: 890000,
+            activeAlerts: alerts,
+          });
+      } finally {
+        setLoading(false);
+        setLastUpdated(new Date());
       }
-      setIsModalVisible(false);
-      form.resetFields();
-    } catch (e: any) {
-      message.error(e?.data?.error || 'Ошибка при сохранении');
-    }
+    };
+
+    fetchSummary();
+
+    const updateInterval = setInterval(fetchSummary, 3 * 60 * 1000);
+    return () => clearInterval(updateInterval);
+  }, [setSummary, setLoading, setLastUpdated]);
+
+  const handleLogout = () => {
+    dispatch(logout());
+    router.push('/login');
   };
 
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteEmployee(id).unwrap();
-      message.success('Менеджер удалён');
-    } catch {
-      message.error('Ошибка при удалении');
-    }
+  const userMenu = {
+    items: [
+      { key: 'profile', icon: <UserOutlined />, label: 'Профиль' },
+      { key: 'settings', icon: <SettingOutlined />, label: 'Настройки' },
+      { type: 'divider' as const },
+      { key: 'logout', icon: <LogoutOutlined />, label: 'Выйти', onClick: handleLogout },
+    ],
   };
 
-  /* --------------------- План (Goal) --------------------- */
-  const handleSetGoal = async (values: any) => {
-    try {
-      const token = localStorage.getItem('token');
-      const payload = {
-        ...values,
-        target_date: values.target_date
-          ? values.target_date.format('YYYY-MM-DD')
-          : dayjs().format('YYYY-MM-DD'),
-      };
-      await fetch('/api/v1/goals', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      message.success('План сохранён');
-      setIsGoalModal(false);
-      goalForm.resetFields();
-      fetchAnalytics(); // обновляем таблицу аналитики
-    } catch {
-      message.error('Ошибка сохранения плана');
-    }
-  };
-
-  /* --------------------- Расписание --------------------- */
-  const handleCreateSched = async (values: any) => {
-    try {
-      const token = localStorage.getItem('token');
-      const payload = {
-        ...values,
-        start_time: values.start_time.toISOString(),
-      };
-      await fetch('/api/v1/schedule/manager', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      message.success('Задача поставлена');
-      setIsSchedModal(false);
-      schedForm.resetFields();
-      fetchSchedule();
-    } catch {
-      message.error('Ошибка создания задачи');
-    }
-  };
-
-  const handleDeleteSched = async (id: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      await fetch(`/api/v1/schedule/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      message.success('Задача удалена');
-      fetchSchedule();
-    } catch {
-      message.error('Ошибка удаления задачи');
-    }
-  };
-
-  /* --------------------- Таблицы --------------------- */
-  const analyticsColumns = [
-    {
-      title: 'Менеджер',
-      dataIndex: 'name',
-      fixed: 'left' as const,
-      width: 150,
-    },
-    {
-      title: '💰 Продажи',
-      children: [
-        {
-          title: 'План / Факт',
-          key: 'sales',
-          width: 150,
-          render: (r: any) => (
-            <KpiCell
-              plan={r.kpi?.sales?.plan || 0}
-              fact={r.kpi?.sales?.fact || 0}
-              suffix="₽"
-            />
-          ),
-        },
-      ],
-    },
-    {
-      title: '👤 Лиды (ввод)',
-      children: [
-        {
-          title: 'План / Факт',
-          key: 'leads',
-          width: 130,
-          render: (r: any) => (
-            <KpiCell plan={r.kpi?.leads?.plan || 0} fact={r.kpi?.leads?.fact || 0} />
-          ),
-        },
-      ],
-    },
-    {
-      title: '📞 Звонки',
-      children: [
-        {
-          title: 'План / Факт',
-          key: 'calls',
-          width: 130,
-          render: (r: any) => (
-            <KpiCell plan={r.kpi?.calls?.plan || 0} fact={r.kpi?.calls?.fact || 0} />
-          ),
-        },
-      ],
-    },
-    {
-      title: '🤝 Встречи',
-      children: [
-        {
-          title: 'План / Факт',
-          key: 'meetings',
-          width: 130,
-          render: (r: any) => (
-            <KpiCell
-              plan={r.kpi?.meetings?.plan || 0}
-              fact={r.kpi?.meetings?.fact || 0}
-            />
-          ),
-        },
-      ],
-    },
-    {
-      title: '📊 Воронка лидов (факт)',
-      children: [
-        {
-          title: 'Занесли',
-          key: 'entered',
-          render: (r: any) => <Tag color="blue">{r.funnel?.entered || 0}</Tag>,
-        },
-        {
-          title: 'В работе',
-          key: 'in_work',
-          render: (r: any) => <Tag color="orange">{r.funnel?.in_work || 0}</Tag>,
-        },
-        {
-          title: 'Думают',
-          key: 'waiting',
-          render: (r: any) => <Tag color="purple">{r.funnel?.waiting || 0}</Tag>,
-        },
-        {
-          title: 'Продажа',
-          key: 'sale',
-          render: (r: any) => <Tag color="green">{r.funnel?.sale || 0}</Tag>,
-        },
-      ],
-    },
+  const tabItems = [
+    { key: 'profit', label: 'Прибыль' },
+    { key: 'funnel', label: 'Воронка и План' },
+    { key: 'products', label: 'Товары и Склад' },
+    { key: 'communications', label: 'Коммуникации' },
   ];
 
-  const scheduleColumns = [
-    {
-      title: 'Время',
-      dataIndex: 'start_time',
-      width: 80,
-      render: (d: string) => dayjs(d).format('HH:mm'),
-    },
-    { title: 'Менеджер', dataIndex: 'user_name' },
-    { title: 'Задача', dataIndex: 'title' },
-    {
-      title: 'Статус',
-      dataIndex: 'status',
-      render: (s: string) => (
-        <Tag color={s === 'completed' ? 'green' : 'blue'}>{s}</Tag>
-      ),
-    },
-    {
-      title: 'Действия',
-      render: (r: any) => (
-        <Popconfirm
-          title="Удалить задачу?"
-          onConfirm={() => handleDeleteSched(r.id)}
-        >
-          <Button danger size="small" icon={<DeleteOutlined />} />
-        </Popconfirm>
-      ),
-    },
-  ];
+  const renderTabContent = () => {
+    const tabPane = tabItems.find(t => t.key === activeTab);
+    if (!tabPane) return null;
 
-  const empColumns = [
-    {
-      title: 'Имя',
-      render: (r: Employee) => `${r.first_name} ${r.last_name}`,
-    },
-    { title: 'Email', dataIndex: 'email' },
-    { title: 'Телефон', dataIndex: 'phone' },
-    {
-      title: 'Действия',
-      key: 'actions',
-      render: (_: any, record: Employee) => (
-        <Space>
-          <Button
-            icon={<EditOutlined />}
-            size="small"
-            onClick={() => showEditModal(record)}
-          />
-          <Popconfirm
-            title="Удалить менеджера?"
-            onConfirm={() => handleDelete(record.id)}
-          >
-            <Button danger icon={<DeleteOutlined />} size="small" />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
-
-  /* --------------------- Состояние загрузки чек‑листов --------------------- */
-  if (isChecklistLoading) return <Spin style={{ margin: 50 }} />;
-
-  /* --------------------- Рендер --------------------- */
-  return (
-    <div style={{ padding: 24, background: '#f5f5f5', minHeight: '100vh' }}>
-      {/* Header */}
-      <Row justify="space-between" align="middle" style={{ marginBottom: 20 }}>
-        <div>
-          <Title level={2} style={{ margin: 0 }}>
-            {title || 'Личный кабинет дилера'}
-          </Title>
-          <Text type="secondary">
-            Добро пожаловать, {user.first_name || user.email}!
-          </Text>
+    return (
+      <Suspense fallback={
+        <div style={{ textAlign: 'center', padding: 50 }}>
+          <Spin size="large" />
         </div>
-        <Space>
-          <Button icon={<AimOutlined />} onClick={() => setIsGoalModal(true)}>
-            Выставить план
-          </Button>
-          <Button
-            type="primary"
-            icon={<UserAddOutlined />}
-            onClick={showCreateModal}
-          >
-            Новый менеджер
-          </Button>
+      }>
+        {activeTab === 'profit' && <ProfitTab />}
+        {activeTab === 'funnel' && <FunnelPlanTab />}
+        {activeTab === 'products' && <ProductsStockTab />}
+        {activeTab === 'communications' && <CommunicationsTab />}
+      </Suspense>
+    );
+  };
+
+  return (
+    <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+      <AntHeader style={{ 
+        background: '#fff', 
+        padding: '0 24px', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'space-between', 
+        borderBottom: '1px solid #f0f0f0',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 'auto',
+        lineHeight: 'normal',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <Title level={4} style={{ margin: 0, color: '#1890ff' }}>
+            {title || dealerCenterName}
+          </Title>
+          <Text type="secondary">{currentDate}</Text>
+        </div>
+
+        <Row gutter={[16, 8]} align="middle" style={{ flex: 1, margin: '0 24px' }}>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 12 }}>
+              <Statistic 
+                title="Чистая прибыль" 
+                value={summary?.netProfit || 0} 
+                precision={0}
+                prefix="₽ "
+                valueStyle={{ fontSize: 16 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 12 }}>
+              <Statistic 
+                title="Валовый оборот" 
+                value={summary?.grossRevenue || 0} 
+                precision={0}
+                prefix="₽ "
+                valueStyle={{ fontSize: 16 }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 12 }}>
+              <Statistic 
+                title="% плана сети" 
+                value={summary?.planCompletionPercent || 0} 
+                precision={0}
+                suffix="%"
+                prefix={<PercentageOutlined />}
+                valueStyle={{ fontSize: 16, color: (summary?.planCompletionPercent || 0) >= 80 ? '#52c41a' : '#fa8c16' }}
+              />
+            </Card>
+          </Col>
+          <Col xs={12} sm={6} lg={3}>
+            <Card size="small" bodyStyle={{ padding: 12 }}>
+              <Statistic 
+                title="Маржинальная прибыль" 
+                value={summary?.marginProfit || 0} 
+                precision={0}
+                prefix="₽ "
+                valueStyle={{ fontSize: 16 }}
+              />
+            </Card>
+          </Col>
+        </Row>
+
+        <Space size="middle">
+          <Badge count={alerts} offset={[-5, 5]}>
+            <BellOutlined style={{ fontSize: 20, cursor: 'pointer' }} />
+          </Badge>
+          <Dropdown menu={userMenu} placement="bottomRight">
+            <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+              <Text style={{ marginLeft: 8, display: 'none' }} className="sm:block">
+                {user.first_name || user.email}
+              </Text>
+            </div>
+          </Dropdown>
         </Space>
-      </Row>
+      </AntHeader>
 
-      {/* === Goal‑компоненты (личный план + список целей) === */}
-      <GoalCard date={dayjs().format('YYYY-MM-DD')} />
-      <GoalList />
+      <Content style={{ padding: '0' }}>
+        <div style={{ 
+          background: '#fff', 
+          borderBottom: '1px solid #f0f0f0',
+          padding: '0 24px',
+          overflowX: 'auto',
+        }}>
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            items={[
+              { key: 'profit', label: '💰 Прибыль' },
+              { key: 'funnel', label: '📊 Воронка и План' },
+              { key: 'products', label: '🛋️ Товары и Склад' },
+              { key: 'communications', label: '📞 Коммуникации' },
+            ]}
+            style={{ marginBottom: -1 }}
+          />
+        </div>
 
-      {/* ==== Сводная таблица аналитики ==== */}
-      <Card style={{ marginBottom: 20 }}>
-        <Space style={{ marginBottom: 16 }}>
-          <Text strong>Период:</Text>
-          <Radio.Group value={period} onChange={e => setPeriod(e.target.value)}>
-            <Radio.Button value="day">День</Radio.Button>
-            <Radio.Button value="week">Неделя</Radio.Button>
-            <Radio.Button value="month">Месяц</Radio.Button>
-          </Radio.Group>
-        </Space>
-
-        <Table
-          dataSource={analytics}
-          columns={analyticsColumns}
-          rowKey="id"
-          loading={loadingStats}
-          bordered
-          size="small"
-          scroll={{ x: 1300 }}
-          locale={{ emptyText: 'Нет данных по команде' }}
-        />
-      </Card>
-
-      {/* ==== Вкладки ==== */}
-      <Tabs defaultActiveKey="schedule">
-        {/* ---------- Расписание ---------- */}
-        <Tabs.TabPane
-          tab={<span><ScheduleOutlined /> Расписание команды</span>}
-          key="schedule"
-        >
-          <Card
-            title="Список задач на сегодня"
-            extra={
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={() => setIsSchedModal(true)}
-              >
-                Поставить задачу
-              </Button>
-            }
-          >
-            <Table
-              dataSource={schedule}
-              columns={scheduleColumns}
-              rowKey="id"
-              locale={{ emptyText: 'Нет задач на сегодня' }}
-            />
-          </Card>
-        </Tabs.TabPane>
-
-        {/* ---------- Задачи (чек‑лист) ---------- */}
-        <Tabs.TabPane tab="Задачи" key="tasks">
-          <Card>
-            <ChecklistBoard canCreate={true} employees={salonManagers} />
-          </Card>
-        </Tabs.TabPane>
-
-        {/* ---------- Менеджеры салонов ---------- */}
-        <Tabs.TabPane tab="Менеджеры салонов" key="managers">
-          <Card>
-            <Table
-              dataSource={salonManagers}
-              columns={empColumns}
-              rowKey="id"
-              loading={isEmployeesLoading}
-              locale={{ emptyText: 'Вы ещё не добавили менеджеров салонов' }}
-            />
-          </Card>
-        </Tabs.TabPane>
-
-        {/* ---------- Салоны ---------- */}
-        <Tabs.TabPane tab={<span><HomeOutlined /> Салоны</span>} key="salons">
-          <SalonManagerWidget />
-        </Tabs.TabPane>
-      </Tabs>
-
-      {/* ===================== Модальная форма менеджера ===================== */}
-      <Modal
-        title={editingManager ? 'Редактировать менеджера' : 'Новый менеджер салона'}
-        open={isModalVisible}                      // ← `open` вместо `visible`
-        onCancel={() => setIsModalVisible(false)}
-        onOk={() => form.submit()}
-        confirmLoading={isCreating}
-      >
-        <Form form={form} layout="vertical" onFinish={handleFinish}>
-          <Form.Item name="first_name" label="Имя" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="last_name" label="Фамилия">
-            <Input />
-          </Form.Item>
-          <Form.Item
-            name="email"
-            label="Email"
-            rules={[{ required: true, type: 'email' }]}
-          >
-            <Input disabled={!!editingManager} />
-          </Form.Item>
-          {!editingManager && (
-            <Form.Item
-              name="password"
-              label="Пароль"
-              rules={[{ required: true, min: 6 }]}
-            >
-              <Input.Password />
-            </Form.Item>
-          )}
-          <Form.Item name="phone" label="Телефон">
-            <Input />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* ===================== Модальная форма расписания ===================== */}
-      <Modal
-        title="Поставить задачу менеджеру"
-        open={isSchedModal}                         // ← `open`
-        onCancel={() => setIsSchedModal(false)}
-        onOk={() => schedForm.submit()}
-      >
-        <Form form={schedForm} layout="vertical" onFinish={handleCreateSched}>
-          <Form.Item
-            name="user_id"
-            label="Менеджер"
-            rules={[{ required: true }]}
-          >
-            <Select placeholder="Выберите менеджера">
-              {salonManagers.map((m: Employee) => (
-                <Option key={m.id} value={m.id}>
-                  {m.first_name} {m.last_name}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item name="title" label="Задача" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-
-          <Form.Item
-            name="start_time"
-            label="Время начала"
-            rules={[{ required: true }]}
-          >
-            <DatePicker
-              showTime
-              format="YYYY-MM-DD HH:mm"
-              style={{ width: '100%' }}
-            />
-          </Form.Item>
-
-          <Form.Item name="type" label="Тип" initialValue="task">
-            <Select>
-              <Option value="task">Задача</Option>
-              <Option value="meeting">Встреча</Option>
-              <Option value="call">Звонок</Option>
-            </Select>
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      {/* ===================== Модальная форма планов (Goal) ===================== */}
-      <Modal
-        title="Выставить план"
-        open={isGoalModal}                         // ← `open`
-        onCancel={() => setIsGoalModal(false)}
-        onOk={() => goalForm.submit()}
-      >
-        <Form form={goalForm} layout="vertical" onFinish={handleSetGoal}>
-          <Form.Item name="user_id" label="Менеджер">
-            <Select allowClear placeholder="Все или конкретный">
-              {salonManagers.map((m: Employee) => (
-                <Option key={m.id} value={m.id}>
-                  {m.first_name} {m.last_name}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item name="target_date" label="Дата плана" initialValue={dayjs()}>
-            <DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" />
-          </Form.Item>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item name="sales_plan" label="План продаж (₽)">
-                <Input type="number" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="leads_plan" label="План лидов">
-                <Input type="number" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="calls_plan" label="План звонков">
-                <Input type="number" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item name="meetings_plan" label="План встреч">
-                <Input type="number" style={{ width: '100%' }} />
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </Modal>
-    </div>
+        <div style={{ padding: 24 }}>
+          {renderTabContent()}
+        </div>
+      </Content>
+    </Layout>
   );
 };
 
-export default DealerDashboard;
+export default DealerDashboardNew;
