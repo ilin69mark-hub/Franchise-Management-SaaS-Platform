@@ -257,11 +257,30 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 		Where("salon_id = ? AND status = ? AND created_at BETWEEN ? AND ?", salonID, "sale", firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&monthFact)
 
+	// Также добавляем факт из заказов (более точные данные)
+	var orderFact float64
+	s.DB.Model(&models.Order{}).
+		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"paid", "contract"}, firstOfMonth, targetDate).
+		Select("COALESCE(SUM(total_price), 0)").Scan(&orderFact)
+	
+	// Используем максимум из обоих источников
+	if orderFact > monthFact {
+		monthFact = orderFact
+	}
+
 	resp.Plan = monthPlan
 	resp.Fact = monthFact
+
+	// Calculate percent - ensure it's always set when we have data
 	if monthPlan > 0 {
-		resp.PlanPercent = int((monthFact / monthPlan) * 100)
+		percent := (monthFact / monthPlan) * 100
+		resp.PlanPercent = int(percent)
 		if resp.PlanPercent > 100 {
+			resp.PlanPercent = 100
+		}
+	} else {
+		// If there's fact but no plan, show 100% or use default
+		if monthFact > 0 {
 			resp.PlanPercent = 100
 		}
 	}
@@ -1590,13 +1609,42 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 	}
 
 	// Общие метрики
-	var totalPlan, totalFact float64
+	var totalPlan, leadFact, orderFact, totalFact float64
 	s.DB.Model(&models.DailyGoal{}).
 		Where("user_id IN ? AND target_date BETWEEN ? AND ?", dealerIDs, startDate, endDate).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
+	
+	// Факт из лидов (статус sale или paid)
 	s.DB.Model(&models.Lead{}).
 		Where("manager_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", dealerIDs, []string{"sale", "paid"}, startDate, endDate).
-		Select("COALESCE(SUM(budget), 0)").Scan(&totalFact)
+		Select("COALESCE(SUM(budget), 0)").Scan(&leadFact)
+	
+	// Получаем фактические продажи из заказов (ORDERS)
+	// Сначала найдём салоны, принадлежащие этим дилерам через их tenant_id
+	var salonIDs []uuid.UUID
+	for _, dealer := range dealers {
+		if dealer.TenantID != nil {
+			// Salon.dealer_id = User.tenant_id (это связь!)
+			var salons []models.Salon
+			s.DB.Where("dealer_id = ?", *dealer.TenantID).Find(&salons)
+			for _, salon := range salons {
+				salonIDs = append(salonIDs, salon.ID)
+			}
+		}
+	}
+	
+	if len(salonIDs) > 0 {
+		s.DB.Model(&models.Order{}).
+			Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, startDate, endDate).
+			Select("COALESCE(SUM(total_price), 0)").Scan(&orderFact)
+	}
+	
+	// Используем максимальное значение из обоих источников
+	if orderFact > leadFact {
+		totalFact = orderFact
+	} else {
+		totalFact = leadFact
+	}
 
 	// Рассчитать процент плана
 	planPercent := 0.0
@@ -1619,15 +1667,26 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 	// Красная зона: дилеры с < 50% плана
 	redZoneCount := 0
 	for _, dealer := range dealers {
+		// Находим салоны этого дилера
+		var dealerSalonIDs []uuid.UUID
+		if dealer.TenantID != nil {
+			var salons []models.Salon
+			s.DB.Where("dealer_id = ?", *dealer.TenantID).Find(&salons)
+			for _, salon := range salons {
+				dealerSalonIDs = append(dealerSalonIDs, salon.ID)
+			}
+		}
+		
 		var plan float64
 		s.DB.Model(&models.DailyGoal{}).
 			Where("user_id = ? AND target_date BETWEEN ? AND ?", dealer.ID, startDate, endDate).
 			Select("COALESCE(SUM(sales_plan), 0)").Scan(&plan)
-		if plan > 0 {
+		
+		if plan > 0 && len(dealerSalonIDs) > 0 {
 			var fact float64
-			s.DB.Model(&models.Lead{}).
-				Where("manager_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", dealer.ID, []string{"sale", "paid"}, startDate, endDate).
-				Select("COALESCE(SUM(budget), 0)").Scan(&fact)
+			s.DB.Model(&models.Order{}).
+				Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", dealerSalonIDs, []string{"paid", "contract"}, startDate, endDate).
+				Select("COALESCE(SUM(total_price), 0)").Scan(&fact)
 			if int((fact/plan)*100) < 50 {
 				redZoneCount++
 			}
