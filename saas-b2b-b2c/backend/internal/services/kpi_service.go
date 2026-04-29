@@ -252,21 +252,18 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	}
 
 	// Факт на текущий момент (сумма продаж из leads со статусом sale)
-	var monthFact float64
+	var monthFact, orderFact float64
 	s.DB.Model(&models.Lead{}).
 		Where("salon_id = ? AND status = ? AND created_at BETWEEN ? AND ?", salonID, "sale", firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&monthFact)
 
 	// Также добавляем факт из заказов (более точные данные)
-	var orderFact float64
 	s.DB.Model(&models.Order{}).
 		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"paid", "contract"}, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(total_price), 0)").Scan(&orderFact)
 	
-	// Используем максимум из обоих источников
-	if orderFact > monthFact {
-		monthFact = orderFact
-	}
+	// СУММИРУЕМ оба источника для более точного подсчёта
+	monthFact = monthFact + orderFact
 
 	resp.Plan = monthPlan
 	resp.Fact = monthFact
@@ -1035,10 +1032,23 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DealerSummaryResponse, error) {
 	resp := &models.DealerSummaryResponse{}
 
-	// Находим все салоны дилера через таблицу salons по dealer_id
-	var salons []models.Salon
-	if err := s.DB.Where("dealer_id = ?", userID).Find(&salons).Error; err != nil {
+	// Сначала находим пользователя дилера
+	var user models.User
+	if err := s.DB.First(&user, userID).Error; err != nil {
 		return nil, err
+	}
+
+	// Находим все салоны дилера через tenant_id (dealer_id в таблице salons = user.tenant_id)
+	var dealerTenantID *uuid.UUID
+	if user.TenantID != nil {
+		dealerTenantID = user.TenantID
+	}
+
+	var salons []models.Salon
+	if dealerTenantID != nil {
+		if err := s.DB.Where("dealer_id = ?", *dealerTenantID).Find(&salons).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	// Собираем все salonID
@@ -1059,16 +1069,27 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
 
-	// Общая выручка всех салонов
+	// Общая выручка всех салонов ИЗ ЗАКАЗОВ
 	var totalRevenue float64
+	s.DB.Model(&models.Order{}).
+		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, firstOfMonth, targetDate).
+		Select("COALESCE(SUM(total_price), 0)").Scan(&totalRevenue)
+
+	// Также добавляем из leads если заказы пустые
+	var leadRevenue float64
 	s.DB.Model(&models.Lead{}).
 		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, firstOfMonth, targetDate).
-		Select("COALESCE(SUM(budget), 0)").Scan(&totalRevenue)
+		Select("COALESCE(SUM(budget), 0)").Scan(&leadRevenue)
+	
+	// Берём максимум из обоих источников
+	if leadRevenue > totalRevenue {
+		totalRevenue = leadRevenue
+	}
 
-	// Общий план через goals
+	// Общий план через daily_goals (для дилеров)
 	var totalPlan float64
-	s.DB.Model(&models.Goal{}).
-		Where("dealer_id = ? AND target_date BETWEEN ? AND ?", userID, firstOfMonth, targetDate).
+	s.DB.Model(&models.DailyGoal{}).
+		Where("user_id = ? AND target_date BETWEEN ? AND ?", userID, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
 
 	// Процент выполнения
@@ -1087,7 +1108,7 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 	// Алёрты - считаем через notifications для дилера
 	var alertsCount int64
 	s.DB.Model(&models.Notification{}).
-		Where("user_id = ? AND is_read = false", userID).
+		Where("user_id = ? AND is_read = ?", userID, false).
 		Count(&alertsCount)
 
 	resp.NetProfit = netProfit
