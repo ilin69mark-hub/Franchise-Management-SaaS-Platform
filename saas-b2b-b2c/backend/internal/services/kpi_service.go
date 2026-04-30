@@ -1069,27 +1069,28 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
 
-	// Общая выручка всех салонов ИЗ ЗАКАЗОВ
-	var totalRevenue float64
+	// Выручка из заказов (orders)
+	var orderRevenue float64
 	s.DB.Model(&models.Order{}).
-		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, firstOfMonth, targetDate).
-		Select("COALESCE(SUM(total_price), 0)").Scan(&totalRevenue)
+		Where("salon_id IN ? AND status = ? AND created_at BETWEEN ? AND ?", salonIDs, "paid", firstOfMonth, targetDate).
+		Select("COALESCE(SUM(total_price), 0)").Scan(&orderRevenue)
 
-	// Также добавляем из leads если заказы пустые
+	// Выручка из лидов - учитываем ВСЕ закрытые статусы (paid, contract)
 	var leadRevenue float64
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, firstOfMonth, targetDate).
+		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&leadRevenue)
-	
-	// Берём максимум из обоих источников
+
+	// Общая выручка = заказы + лиды (или максимум из них)
+	totalRevenue := orderRevenue
 	if leadRevenue > totalRevenue {
 		totalRevenue = leadRevenue
 	}
 
-	// Общий план через daily_goals (для дилеров)
+	// Общий план через goals (для дилеров - ищем по assignee_id = userID)
 	var totalPlan float64
-	s.DB.Model(&models.DailyGoal{}).
-		Where("user_id = ? AND target_date BETWEEN ? AND ?", userID, firstOfMonth, targetDate).
+	s.DB.Model(&models.Goal{}).
+		Where("assignee_id = ? AND period = 'monthly'", userID).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
 
 	// Процент выполнения
@@ -1466,20 +1467,25 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID, dateStr string) (*models.FranchiserSummaryResponse, error) {
 	resp := &models.FranchiserSummaryResponse{}
 
-	// Находим всех дилеров, которыми управляет франчайзер
-	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	// Находим всех дилеров через tenant_id франчайзера
+	var user models.User
+	if err := s.DB.First(&user, userID).Error; err != nil {
 		return nil, err
 	}
-
-	if len(dealers) == 0 {
-		return resp, nil
+	
+	// Ищем салоны через tenant_id
+	var salons []models.Salon
+	if err := s.DB.Where("dealer_id = ?", user.TenantID).Find(&salons).Error; err != nil {
+		return nil, err
+	}
+	
+	var salonIDs []uuid.UUID
+	for _, salon := range salons {
+		salonIDs = append(salonIDs, salon.ID)
 	}
 
-	// Собираем все salonIDs
-	var dealerIDs []uuid.UUID
-	for _, d := range dealers {
-		dealerIDs = append(dealerIDs, d.ID)
+	if len(salonIDs) == 0 {
+		return resp, nil
 	}
 
 	targetDate := time.Now()
@@ -1490,16 +1496,16 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
 
-	// Общая выручка
+	// Общая выручка из лидов (paid + contract)
 	var totalRevenue float64
 	s.DB.Model(&models.Lead{}).
-		Where("manager_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", dealerIDs, []string{"sale", "paid"}, firstOfMonth, targetDate).
+		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&totalRevenue)
 
-	// Общий план
+	// Общий план из goals
 	var totalPlan float64
-	s.DB.Model(&models.DailyGoal{}).
-		Where("user_id IN ? AND target_date BETWEEN ? AND ?", dealerIDs, firstOfMonth, targetDate).
+	s.DB.Model(&models.Goal{}).
+		Where("assignee_id = ? AND period = 'monthly'", userID).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
 
 	// Процент плана
@@ -1519,8 +1525,8 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 
 	// Средняя конверсия
 	var totalLeads, totalSales int64
-	s.DB.Model(&models.Lead{}).Where("manager_id IN ? AND created_at BETWEEN ? AND ?", dealerIDs, firstOfMonth, targetDate).Count(&totalLeads)
-	s.DB.Model(&models.Lead{}).Where("manager_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", dealerIDs, []string{"sale", "paid"}, firstOfMonth, targetDate).Count(&totalSales)
+	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND created_at BETWEEN ? AND ?", salonIDs, firstOfMonth, targetDate).Count(&totalLeads)
+	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"paid", "contract"}, firstOfMonth, targetDate).Count(&totalSales)
 
 	avgConversion := 0.0
 	if totalLeads > 0 {
@@ -1529,9 +1535,9 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 
 	resp.PlanPercent = planPercent
 	resp.ForecastPercent = forecastPercent
-	resp.ActiveDealers = len(dealers)
+	resp.ActiveDealers = len(salons)
 	resp.AvgConversion = avgConversion
-	resp.AvgMargin = 32.0 // Заглушка
+	resp.AvgMargin = 32.0
 
 	return resp, nil
 }
