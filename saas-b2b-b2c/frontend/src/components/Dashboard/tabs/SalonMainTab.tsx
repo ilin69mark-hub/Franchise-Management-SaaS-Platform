@@ -240,7 +240,7 @@ const SalonMainTab: React.FC<SalonMainTabProps> = ({ user }) => {
             <Row gutter={16}>
               <Col xs={12}>
                 <Card size="small" style={{ textAlign: 'center', background: '#fafafa' }}>
-                  <Text type="secondary">相对于昨日</Text>
+                  <Text type="secondary">К вчерашнему дню</Text>
                   <div style={{ marginTop: 8 }}>
                     <Text strong style={{ color: getDynamicColor(data?.dynamic_day || 0), fontSize: 24 }}>
                       {getDynamicIcon(data?.dynamic_day || 0)}
@@ -251,7 +251,7 @@ const SalonMainTab: React.FC<SalonMainTabProps> = ({ user }) => {
               </Col>
               <Col xs={12}>
                 <Card size="small" style={{ textAlign: 'center', background: '#fafafa' }}>
-                  <Text type="secondary">相对于上周</Text>
+                  <Text type="secondary">К прошлой неделе</Text>
                   <div style={{ marginTop: 8 }}>
                     <Text strong style={{ color: getDynamicColor(data?.dynamic_week || 0), fontSize: 24 }}>
                       {getDynamicIcon(data?.dynamic_week || 0)}

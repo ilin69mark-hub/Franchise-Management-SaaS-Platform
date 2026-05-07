@@ -268,6 +268,19 @@ type AlertsResponse struct {
 	UnreadCount int    `json:"unread_count"`
 }
 
+// AuditLog - запись аудита
+type AuditLog struct {
+	ID         uuid.UUID  `json:"id"`
+	TenantID   uuid.UUID  `json:"tenant_id"`
+	UserID     *uuid.UUID `json:"user_id"`
+	Action     string     `json:"action"`
+	EntityType string     `json:"entity_type"`
+	EntityID   string     `json:"entity_id"`
+	Details    string     `json:"details"`
+	IPAddress  string     `json:"ip_address"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 // DashboardTeamResponse - ответ для команды
 type DashboardTeamResponse struct {
 	Period     string             `json:"period"`       // week/month/quarter

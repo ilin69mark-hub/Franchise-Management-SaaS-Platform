@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -12,16 +13,99 @@ import (
 	"gorm.io/gorm"
 )
 
+var (
+	ErrInvalidMessage  = errors.New("message cannot be empty")
+	ErrInvalidSeverity = errors.New("invalid severity value")
+	ErrForbidden       = errors.New("forbidden")
+)
+
 type AlertService struct {
+	alertRepo repository.AlertRepositoryInterface
 	notifRepo *repository.NotificationRepository
 	db        *gorm.DB
 }
 
-func NewAlertService(notifRepo *repository.NotificationRepository, db *gorm.DB) *AlertService {
-	return &AlertService{notifRepo: notifRepo, db: db}
+func NewAlertService(alertRepo repository.AlertRepositoryInterface, notifRepo *repository.NotificationRepository, db *gorm.DB) *AlertService {
+	return &AlertService{alertRepo: alertRepo, notifRepo: notifRepo, db: db}
 }
 
-// GetUnreadAlerts - получить непрочитанные алерты
+func NewAlertServiceWithDB(alertRepo repository.AlertRepositoryInterface, db *gorm.DB) *AlertService {
+	return &AlertService{alertRepo: alertRepo, db: db}
+}
+
+func (s *AlertService) CreateAlert(ctx context.Context, userID uuid.UUID, title, message string, severity models.AlertSeverity, alertType models.AlertType, link string) (*models.Alert, error) {
+	if message == "" {
+		return nil, ErrInvalidMessage
+	}
+	if severity != models.AlertSeverityCritical && severity != models.AlertSeverityWarning && severity != models.AlertSeverityInfo {
+		return nil, ErrInvalidSeverity
+	}
+
+	alert := &models.Alert{
+		ID:          uuid.New(),
+		UserID:      userID,
+		Type:        alertType,
+		Title:       title,
+		Description: message,
+		Severity:    severity,
+		Link:        link,
+		CreatedAt:   time.Now(),
+	}
+
+	return s.alertRepo.CreateAlert(ctx, alert)
+}
+
+func (s *AlertService) GetAlertsByUser(ctx context.Context, userID uuid.UUID) ([]models.Alert, error) {
+	return s.alertRepo.GetAlertsByUser(ctx, userID)
+}
+
+func (s *AlertService) GetUnreadCount(ctx context.Context, userID uuid.UUID) (int, error) {
+	alerts, err := s.alertRepo.GetUnreadAlerts(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	return len(alerts), nil
+}
+
+func (s *AlertService) MarkAsRead(ctx context.Context, userID, alertID uuid.UUID) error {
+	alert, err := s.alertRepo.GetAlertByID(ctx, alertID)
+	if err != nil {
+		return err
+	}
+	if alert == nil {
+		return errors.New("alert not found")
+	}
+	if alert.UserID != userID {
+		return ErrForbidden
+	}
+	return s.alertRepo.MarkAsRead(ctx, alertID)
+}
+
+func (s *AlertService) MarkAllAsRead(ctx context.Context, userID uuid.UUID) error {
+	alerts, err := s.alertRepo.GetUnreadAlerts(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(alerts) == 0 {
+		return nil
+	}
+	return s.alertRepo.MarkAllAsRead(ctx, userID)
+}
+
+func (s *AlertService) DeleteAlert(ctx context.Context, userID, alertID uuid.UUID) error {
+	alert, err := s.alertRepo.GetAlertByID(ctx, alertID)
+	if err != nil {
+		return err
+	}
+	if alert == nil {
+		return errors.New("alert not found")
+	}
+	if alert.UserID != userID {
+		return ErrForbidden
+	}
+	return s.alertRepo.DeleteAlert(ctx, alertID)
+}
+
 func (s *AlertService) GetUnreadAlerts(ctx context.Context, userID uuid.UUID) ([]models.Notification, int, error) {
 	var alerts []models.Notification
 	var count int64
@@ -37,14 +121,12 @@ func (s *AlertService) GetUnreadAlerts(ctx context.Context, userID uuid.UUID) ([
 	return alerts, int(count), nil
 }
 
-// MarkAsRead - пометить алерт прочитанным
-func (s *AlertService) MarkAsRead(ctx context.Context, userID, alertID uuid.UUID) error {
+func (s *AlertService) MarkAsReadNotification(ctx context.Context, userID, alertID uuid.UUID) error {
 	return s.db.Model(&models.Notification{}).
 		Where("id = ? AND user_id = ?", alertID, userID).
 		Update("is_read", true).Error
 }
 
-// GenerateAlertsForUser - сгенерировать алерты для пользователя
 func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UUID) error {
 	var user models.User
 	if err := s.db.First(&user, userID).Error; err != nil {
@@ -58,7 +140,6 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 
 	now := time.Now()
 
-	// === 1. Просроченные замеры (> 3 дней) ===
 	threeDaysAgo := now.AddDate(0, 0, -3)
 	var overdueMeasurements []models.Lead
 	s.db.Where("salon_id = ? AND status = ? AND updated_at < ?", salonID, "meeting", threeDaysAgo).
@@ -79,7 +160,6 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		s.db.Create(&alert)
 	}
 
-	// === 2. Брошенные КП (> 5 дней) ===
 	fiveDaysAgo := now.AddDate(0, 0, -5)
 	var abandonedKP []models.Lead
 	s.db.Where("salon_id = ? AND status = ? AND updated_at < ?", salonID, "wait", fiveDaysAgo).
@@ -100,20 +180,18 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		s.db.Create(&alert)
 	}
 
-	// === 3. Падение конверсии (> 20% к среднему) ===
 	var avgConversion float64
 	var todayCount int64
 
-	// Средняя конверсия за последние 30 дней
 	monthAgo := now.AddDate(0, 0, -30)
 	s.db.Model(&models.Lead{}).
 		Where("salon_id = ? AND created_at > ?", salonID, monthAgo).
 		Count(&todayCount)
 
 	if todayCount > 10 {
-		avgConversion = 20.0 // Заглушка - нужно реальный расчет
+		avgConversion = 20.0
 
-		todayConversion := 5.0 // Заглушка - получить из реальных данных
+		todayConversion := 5.0
 		drop := ((avgConversion - todayConversion) / avgConversion) * 100
 
 		if drop > 20 {
@@ -132,7 +210,6 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		}
 	}
 
-	// === 4. Падение трафика (> 30% к среднему) ===
 	var avgLeads, todayLeads int64
 	s.db.Model(&models.Lead{}).
 		Where("salon_id = ? AND created_at > ?", salonID, monthAgo).

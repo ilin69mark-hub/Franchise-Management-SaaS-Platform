@@ -71,7 +71,7 @@ func main() {
 	scheduleService := services.NewScheduleService(scheduleRepo)
 	kpiService := services.NewKPIService(db, kpiRepo, scheduleRepo)
 	goalService := services.NewGoalService(goalRepo)
-	alertService := services.NewAlertService(notifRepo, db)
+	alertService := services.NewAlertService(nil, notifRepo, db)
 
 	c := cron.New()
 	paymentJob := jobs.NewPaymentJob(adminService, notifService)

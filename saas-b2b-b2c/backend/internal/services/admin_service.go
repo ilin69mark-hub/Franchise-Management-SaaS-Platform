@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -13,14 +14,29 @@ import (
 	"gorm.io/gorm"
 )
 
+var (
+	ErrAlreadyExists       = errors.New("tenant with this slug already exists")
+	ErrNotFound           = errors.New("tenant not found")
+	ErrHasActiveUsers     = errors.New("cannot delete tenant with active users")
+)
+
 type AdminService struct {
-	tenantRepo *repository.TenantRepository
-	db         *gorm.DB
+	tenantRepo  repository.TenantRepositoryInterface
+	auditRepo   repository.AuditLogRepositoryInterface
+	db          *gorm.DB
 }
 
 func NewAdminService(db *gorm.DB) *AdminService {
 	return &AdminService{
-		tenantRepo: repository.NewTenantRepository(db),
+		tenantRepo:  repository.NewTenantRepository(db),
+		db:         db,
+	}
+}
+
+func NewAdminServiceWithInterfaces(tenantRepo repository.TenantRepositoryInterface, auditRepo repository.AuditLogRepositoryInterface, db *gorm.DB) *AdminService {
+	return &AdminService{
+		tenantRepo: tenantRepo,
+		auditRepo:  auditRepo,
 		db:         db,
 	}
 }
@@ -78,26 +94,76 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 	}, nil
 }
 
+// GetSystemStats - системная статистика для админа
+func (s *AdminService) GetSystemStats(ctx context.Context) (map[string]interface{}, error) {
+	tenants, err := s.tenantRepo.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalUsers int64
+	if s.db != nil {
+		s.db.Model(&models.User{}).Count(&totalUsers)
+	}
+
+	activeTenants := 0
+	for _, t := range tenants {
+		if t.Status == "active" {
+			activeTenants++
+		}
+	}
+
+	return map[string]interface{}{
+		"total_tenants":  len(tenants),
+		"active_tenants": activeTenants,
+		"total_users":    totalUsers,
+	}, nil
+}
+
+// GetAuditLog - получить аудит лог с фильтрацией и пагинацией
+func (s *AdminService) GetAuditLog(ctx context.Context, tenantID *uuid.UUID, startDate, endDate *time.Time, limit, offset int) ([]models.AuditLog, int64, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	total, err := s.auditRepo.CountByFilters(ctx, tenantID, startDate, endDate)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	logs, err := s.auditRepo.FindByFilters(ctx, tenantID, startDate, endDate, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return logs, total, nil
+}
+
 // GetAllTenants - список всех сетей
 func (s *AdminService) GetAllTenants(ctx context.Context) ([]map[string]interface{}, error) {
-	var results []map[string]interface{}
-	err := s.db.Table("tenants").
-		Select(`
-			tenants.id, 
-			tenants.name, 
-			tenants.status, 
-			tenants.plan_id, 
-			tenants.legal_entity,
-			tenants.inn,
-			tenants.max_users,
-			tenants.paid_until,
-			tenants.created_at,
-			plans.name as plan_name,
-			COALESCE(plans.price, 0) as mrr
-		`).
-		Joins("LEFT JOIN plans ON tenants.plan_id = plans.id").
-		Find(&results).Error
-	return results, err
+	tenants, err := s.tenantRepo.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]map[string]interface{}, 0, len(tenants))
+	for _, t := range tenants {
+		results = append(results, map[string]interface{}{
+			"id":           t.ID,
+			"name":         t.Name,
+			"status":       t.Status,
+			"plan_id":      t.PlanID,
+			"legal_entity": t.LegalEntity,
+			"inn":          t.INN,
+			"max_users":    t.MaxUsers,
+			"paid_until":   t.PaidUntil,
+			"created_at":   t.CreatedAt,
+		})
+	}
+	return results, nil
 }
 
 // GetTenantsWithPaidUntil - для payment job
@@ -142,8 +208,18 @@ type CreateTenantRequest struct {
 }
 
 // CreateTenant - создать сеть
-func (s *AdminService) CreateTenant(req *CreateTenantRequest) (*models.Tenant, error) {
-	tenant := models.Tenant{
+func (s *AdminService) CreateTenant(ctx context.Context, req *CreateTenantRequest) (*models.Tenant, error) {
+	tenants, err := s.tenantRepo.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tenants {
+		if t.Name == req.Name {
+			return nil, ErrAlreadyExists
+		}
+	}
+
+	tenant := &models.Tenant{
 		Name:        req.Name,
 		PlanID:      req.PlanID,
 		Status:      "active",
@@ -151,21 +227,24 @@ func (s *AdminService) CreateTenant(req *CreateTenantRequest) (*models.Tenant, e
 		INN:         req.INN,
 		MaxUsers:    req.MaxUsers,
 	}
-	if err := s.db.Create(&tenant).Error; err != nil {
+
+	created, err := s.tenantRepo.CreateTenant(ctx, tenant)
+	if err != nil {
 		return nil, err
 	}
+
 	if req.ContactEmail != "" {
-		tenantID := tenant.ID
 		contactUser := models.User{
 			Email:     req.ContactEmail,
 			FirstName: req.ContactName,
-			TenantID:  &tenantID,
+			TenantID:  &created.ID,
 			Role:      models.RoleFranchisor,
 			Status:    "active",
 		}
 		s.db.Create(&contactUser)
 	}
-	return &tenant, nil
+
+	return created, nil
 }
 
 // UpdateTenant - обновить сеть
@@ -193,10 +272,41 @@ func (s *AdminService) UnblockTenant(id uuid.UUID) error {
 	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "active").Error
 }
 
-// DeleteTenant - удалить
-func (s *AdminService) DeleteTenant(id uuid.UUID) error {
-	s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "churned")
-	return s.db.Delete(&models.Tenant{}, id).Error
+// SuspendTenant - приостановить тенант
+func (s *AdminService) SuspendTenant(ctx context.Context, id uuid.UUID) error {
+	tenant, err := s.tenantRepo.FindByID(ctx, id)
+	if err != nil {
+		return ErrNotFound
+	}
+	if tenant == nil {
+		return ErrNotFound
+	}
+
+	tenant.Status = "suspended"
+	return s.tenantRepo.UpdateTenant(ctx, tenant)
+}
+
+// DeleteTenant - удалить (мягкое удаление)
+func (s *AdminService) DeleteTenant(ctx context.Context, id uuid.UUID) error {
+	tenant, err := s.tenantRepo.FindByID(ctx, id)
+	if err != nil {
+		return ErrNotFound
+	}
+	if tenant == nil {
+		return ErrNotFound
+	}
+
+	// Проверка на активных пользователей
+	userCount, err := s.tenantRepo.CountUsersByTenantID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if userCount > 0 {
+		return ErrHasActiveUsers
+	}
+
+	tenant.Status = "churned"
+	return s.tenantRepo.UpdateTenant(ctx, tenant)
 }
 
 // === PLANS ===

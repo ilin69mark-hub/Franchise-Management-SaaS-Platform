@@ -507,7 +507,7 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 	addStage("measurement", "Замер", statusCounts["meeting"], statusSums["meeting"])
 	addStage("kp", "КП", statusCounts["wait"], statusSums["wait"])
 	addStage("contract", "Договор", statusCounts["sale"], statusSums["sale"])
-	addStage("payment", "Оплата", 0, 0)
+	addStage("payment", "Оплата", statusCounts["paid"], statusSums["paid"])
 
 	// ===== ГОРЯЧИЕ СДЕЛКИ (КП > N дней) =====
 	hotDays := 5

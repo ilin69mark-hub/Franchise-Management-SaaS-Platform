@@ -86,6 +86,18 @@ func (r *UserRepository) DeleteUser(ctx context.Context, userID uuid.UUID) error
     return r.db.WithContext(ctx).Delete(&models.User{}, userID).Error
 }
 
+// UpdateUser - обновить пользователя
+func (r *UserRepository) UpdateUser(ctx context.Context, user *models.User) error {
+    return r.db.WithContext(ctx).Save(user).Error
+}
+
+// CountByRole - посчитать пользователей с определенной ролью
+func (r *UserRepository) CountByRole(ctx context.Context, role string) (int64, error) {
+    var count int64
+    err := r.db.WithContext(ctx).Model(&models.User{}).Where("role = ?", role).Count(&count).Error
+    return count, err
+}
+
 // === ЭТАП 2: АНАЛИТИКА ===
 
 // CreateLog сохраняет запись о действии пользователя

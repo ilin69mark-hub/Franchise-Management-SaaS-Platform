@@ -74,7 +74,7 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
-	tenant, err := h.service.CreateTenant(&req)
+	tenant, err := h.service.CreateTenant(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -130,7 +130,7 @@ func (h *AdminHandler) UnblockTenant(c *gin.Context) {
 func (h *AdminHandler) DeleteTenant(c *gin.Context) {
 	idStr := c.Param("id")
 	id, _ := uuid.Parse(idStr)
-	if err := h.service.DeleteTenant(id); err != nil {
+	if err := h.service.DeleteTenant(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

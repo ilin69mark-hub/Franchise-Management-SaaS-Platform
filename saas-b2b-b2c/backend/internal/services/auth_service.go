@@ -18,14 +18,21 @@ import (
 )
 
 type AuthService struct {
-	userRepo   *repository.UserRepository
-	tenantRepo *repository.TenantRepository
+	userRepo   repository.UserRepositoryInterface
+	tenantRepo repository.TenantRepositoryInterface
 }
 
 func NewAuthService(db *gorm.DB) *AuthService {
 	return &AuthService{
 		userRepo:   repository.NewUserRepository(db),
 		tenantRepo: repository.NewTenantRepository(db),
+	}
+}
+
+func NewAuthServiceWithInterface(userRepo repository.UserRepositoryInterface, tenantRepo repository.TenantRepositoryInterface) *AuthService {
+	return &AuthService{
+		userRepo:   userRepo,
+		tenantRepo: tenantRepo,
 	}
 }
 
