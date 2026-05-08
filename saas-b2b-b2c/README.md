@@ -1,292 +1,226 @@
-Вот подробный, объединенный `README.md` для всего проекта. Я разбил его на логические блоки, объяснил зону ответственности каждого компонента и добавил пошаговые инструкции.
-
----
-
-# 🏢 Franchise Management SaaS Platform
+# Franchise Management SaaS Platform
 
 Полнофункциональная SaaS-платформа для управления франчайзинговой сетью. Позволяет франчайзеру управлять дилерами, товарами, заказами и аналитикой через современный веб-интерфейс.
 
-## 📋 Содержание
+## Содержание
 
-- [Архитектура проекта](#-архитектура-проекта)
-- [Технологический стек](#-технологический-стек)
-- [Структура проекта](#-структура-проекта)
-- [Установка и запуск](#-установка-и-запуск)
-- [API Документация](#-api-документация)
-- [Разработка](#-разработка)
-- [Деплой](#-деплой)
+- [Архитектура](#архитектура)
+- [Технологический стек](#технологический-стек)
+- [Структура проекта](#структура-проекта)
+- [Быстрый старт](#быстрый-старт)
+- [Ролевая модель](#ролевая-модель)
+- [База данных и RLS](#база-данных-и-rls)
+- [API](#api)
+- [Разработка](#разработка)
+- [Деплой](#деплой)
 
 ---
 
-## 🏗 Архитектура проекта
+## Архитектура
 
-Проект построен по принципу разделения ответственности (Separation of Concerns) и состоит из трех основных слоев:
+Проект построен по принципу разделения ответственности и состоит из трех основных слоев:
 
-### 1. Frontend (Слой представления)
-**Директория:** `/frontend`
-**Технология:** Next.js 14 + React 18 + TypeScript + Ant Design
+### Frontend
+**Директория:** `/frontend`  
+**Технологии:** Next.js 14 + React 18 + TypeScript + Ant Design + Redux Toolkit
 
-**Зона ответственности:**
-- Отрисовка пользовательского интерфейса (UI)
-- Взаимодействие с пользователем (формы, кнопки, навигация)
-- Валидация данных на клиенте
-- Управление состоянием приложения (Redux Toolkit)
-- Маршрутизация на стороне клиента
-
-**Ключевые особенности:**
-- Server-Side Rendering (SSR) для SEO-оптимизации
+- SSR для SEO-оптимизации
 - Адаптивный дизайн (Desktop/Mobile)
 - Интеграция с картами (Yandex Maps)
 
-### 2. Backend (Слой бизнес-логики)
-**Директория:** `/backend`
-**Технология:** Go 1.24 + Gin + GORM
+### Backend
+**Директория:** `/backend`  
+**Технологии:** Go 1.24 + Gin + GORM
 
-**Зона ответственности:**
-- Обработка HTTP-запросов
-- Бизнес-логика приложения
-- Валидация данных на сервере
-- Аутентификация и авторизация (JWT)
-- Взаимодействие с базой данных
-- Кэширование данных (Redis)
-
-**Ключевые особенности:**
 - RESTful API архитектура
+- JWT аутентификация
 - Role-Based Access Control (RBAC)
 - Мультиарендность (Multi-tenancy)
-
-### 3. Infrastructure (Слой инфраструктуры)
-**Файлы:** `docker-compose.yml`, `Dockerfile.*`, `nginx.conf`
-
-**Зона ответственности:**
-- Контейнеризация приложения
-- Управление базами данных
-- Обратное проксирование (Nginx)
-- Сетевое взаимодействие между сервисами
-
----
-
-## 🛠 Технологический стек
-
-### Frontend
-| Технология | Версия | Назначение |
-|------------|--------|------------|
-| Next.js | 14.0.0 | SSR-фреймворк |
-| React | 18.2.0 | UI библиотека |
-| TypeScript | 5.2.2 | Типизация |
-| Ant Design | 5.10.0 | UI компоненты |
-| Redux Toolkit | 1.9.7 | State management |
-| Tailwind CSS | 3.3.3 | Стилизация |
-| Axios | 1.13.4 | HTTP-клиент |
-| React Hook Form | 7.47.0 | Работа с формами |
-| Recharts | 2.8.0 | Графики и диаграммы |
-
-### Backend
-| Технология | Версия | Назначение |
-|------------|--------|------------|
-| Go | 1.24 | Язык программирования |
-| Gin | latest | HTTP-фреймворк |
-| GORM | latest | ORM для работы с БД |
-| JWT | latest | Аутентификация |
-| Viper | latest | Конфигурация |
-| Air | latest | Hot-reload для разработки |
+- Кэширование (Redis)
 
 ### Infrastructure
-| Технология | Версия | Назначение |
-|------------|--------|------------|
-| Docker | latest | Контейнеризация |
-| Docker Compose | 3.8 | Оркестрация |
-| PostgreSQL | 15-alpine | Основная БД |
-| Redis | 7-alpine | Кэширование |
-| Nginx | latest | Reverse proxy |
+**Файлы:** `docker-compose.yml`, `Dockerfile.*`, `nginx.conf`
+
+- Контейнеризация (Docker)
+- PostgreSQL 15 + Redis 7
+- Nginx reverse proxy
 
 ---
 
-## 📁 Структура проекта
+## Технологический стек
+
+### Frontend
+| Технология | Версия |
+|------------|--------|
+| Next.js | 14.0.0 |
+| React | 18.2.0 |
+| TypeScript | 5.2.2 |
+| Ant Design | 5.10.0 |
+| Redux Toolkit | 1.9.7 |
+| Tailwind CSS | 3.3.3 |
+
+### Backend
+| Технология | Версия |
+|------------|--------|
+| Go | 1.24 |
+| Gin | latest |
+| GORM | latest |
+| PostgreSQL | 15 |
+| Redis | 7 |
+
+---
+
+## Структура проекта
 
 ```
 saas-b2b-b2c/
-├── 📂 backend/                 # Серверная часть
-│   ├── 📂 cmd/                 # Точки входа
-│   │   └── 📄 server/main.go   # Главный файл запуска
-│   ├── 📂 config/              # Конфигурация
-│   ├── 📂 controllers/         # Контроллеры (обработчики)
-│   ├── 📂 middleware/           # Middleware (аутентификация и др.)
-│   ├── 📂 migrations/           # SQL миграции
-│   ├── 📂 models/               # Модели данных (ORM)
-│   ├── 📂 repositories/         # Слой доступа к данным
-│   ├── 📂 routes/               # Определение маршрутов
-│   ├── 📂 services/             # Бизнес-логика
-│   ├── 📂 tests/                # Тесты
-│   ├── 📂 utils/                # Утилиты
-│   ├── 📄 go.mod                # Зависимости Go
-│   └── 📄 Dockerfile.backend     # Docker-сборка бэкенда
+├── backend/                     # Серверная часть (Go)
+│   ├── cmd/server/              # Точка входа
+│   ├── internal/
+│   │   ├── cache/              # Redis кэширование
+│   │   ├── database/           # Подключение к БД
+│   │   ├── handlers/            # HTTP обработчики
+│   │   ├── middleware/          # Auth, CORS и др.
+│   │   ├── models/              # Модели данных
+│   │   ├── repository/          # Слой доступа к данным
+│   │   ├── services/            # Бизнес-логика
+│   │   └── jobs/                # Фоновые задачи
+│   ├── migrations/              # SQL миграции
+│   └── Dockerfile.backend
 │
-├── 📂 frontend/                # Клиентская часть
-│   ├── 📂 public/               # Статические файлы
-│   ├── 📂 src/
-│   │   ├── 📂 app/              # Next.js App Router
-│   │   ├── 📂 components/       # React компоненты
-│   │   ├── 📂 hooks/            # Кастомные хуки
-│   │   ├── 📂 pages/            # Страницы (Pages Router)
-│   │   ├── 📂 services/         # API сервисы (axios)
-│   │   ├── 📂 store/            # Redux store
-│   │   ├── 📂 types/            # TypeScript типы
-│   │   └── 📂 utils/            # Утилиты
-│   ├── 📄 package.json          # Зависимости npm
-│   ├── 📄 tailwind.config.js    # Конфигурация Tailwind
-│   └── 📄 Dockerfile.frontend   # Docker-сборка фронтенда
+├── frontend/                    # Клиентская часть (Next.js)
+│   ├── src/
+│   │   ├── api/                # Axios инстанс
+│   │   ├── components/         # React компоненты
+│   │   ├── pages/              # Страницы (Pages Router)
+│   │   ├── services/           # API сервисы
+│   │   ├── store/              # Redux store
+│   │   ├── types/              # TypeScript типы
+│   │   └── utils/              # Утилиты
+│   └── Dockerfile.frontend
 │
-├── 📄 docker-compose.yml        # Продакшн конфигурация
-├── 📄 docker-compose.dev.yml    # Dev конфигурация
-├── 📄 nginx.conf                # Конфигурация Nginx
-├── 📄 .env                      # Переменные окружения (НЕ коммитить!)
-├── 📄 config.yaml               # Конфигурация для Go
-└── 📄 README.md                 # Этот файл
+├── docker-compose.yml           # Продакшн
+├── docker-compose.dev.yml       # Разработка
+├── nginx.conf                   # Reverse proxy
+├── config.yaml                  # Конфигурация Go
+└── APIDOCS.md                   # Документация API
 ```
 
 ---
 
-## 🚀 Установка и запуск
+## Быстрый старт
 
 ### Предварительные требования
 
-- **Docker** >= 20.10
-- **Docker Compose** >= 2.0
-- **Node.js** >= 18.0 (для локальной разработки фронтенда)
-- **Go** >= 1.24 (для локальной разработки бэкенда)
+- Docker >= 20.10
+- Docker Compose >= 2.0
 
----
-
-### Вариант 1: Быстрый старт (Docker) ⚡
-
-> **Рекомендуется для тестирования и продакшена**
-
-#### Шаг 1: Клонирование репозитория
+### Запуск
 
 ```bash
-git clone <your-repo-url>
-cd saas-b2b-b2c
+# Клонирование и запуск
+docker-compose up -d --build
+
+# Проверка статуса
+docker-compose ps
 ```
 
-#### Шаг 2: Настройка переменных окружения
+### Адреса сервисов
 
-Создайте файл `.env` в корне проекта:
+| Сервис | URL |
+|--------|-----|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8080/api/v1 |
+| PostgreSQL | localhost:5432 |
+| Redis | localhost:6379 |
+
+### Переменные окружения
+
+Создайте `.env` в корне проекта:
 
 ```env
-# Database
 DB_USER=postgres
-DB_PASSWORD=your_secure_password_here
+DB_PASSWORD=your_secure_password
 DB_NAME=franchise_db
-
-# Server
 PORT=8080
-
-# JWT
 JWT_SECRET=CHANGE_ME_JWT_SECRET
-
-# Frontend (для сборки)
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-#### Шаг 3: Запуск через Docker Compose
+---
 
-```bash
-# Сборка и запуск всех сервисов
-docker-compose up -d --build
+## Ролевая модель
 
-# Просмотр логов
-docker-compose logs -f
+Система использует иерархическую структуру управления:
 
-# Остановка сервисов
-docker-compose down
+```
+franchiser (Владелец)
+    └── franchiser_manager (Менеджер)
+            └── dealer (Дилер)
+                    └── salon_manager (Менеджер салона)
 ```
 
-#### Шаг 4: Проверка работоспособности
+### Уровни доступа
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8080/api/v1
-- **PostgreSQL**: localhost:5432
-- **Redis**: localhost:6379
+| Роль | Описание |
+|------|----------|
+| `super_admin` | Полный доступ ко всей системе |
+| `franchiser` | Владелец франшизы, управление всей сетью |
+| `franchiser_manager` | Менеджер франчайзера |
+| `dealer` | Дилер (представитель салона) |
+| `salon_manager` | Менеджер отдельного салона |
 
 ---
 
-### Вариант 2: Локальная разработка (без Docker) 🔧
+## База данных и RLS
 
-> **Рекомендуется для активной разработки**
+### Структура таблиц
 
-#### Backend (Go)
+Основные миграции:
+- `001_full_schema` - основная схема (пользователи, продукты, заказы)
+- `002_add_analytics` - аналитика
+- `005_franchise_manager_foundations` - иерархия менеджеров
+- `006_contracts` - контракты
+- `007_add_schedule_events` - события расписания
+- `008_add_daily_goals` - дневные цели
 
-```bash
-# Переход в директорию бэкенда
-cd backend
+### Row-Level Security (RLS)
 
-# Установка зависимостей
-go mod download
+Реализована система безопасности на уровне строк:
 
-# Запуск миграций (опционально, если не используете Docker PostgreSQL)
-# Создайте БД вручную и примените миграции из /migrations
+1. **Иерархия ролей** - поле `managed_by` для связи пользователей
+2. **Функция `fn_user_subtree(uuid)`** - возвращает всех подчиненных пользователя (включая самого себя)
+3. **Политика `rls_owner`** на таблице `plans`:
+   - `super_admin` и `franchiser` видят все строки
+   - Остальные роли видят только строки, где `owner_user_id` в их поддереве
 
-# Запуск сервера с hot-reload
-# Требуется установленное окружение из config.yaml или .env
-go run cmd/server/main.go
+### Примеры RLS-запросов
 
-# Или с использованием Air (hot-reload)
-air
-```
+```sql
+-- Установить текущего пользователя
+SET LOCAL app.current_user_id = 'uuid- пользователя';
 
-#### Frontend (Next.js)
-
-```bash
-# Переход в директорию фронтенда
-cd frontend
-
-# Установка зависимостей
-npm install
-
-# Создание .env.local для API
-echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
-
-# Запуск в режиме разработки
-npm run dev
-```
-
-#### База данных (PostgreSQL + Redis)
-
-Вы можете запускать только инфраструктурные сервисы через Docker:
-
-```bash
-docker-compose up -d postgres redis
+-- Запрос данных с учетом RLS
+SELECT * FROM plans;
 ```
 
 ---
 
-### Вариант 3: Режим разработки (Docker + Hot Reload) 🔄
-
-```bash
-# Используйте специальный compose-файл для разработки
-docker-compose -f docker-compose.dev.yml up -d
-
-# Это позволит:
-# - Монтировать исходный код как volumes
-# - Использовать Air для Go (hot-reload)
-# - Использовать next dev для фронтенда
-```
-
----
-
-## 📖 API Документация
+## API
 
 ### Базовый URL
-- Development: `http://localhost:8080/api/v1`
-- Production: `https://api.yourdomain.com/api/v1`
+
+```
+Development: http://localhost:8080/api/v1
+Production:  https://api.yourdomain.com/api/v1
+```
 
 ### Аутентификация
 
-Большинство эндпоинтов требуют Bearer Token в заголовке:
+Большинство эндпоинтов требуют Bearer Token:
 
 ```
-Authorization: Bearer <your_jwt_token>
+Authorization: Bearer <jwt_token>
 ```
 
 ### Основные эндпоинты
@@ -294,8 +228,8 @@ Authorization: Bearer <your_jwt_token>
 | Метод | Эндпоинт | Описание | Доступ |
 |-------|----------|----------|--------|
 | POST | `/auth/register` | Регистрация | Публичный |
-| POST | `/auth/login` | Вход в систему | Публичный |
-| GET | `/auth/me` | Профиль пользователя | Авторизованный |
+| POST | `/auth/login` | Вход | Публичный |
+| GET | `/auth/me` | Профиль | Авторизованный |
 | POST | `/auth/refresh` | Обновление токена | Авторизованный |
 | GET | `/dealers` | Список дилеров | Franchiser |
 | GET | `/products` | Список товаров | Все роли |
@@ -303,8 +237,7 @@ Authorization: Bearer <your_jwt_token>
 
 ### Примеры запросов
 
-#### Регистрация
-
+**Регистрация:**
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
@@ -312,196 +245,144 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
     "email": "user@example.com",
     "password": "securePassword123",
     "role": "dealer",
-    "tenant_id": "tenant-001",
     "first_name": "Иван",
     "last_name": "Иванов"
   }'
 ```
 
-#### Вход в систему
-
+**Вход:**
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securePassword123"
-  }'
+  -d '{"email": "user@example.com", "password": "securePassword123"}'
 ```
 
 **Ответ:**
-
 ```json
 {
-  "user": {
-    "id": "uuid",
-    "email": "user@example.com",
-    "role": "dealer"
-  },
+  "user": {"id": "uuid", "email": "user@example.com", "role": "dealer"},
   "token": "eyJhbGciOiJIUzI1NiIs...",
   "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
 }
 ```
 
+### Чеклисты
+
+| Метод | Эндпоинт | Описание |
+|-------|----------|----------|
+| GET | `/checklists` | Список чеклистов |
+| GET | `/checklists/:id` | Чеклист по ID |
+| POST | `/checklists` | Создать чеклист |
+| PUT | `/checklists/:id` | Обновить чеклист |
+| DELETE | `/checklists/:id` | Удалить чеклист |
+| POST | `/checklists/:id/complete` | Завершить чеклист |
+
+Полная документация API: [APIDOCS.md](./APIDOCS.md)
+
 ---
 
-## 💻 Разработка
+## Разработка
+
+### Локальная разработка (без Docker)
+
+**Backend:**
+```bash
+cd backend
+go mod download
+go run cmd/server/main.go
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Docker для разработки
+
+```bash
+# С hot-reload
+docker-compose -f docker-compose.dev.yml up -d
+```
 
 ### Стандарты кода
 
-#### Backend (Go)
-- Следуйте стандартам `gofmt` и `go vet`
-- Используйте комментарии для экспортируемых функций
-- Пишите unit-тесты для критичной бизнес-логики
-
+**Backend (Go):**
 ```bash
-# Форматирование кода
 go fmt ./...
-
-# Запуск тестов
-go test ./...
-
-# Проверка кода
 go vet ./...
+go test ./...
 ```
 
-#### Frontend (TypeScript/React)
-- Используйте строгую типизацию (strict mode)
-- Разделяйте компоненты на Presentational и Container
-- Используйте функциональные компоненты и хуки
-
+**Frontend:**
 ```bash
-# Линтинг
 npm run lint
-
-# Тесты
 npm test
-
-# Сборка
 npm run build
 ```
 
 ### Git Workflow
 
 ```bash
-# Создание ветки для фичи
 git checkout -b feature/new-feature
-
-# Коммит с понятным описанием
-git commit -m "feat: add user profile page"
-
-# Push и создание Pull Request
+git commit -m "feat: add new feature"
 git push origin feature/new-feature
 ```
 
 ---
 
-## 🚢 Деплой
+## Деплой
 
-### Подготовка к продакшену
+### Подготовка
 
-1. **Измените пароли и секреты** в `.env`:
-   ```env
-   DB_PASSWORD=<strong_password>
-   JWT_SECRET=<very_long_random_string>
-   ```
+1. Измените пароли и секреты в `.env`
+2. Настройте домен в `nginx.conf`
+3. Настройте SSL (Let's Encrypt)
 
-2. **Настройте домен** в `nginx.conf` и `NEXT_PUBLIC_API_URL`
-
-3. **Настройте SSL** сертификаты (Let's Encrypt)
-
-### Сборка и запуск на сервере
+### Сборка и запуск
 
 ```bash
-# Клонирование репозитория
 git clone <repo-url>
 cd saas-b2b-b2c
-
-# Создание .env с продакшен-переменными
 nano .env
-
-# Сборка и запуск
-docker-compose -f docker-compose.yml up -d --build
-
-# Проверка статуса
-docker-compose ps
+docker-compose up -d --build
 ```
 
 ### Мониторинг
 
 ```bash
-# Логи всех сервисов
 docker-compose logs -f
-
-# Логи конкретного сервиса
-docker-compose logs -f backend
-docker-compose logs -f frontend
-
-# Использование ресурсов
 docker stats
 ```
 
 ---
 
-## 🔧 Устранение неполадок
+## Устранение неполадок
 
-### Частые проблемы
-
-#### 1. Порт уже занят
+**Порт занят:**
 ```bash
-# Проверка занятых портов
 lsof -i :3000
 lsof -i :8080
-
-# Остановка конфликтующих сервисов
-docker-compose down
 ```
 
-#### 2. Ошибки базы данных
+**Пересоздание БД (удаляет все данные):**
 ```bash
-# Пересоздание БД (ВНИМАНИЕ: удалит все данные!)
 docker-compose down -v
 docker-compose up --build
 ```
 
-#### 3. Проблемы с зависимостями
+**Очистка зависимостей:**
 ```bash
-# Frontend: очистка кэша
-cd frontend
-rm -rf node_modules package-lock.json
-npm install
+# Frontend
+cd frontend && rm -rf node_modules package-lock.json && npm install
 
-# Backend: обновление зависимостей
-cd backend
-go mod tidy
+# Backend
+cd backend && go mod tidy
 ```
 
 ---
 
-## 📞 Поддержка
-
-- **Документация API**: См. `APIDOCS.md`
-- **Коллекция Postman**: Импортируйте `postman-collection.json`
-- **Issues**: Создавайте в репозитории
-
----
-
-## 📜 Лицензия
+## Лицензия
 
 Copyright © 2024 Franchise SaaS Platform. Все права защищены.
-
----
-
-**Удачной разработки! 🎉**
-
-
-Что добавлено 13.04.2026
-RLS база данных.
-1	Описана иерархия ролей через поле managed_by (franchiser → franchiser_manager → dealer → salon_manager).
-2	Добавлена функция fn_user_subtree(uuid), возвращающая всех «подчинённых» пользователя (включая его самого).
-3	Создана единственная политика RLS rls_owner на таблице public.plans:
-• super_admin и franchiser видят все строки.
-• остальные роли видят только строки, где owner_user_id находится в их поддереве (или совпадает с их ID).
-4	Даны необходимые GRANT‑ы (USAGE, SELECT, INSERT/UPDATE/DELETE).
-5	Описан способ установить логического пользователя (app.current_user_id) в сессии и выполнить запросы без лишних условий.
-6	Приведён набор тестовых запросов, показывающих сколько строк должен увидеть каждый роль.

@@ -53,11 +53,11 @@ func (LeadActivity) TableName() string {
 // === DTOs для Лидов ===
 
 type CreateLeadRequest struct {
-    FullName        string  `json:"full_name" binding:"required"`
-    Phone           string  `json:"phone"`
-    Email           string  `json:"email"`
-    InterestProduct string  `json:"interest_product"`
-    Budget          float64 `json:"budget"`
+    FullName        string  `json:"full_name" binding:"required,min=1,max=255"`
+    Phone           string  `json:"phone" binding:"max=20"`
+    Email           string  `json:"email" binding:"omitempty,email,max=255"`
+    InterestProduct string  `json:"interest_product" binding:"max=255"`
+    Budget          float64 `json:"budget" binding:"gte=0"`
 }
 
 type UpdateLeadStatusRequest struct {

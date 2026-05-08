@@ -384,17 +384,22 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
               title: 'Статус',
               dataIndex: 'status',
               key: 'status',
-              render: (status: string) => {
-                const statusMap: Record<string, { color: string; label: string }> = {
-                  new: { color: 'blue', label: 'Новый' },
-                  contact: { color: 'orange', label: 'Контакт' },
-                  meeting: { color: 'cyan', label: 'Замер' },
-                  wait: { color: 'purple', label: 'КП' },
-                  sale: { color: 'green', label: 'Договор' },
-                  paid: { color: 'gold', label: 'Оплачен' },
-                };
-                return <Tag color={statusMap[status]?.color || 'default'}>{statusMap[status]?.label || status}</Tag>;
-              },
+              render: (status: string, record: any) => (
+                <Select
+                  value={status}
+                  size="small"
+                  style={{ width: 120 }}
+                  onChange={(val) => handleStatusChange(record.id, val)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Option value="new"><Tag color="blue">Новый</Tag></Option>
+                  <Option value="contact"><Tag color="orange">Контакт</Tag></Option>
+                  <Option value="meeting"><Tag color="cyan">Замер</Tag></Option>
+                  <Option value="wait"><Tag color="purple">КП</Tag></Option>
+                  <Option value="sale"><Tag color="green">Договор</Tag></Option>
+                  <Option value="paid"><Tag color="gold">Оплачен</Tag></Option>
+                </Select>
+              ),
             },
           ]}
         />

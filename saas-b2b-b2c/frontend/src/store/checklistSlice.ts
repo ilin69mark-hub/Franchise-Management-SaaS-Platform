@@ -45,6 +45,10 @@ const handleAsyncError = (error: unknown, defaultMessage: string): ApiError => {
   if (error instanceof AxiosError) {
     return { message: error.response?.data?.message || defaultMessage };
   }
+  const err = error as { isAxiosError?: boolean; response?: { data?: { message?: string } } };
+  if (err?.isAxiosError) {
+    return { message: err.response?.data?.message || defaultMessage };
+  }
   return { message: defaultMessage };
 };
 
@@ -161,7 +165,7 @@ const checklistSlice = createSlice({
       })
       .addCase(fetchChecklists.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload?.message || 'Ошибка загрузки';
+        state.error = action.payload?.message || 'Ошибка получения чек-листов';
       })
       
       // Fetch by ID
@@ -192,11 +196,11 @@ const checklistSlice = createSlice({
         if (!state.items) {
           state.items = [];
         }
-        state.items.push(action.payload);
+        state.items.unshift(action.payload);
       })
       .addCase(createChecklist.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload?.message || 'Ошибка создания';
+        state.error = action.payload?.message || 'Ошибка создания чек-листа';
       })
       
       // Update
@@ -248,7 +252,7 @@ const checklistSlice = createSlice({
       })
       .addCase(completeChecklist.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload?.message || 'Ошибка завершения';
+        state.error = action.payload?.message || 'Ошибка завершения чек-листа';
       });
   },
 });

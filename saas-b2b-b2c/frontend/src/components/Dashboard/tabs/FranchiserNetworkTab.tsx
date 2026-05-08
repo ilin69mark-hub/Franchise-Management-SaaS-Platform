@@ -10,7 +10,7 @@ import {
   RiseOutlined,
   FallOutlined,
 } from '@ant-design/icons';
-import { FranchiserSummary, DealerMetrics } from '@/store/franchiserStore';
+import { FranchiserSummary, DealerMetrics, useFranchiserStore } from '@/store/franchiserStore';
 import dynamic from 'next/dynamic';
 
 const { Title, Text } = Typography;
@@ -90,11 +90,16 @@ const mockSalesData = [
 ];
 
 const FranchiserNetworkTab: React.FC<FranchiserNetworkTabProps> = ({ summary }) => {
+  const { fetchNetwork, dealers } = useFranchiserStore();
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year'>('month');
   const [groupBy, setGroupBy] = useState<'manager' | 'district' | 'type'>('manager');
   const [overview] = useState<NetworkOverview>(mockOverview);
   const [territories] = useState<TerritoryData[]>(mockTerritories);
   const [selectedManager, setSelectedManager] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchNetwork();
+  }, [fetchNetwork]);
 
   const getHeatmapColor = (status: 'green' | 'yellow' | 'red') => {
     return status === 'green' ? '#52c41a' : status === 'yellow' ? '#fa8c16' : '#ff4d4f';

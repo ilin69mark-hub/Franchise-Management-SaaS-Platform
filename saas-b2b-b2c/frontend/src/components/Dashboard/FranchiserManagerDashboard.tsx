@@ -1,5 +1,6 @@
 // src/components/Dashboard/FranchiserManagerDashboard.tsx
 import React, { useEffect, Suspense, lazy, useState } from 'react';
+import { useDispatch } from 'react-redux';
 import { Layout, Row, Col, Card, Typography, Tabs, Badge, Avatar, Dropdown, Space, Spin, Statistic, Button, Modal, List, Divider } from 'antd';
 import { 
   UserOutlined, 
@@ -48,6 +49,7 @@ interface FranchiserManagerDashboardProps {
 }
 
 const FranchiserManagerDashboard: React.FC<FranchiserManagerDashboardProps> = ({ user, title }) => {
+  const dispatch = useDispatch();
   const router = useRouter();
   const { 
     activeTab, 
@@ -125,7 +127,7 @@ const FranchiserManagerDashboard: React.FC<FranchiserManagerDashboardProps> = ({
   }, [setSummary, setLoading, setLastUpdated, alerts]);
 
   const handleLogout = () => {
-    logout();
+    dispatch(logout());
     router.push('/login');
   };
 

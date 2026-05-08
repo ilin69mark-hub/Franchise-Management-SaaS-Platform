@@ -268,6 +268,19 @@ type AlertsResponse struct {
 	UnreadCount int    `json:"unread_count"`
 }
 
+// AuditLog - запись аудита
+type AuditLog struct {
+	ID         uuid.UUID  `json:"id"`
+	TenantID   uuid.UUID  `json:"tenant_id"`
+	UserID     *uuid.UUID `json:"user_id"`
+	Action     string     `json:"action"`
+	EntityType string     `json:"entity_type"`
+	EntityID   string     `json:"entity_id"`
+	Details    string     `json:"details"`
+	IPAddress  string     `json:"ip_address"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 // DashboardTeamResponse - ответ для команды
 type DashboardTeamResponse struct {
 	Period     string             `json:"period"`       // week/month/quarter
@@ -311,4 +324,323 @@ type ManagerTargetsResponse struct {
 	BonusForecast float64      `json:"bonus_forecast"` // Прогноз премии
 	MaxBonus float64           `json:"max_bonus"`    // Максимальная премия
 	WarningLevel string        `json:"warning_level"` // none/yellow/red
+}
+
+// === DASHBOARD DEALER ===
+
+// DealerSummaryResponse - сводка для дилера
+type DealerSummaryResponse struct {
+	NetProfit            float64 `json:"netProfit"`
+	GrossRevenue        float64 `json:"grossRevenue"`
+	PlanCompletionPercent int   `json:"planCompletionPercent"`
+	MarginProfit        float64 `json:"marginProfit"`
+	ActiveAlerts        int     `json:"activeAlerts"`
+}
+
+// DealerFinanceResponse - финансы для дилера
+type DealerFinanceResponse struct {
+	Revenue           float64          `json:"revenue"`
+	COGS              float64          `json:"cogs"`
+	Rent              float64          `json:"rent"`
+	Utilities         float64          `json:"utilities"`
+	Payroll           float64          `json:"payroll"`
+	Taxes              float64          `json:"taxes"`
+	Logistics         float64          `json:"logistics"`
+	Marketing         float64          `json:"marketing"`
+	Defects           float64          `json:"defects"`
+	OtherExpenses     float64          `json:"other_expenses"`
+	Bonus             float64          `json:"bonus"`
+	NetProfit        float64          `json:"net_profit"`
+	NetProfitForecast float64          `json:"net_profit_forecast"`
+	PrevMonthNetProfit float64        `json:"prev_month_net_profit"`
+	ExpenseBreakdown  []ExpenseBreakdown `json:"expense_breakdown"`
+}
+
+// ExpenseBreakdown - статья расходов
+type ExpenseBreakdown struct {
+	Category         string  `json:"category"`
+	Amount          float64  `json:"amount"`
+	PercentOfRevenue float64 `json:"percent_of_revenue"`
+	PrevMonthAmount float64 `json:"prev_month_amount"`
+}
+
+// DealerFunnelResponse - воронка для дилера
+type DealerFunnelResponse struct {
+	Stages        []FunnelStage    `json:"stages"`
+	SalonPlanData []SalonPlanData `json:"salon_plan_data"`
+}
+
+// SalonPlanData - план салона
+type SalonPlanData struct {
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Plan           float64   `json:"plan"`
+	Fact           float64   `json:"fact"`
+	Percent        int       `json:"percent"`
+	Forecast       string    `json:"forecast"`
+	ManagersCount  int       `json:"managers_count"`
+	AvgCheck        float64   `json:"avg_check"`
+}
+
+// DealerProductsResponse - товары для дилера
+type DealerProductsResponse struct {
+	TotalRevenue   float64             `json:"total_revenue"`
+	TopProducts    []DealerTopProduct   `json:"top_products"`
+	Inventory     []DealerInventoryItem `json:"inventory"`
+}
+
+// DealerTopProduct - топ товар
+type DealerTopProduct struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Revenue      float64 `json:"revenue"`
+	Quantity     int     `json:"quantity"`
+	SharePercent float64 `json:"share_percent"`
+}
+
+// DealerInventoryItem - остаток товара
+type DealerInventoryItem struct {
+	ID             string  `json:"id"`
+	Collection    string  `json:"collection"`
+	StockWarehouse int    `json:"stock_warehouse"`
+	OnDisplay     int     `json:"on_display"`
+	SoldPeriod    int     `json:"sold_period"`
+	TurnoverDays  int     `json:"turnover_days"`
+}
+
+// === DASHBOARD FRANCHISER ===
+
+// FranchiserSummaryResponse - сводка для франчайзера
+type FranchiserSummaryResponse struct {
+	PlanPercent       int     `json:"planPercent"`
+	ForecastPercent  int     `json:"forecastPercent"`
+	ActiveDealers    int     `json:"activeDealers"`
+	AvgConversion   float64 `json:"avgConversion"`
+	AvgMargin      float64 `json:"avgMargin"`
+}
+
+// FranchiserNetworkResponse - данные сети
+type FranchiserNetworkResponse struct {
+	NetworkData []FranchiserDealerData `json:"network_data"`
+	Overview   FranchiserOverview     `json:"overview"`
+}
+
+// FranchiserDealerData - данные дилера
+type FranchiserDealerData struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	SalonCount    int       `json:"salon_count"`
+	Plan          float64   `json:"plan"`
+	Fact          float64   `json:"fact"`
+	PlanPercent   int       `json:"plan_percent"`
+	Forecast     string    `json:"forecast"`
+}
+
+// FranchiserOverview - обзор сети
+type FranchiserOverview struct {
+	PlanAmount        float64 `json:"plan_amount"`
+	PlanPercent      int     `json:"plan_percent"`
+	ForecastAmount   float64 `json:"forecast_amount"`
+	ForecastPercent  int     `json:"forecast_percent"`
+	ActiveDealers    int     `json:"active_dealers"`
+	AvgConversion   float64 `json:"avg_conversion"`
+	AvgMargin       float64 `json:"avg_margin"`
+	RedZoneDealers   int     `json:"red_zone_dealers"`
+}
+
+// FranchiserHealthResponse - здоровье сети
+type FranchiserHealthResponse struct {
+	SLA          float64             `json:"sla"`
+	TotalDealers int                 `json:"total_dealers"`
+	ActiveDealers int                `json:"active_dealers"`
+	TotalSalons  int                 `json:"total_salons"`
+	RedDealers   []FranchiserDealerHealth `json:"red_dealers"`
+}
+
+// FranchiserDealerHealth - проблемный дилер
+type FranchiserDealerHealth struct {
+	DealerID   uuid.UUID `json:"dealer_id"`
+	DealerName string   `json:"dealer_name"`
+	Issue     string   `json:"issue"`
+	Severity   string   `json:"severity"` // critical, warning
+}
+
+// FranchiserTeamResponse - команда
+type FranchiserTeamResponse struct {
+	TeamMembers []FranchiserTeamMember `json:"team_members"`
+}
+
+// FranchiserTeamMember - член команды
+type FranchiserTeamMember struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string   `json:"name"`
+	DealersCount int    `json:"dealers_count"`
+	Role        string   `json:"role"`
+}
+
+// === DASHBOARD TERRITORY MANAGER ===
+
+// TerritorySummaryResponse - сводка для территориального менеджера
+type TerritorySummaryResponse struct {
+	PlanCompletionPercent      int `json:"planCompletionPercent"`
+	QuarterForecastPercent    int `json:"quarterForecastPercent"`
+	RedZoneDealersCount       int `json:"redZoneDealersCount"`
+	AvgConversion          float64 `json:"avgConversion"`
+	ActiveAlerts          int     `json:"activeAlerts"`
+}
+
+// TerritoryFunnelResponse - воронка
+type TerritoryFunnelResponse struct {
+	Stages []FunnelStage `json:"stages"`
+}
+
+// TerritoryPlanFactResponse - план-факт
+type TerritoryPlanFactResponse struct {
+	Dealers   []TerritoryDealerPlanFact `json:"dealers"`
+	TotalPlan float64                  `json:"total_plan"`
+	TotalFact float64                  `json:"total_fact"`
+}
+
+// TerritoryDealerPlanFact - план-факт дилера
+type TerritoryDealerPlanFact struct {
+	ID          uuid.UUID `json:"id"`
+	DealerName  string   `json:"dealer_name"`
+	Plan        float64  `json:"plan"`
+	Fact        float64  `json:"fact"`
+	PlanPercent int     `json:"plan_percent"`
+}
+
+// TerritoryCommunicationsResponse - коммуникации
+type TerritoryCommunicationsResponse struct {
+	Tasks          []TerritoryTask `json:"tasks"`
+	UnreadMessages int             `json:"unread_messages"`
+}
+
+// TerritoryTask - задача
+type TerritoryTask struct {
+	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
+	Status      string    `json:"status"`
+	AssignedTo  uuid.UUID `json:"assigned_to"`
+	DueDate     string    `json:"due_date"`
+}
+
+// TerritoryBenchmarksResponse - бенчмарки
+type TerritoryBenchmarksResponse struct {
+	TerritoryConversion float64 `json:"territory_conversion"`
+	TerritoryAvgCheck    float64 `json:"territory_avg_check"`
+	NetworkAvgConversion float64 `json:"network_avg_conversion"`
+	NetworkAvgCheck      float64 `json:"network_avg_check"`
+}
+
+// === Dealer Additional DTOs ===
+
+// DealerTasksResponse - задачи для дилера
+type DealerTasksResponse struct {
+	Tasks     []DealerTaskItem `json:"tasks"`
+	Total     int             `json:"total"`
+	Overdue   int             `json:"overdue"`
+}
+
+type DealerTaskItem struct {
+	ID          uuid.UUID `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Status     string   `json:"status"`
+	Priority   string   `json:"priority"`
+	DueDate    string   `json:"due_date"`
+	IsOverdue   bool     `json:"is_overdue"`
+}
+
+// DealerRequest - запрос от дилера (db model)
+type DealerRequest struct {
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key"`
+	DealerID    uuid.UUID `json:"dealer_id" gorm:"type:uuid"`
+	Type        string    `json:"type" gorm:"type:varchar(50)"`
+	Description string   `json:"description" gorm:"type:text"`
+	Amount      float64   `json:"amount" gorm:"type:decimal(12,2)"`
+	Status     string    `json:"status" gorm:"type:varchar(50);default:'pending'"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+func (DealerRequest) TableName() string {
+	return "dealer_requests"
+}
+
+// DealerRequestsResponse - запросы к бренду
+type DealerRequestsResponse struct {
+	Requests []DealerRequestItem `json:"requests"`
+	Total    int                `json:"total"`
+	Pending int                `json:"pending"`
+}
+
+type DealerRequestItem struct {
+	ID          uuid.UUID `json:"id"`
+	DealerID    uuid.UUID `json:"dealer_id"`
+	Type        string    `json:"type"`
+	Description string   `json:"description"`
+	Amount      float64   `json:"amount"`
+	Status     string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// DealerMarketingBudgetResponse - маркетинговый бюджет
+type DealerMarketingBudgetResponse struct {
+	Quarter       string `json:"quarter"`
+	TotalAmount   float64 `json:"total_amount"`
+	UsedAmount    float64 `json:"used_amount"`
+	Remaining     float64 `json:"remaining"`
+	UsagePercent  int     `json:"usage_percent"`
+}
+
+// DealerAlertsResponse - алерты дилера
+type DealerAlertsResponse struct {
+	Alerts      []DealerAlertItem `json:"alerts"`
+	UnreadCount int              `json:"unread_count"`
+}
+
+type DealerAlertItem struct {
+	ID       uuid.UUID `json:"id"`
+	Type     string    `json:"type"`
+	Title    string    `json:"title"`
+	Message  string    `json:"message"`
+	Priority string    `json:"priority"`
+}
+
+// === FRANCHISER DASHBOARD ===
+
+// FranchiserDealersResponse - ответ с списком дилеров
+type FranchiserDealersResponse struct {
+	Dealers []FranchiserDealerItem `json:"dealers"`
+	Total   int                    `json:"total"`
+}
+
+// FranchiserDealerItem - элемент списка дилеров
+type FranchiserDealerItem struct {
+	ID           uuid.UUID `json:"id"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email"`
+	Plan         float64  `json:"plan"`
+	Fact         float64  `json:"fact"`
+	PlanPercent  int      `json:"plan_percent"`
+	Status      string   `json:"status"` // green, yellow, red
+}
+
+// FranchiserRequestsResponse - ответ с запросами
+type FranchiserRequestsResponse struct {
+	Requests []FranchiserRequestItem `json:"requests"`
+	Total    int                      `json:"total"`
+	Pending  int                      `json:"pending"`
+}
+
+// FranchiserRequestItem - элемент запроса
+type FranchiserRequestItem struct {
+	ID          uuid.UUID `json:"id"`
+	DealerID    uuid.UUID `json:"dealer_id"`
+	DealerName  string    `json:"dealer_name"`
+	Type        string    `json:"type"` // discount, marketing, return, etc
+	Description string    `json:"description"`
+	Amount      float64   `json:"amount"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
 }

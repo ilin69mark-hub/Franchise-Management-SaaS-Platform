@@ -106,3 +106,13 @@ type DashboardStatsResponse struct {
 		Total int `json:"total"`
 	} `json:"checklist"`
 }
+
+// KPISummary - агрегированная статистика KPI
+type KPISummary struct {
+	TotalSales     float64 `json:"total_sales"`
+	TotalLeads     int     `json:"total_leads"`
+	ConversionRate float64 `json:"conversion_rate"`
+	AvgCheck       float64 `json:"avg_check"`
+	TotalCalls     int     `json:"total_calls"`
+	TotalMeetings  int     `json:"total_meetings"`
+}
