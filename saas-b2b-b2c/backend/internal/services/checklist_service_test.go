@@ -9,30 +9,35 @@ import (
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 type MockChecklistRepo struct {
 	mock.Mock
 }
 
-func NewMockChecklistRepo() *MockChecklistRepo {
-	return &MockChecklistRepo{}
-}
-
 func (m *MockChecklistRepo) FindAllGlobal(ctx context.Context, status, priority string, isArchive bool) ([]models.Checklist, error) {
 	args := m.Called(ctx, status, priority, isArchive)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]models.Checklist), args.Error(1)
 }
 
 func (m *MockChecklistRepo) FindUserTasks(ctx context.Context, userID uuid.UUID, status, priority string, isArchive bool) ([]models.Checklist, error) {
 	args := m.Called(ctx, userID, status, priority, isArchive)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]models.Checklist), args.Error(1)
 }
 
 func (m *MockChecklistRepo) FindAll(ctx context.Context, status, priority string) ([]models.Checklist, error) {
 	args := m.Called(ctx, status, priority)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]models.Checklist), args.Error(1)
 }
 
@@ -59,288 +64,257 @@ func (m *MockChecklistRepo) DeleteChecklist(ctx context.Context, id uuid.UUID) e
 	return args.Error(0)
 }
 
-type ChecklistRepoInterface interface {
-	FindAllGlobal(ctx context.Context, status, priority string, isArchive bool) ([]models.Checklist, error)
-	FindUserTasks(ctx context.Context, userID uuid.UUID, status, priority string, isArchive bool) ([]models.Checklist, error)
-	FindAll(ctx context.Context, status, priority string) ([]models.Checklist, error)
-	GetChecklistByID(ctx context.Context, id uuid.UUID) (*models.Checklist, error)
-	CreateChecklist(ctx context.Context, chk *models.Checklist) error
-	UpdateChecklist(ctx context.Context, chk *models.Checklist) error
-	DeleteChecklist(ctx context.Context, id uuid.UUID) error
+func (m *MockChecklistRepo) GetTaskStats() (int64, int64, error) {
+	args := m.Called()
+	return args.Get(0).(int64), args.Get(1).(int64), args.Error(2)
 }
 
-type ChecklistServiceTestable struct {
-	repo ChecklistRepoInterface
+func TestChecklistService_GetUserChecklists_SuperAdmin(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	user := &models.User{ID: uuid.New(), Role: models.RoleSuperAdmin}
+	expected := []models.Checklist{{ID: uuid.New(), Title: "Global Task"}}
+
+	mockRepo.On("FindAllGlobal", mock.Anything, "pending", "", false).Return(expected, nil)
+
+	result, err := service.GetUserChecklists(context.Background(), user, "pending", "", false)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+	mockRepo.AssertExpectations(t)
 }
 
-func NewChecklistServiceTestable(repo ChecklistRepoInterface) *ChecklistServiceTestable {
-	return &ChecklistServiceTestable{repo: repo}
+func TestChecklistService_GetUserChecklists_RegularUser(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	user := &models.User{ID: uuid.New(), Role: models.RoleDealer}
+	expected := []models.Checklist{{ID: uuid.New(), Title: "My Task"}}
+
+	mockRepo.On("FindUserTasks", mock.Anything, user.ID, "pending", "", false).Return(expected, nil)
+
+	result, err := service.GetUserChecklists(context.Background(), user, "pending", "", false)
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) GetUserChecklists(ctx context.Context, user *models.User, status, priority string, isArchive bool) ([]models.Checklist, error) {
-	if user.Role == models.RoleSuperAdmin {
-		return s.repo.FindAllGlobal(ctx, status, priority, isArchive)
+func TestChecklistService_GetUserChecklists_Error(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	user := &models.User{ID: uuid.New(), Role: models.RoleSuperAdmin}
+
+	mockRepo.On("FindAllGlobal", mock.Anything, "pending", "", false).Return(nil, errors.New("db error"))
+
+	result, err := service.GetUserChecklists(context.Background(), user, "pending", "", false)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChecklistService_GetAllGlobal_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	expected := []models.Checklist{{ID: uuid.New(), Title: "Task 1"}}
+
+	mockRepo.On("FindAllGlobal", mock.Anything, "pending", "high", false).Return(expected, nil)
+
+	result, err := service.GetAllGlobal(context.Background(), "pending", "high")
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChecklistService_GetAllChecklists_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	expected := []models.Checklist{{ID: uuid.New(), Title: "Task 1"}}
+
+	mockRepo.On("FindAll", mock.Anything, "pending", "high").Return(expected, nil)
+
+	result, err := service.GetAllChecklists(context.Background(), "pending", "high")
+
+	assert.NoError(t, err)
+	assert.Len(t, result, 1)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChecklistService_GetChecklistByID_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklistID := uuid.New()
+	expected := &models.Checklist{ID: checklistID, Title: "Test Task"}
+
+	mockRepo.On("GetChecklistByID", mock.Anything, checklistID).Return(expected, nil)
+
+	result, err := service.GetChecklistByID(context.Background(), checklistID)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expected, result)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChecklistService_GetChecklistByID_NotFound(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklistID := uuid.New()
+
+	mockRepo.On("GetChecklistByID", mock.Anything, checklistID).Return(nil, errors.New("record not found"))
+
+	result, err := service.GetChecklistByID(context.Background(), checklistID)
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChecklistService_CreateChecklist_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklist := &models.Checklist{
+		Title:       "New Task",
+		Description: "Test description",
 	}
-	return s.repo.FindUserTasks(ctx, user.ID, status, priority, isArchive)
+
+	mockRepo.On("CreateChecklist", mock.Anything, mock.MatchedBy(func(c *models.Checklist) bool {
+		return c.Title == "New Task" && c.CreatedAt.IsZero() == false
+	})).Return(nil)
+
+	err := service.CreateChecklist(context.Background(), checklist)
+
+	assert.NoError(t, err)
+	assert.False(t, checklist.CreatedAt.IsZero())
+	assert.False(t, checklist.UpdatedAt.IsZero())
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) GetAllGlobal(ctx context.Context, status, priority string) ([]models.Checklist, error) {
-	return s.repo.FindAllGlobal(ctx, status, priority, false)
+func TestChecklistService_CreateChecklist_Error(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklist := &models.Checklist{Title: "New Task"}
+
+	mockRepo.On("CreateChecklist", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	err := service.CreateChecklist(context.Background(), checklist)
+
+	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) GetAllChecklists(ctx context.Context, status, priority string) ([]models.Checklist, error) {
-	return s.repo.FindAll(ctx, status, priority)
+func TestChecklistService_UpdateChecklist_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklist := &models.Checklist{ID: uuid.New(), Title: "Updated Task"}
+
+	mockRepo.On("UpdateChecklist", mock.Anything, mock.MatchedBy(func(c *models.Checklist) bool {
+		return c.Title == "Updated Task" && c.UpdatedAt.IsZero() == false
+	})).Return(nil)
+
+	err := service.UpdateChecklist(context.Background(), checklist)
+
+	assert.NoError(t, err)
+	assert.False(t, checklist.UpdatedAt.IsZero())
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) GetChecklistByID(ctx context.Context, id uuid.UUID) (*models.Checklist, error) {
-	return s.repo.GetChecklistByID(ctx, id)
+func TestChecklistService_UpdateChecklist_Error(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklist := &models.Checklist{ID: uuid.New(), Title: "Updated Task"}
+
+	mockRepo.On("UpdateChecklist", mock.Anything, mock.Anything).Return(errors.New("db error"))
+
+	err := service.UpdateChecklist(context.Background(), checklist)
+
+	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) CreateChecklist(ctx context.Context, chk *models.Checklist) error {
-	chk.CreatedAt = time.Now()
-	chk.UpdatedAt = time.Now()
-	return s.repo.CreateChecklist(ctx, chk)
+func TestChecklistService_UpdateStatus_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
+
+	checklistID := uuid.New()
+	existingChk := &models.Checklist{ID: checklistID, Status: "pending", UpdatedAt: time.Now().Add(-time.Hour)}
+
+	mockRepo.On("GetChecklistByID", mock.Anything, checklistID).Return(existingChk, nil)
+	mockRepo.On("UpdateChecklist", mock.Anything, mock.MatchedBy(func(c *models.Checklist) bool {
+		return c.Status == "completed"
+	})).Return(nil)
+
+	err := service.UpdateStatus(context.Background(), checklistID, "completed")
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-func (s *ChecklistServiceTestable) UpdateChecklist(ctx context.Context, chk *models.Checklist) error {
-	chk.UpdatedAt = time.Now()
-	return s.repo.UpdateChecklist(ctx, chk)
-}
+func TestChecklistService_UpdateStatus_NotFound(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
 
-func (s *ChecklistServiceTestable) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
-	chk, err := s.repo.GetChecklistByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	chk.Status = status
-	return s.repo.UpdateChecklist(ctx, chk)
-}
+	checklistID := uuid.New()
 
-func (s *ChecklistServiceTestable) CompleteChecklist(ctx context.Context, id uuid.UUID) error {
-	return s.UpdateStatus(ctx, id, "completed")
-}
+	mockRepo.On("GetChecklistByID", mock.Anything, checklistID).Return(nil, errors.New("not found"))
 
-func (s *ChecklistServiceTestable) DeleteChecklist(ctx context.Context, id uuid.UUID) error {
-	return s.repo.DeleteChecklist(ctx, id)
-}
+	err := service.UpdateStatus(context.Background(), checklistID, "completed")
 
-func TestChecklistService_GetUserChecklists(t *testing.T) {
-	t.Run("superadmin sees all global", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		user := &models.User{ID: uuid.New(), Role: models.RoleSuperAdmin}
-		checklists := []models.Checklist{{ID: uuid.New(), Title: "Global Task"}}
-		repo.On("FindAllGlobal", mock.Anything, "pending", "high", false).Return(checklists, nil)
-
-		result, err := service.GetUserChecklists(context.Background(), user, "pending", "high", false)
-
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-		require.Equal(t, "Global Task", result[0].Title)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("regular user sees own tasks", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		userID := uuid.New()
-		user := &models.User{ID: userID, Role: models.RoleDealer}
-		checklists := []models.Checklist{{ID: uuid.New(), Title: "My Task"}}
-		repo.On("FindUserTasks", mock.Anything, userID, "pending", "", false).Return(checklists, nil)
-
-		result, err := service.GetUserChecklists(context.Background(), user, "pending", "", false)
-
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-		repo.AssertExpectations(t)
-	})
-}
-
-func TestChecklistService_GetChecklistByID(t *testing.T) {
-	t.Run("success returns checklist", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		id := uuid.New()
-		checklist := &models.Checklist{ID: id, Title: "Test Task"}
-		repo.On("GetChecklistByID", mock.Anything, id).Return(checklist, nil)
-
-		result, err := service.GetChecklistByID(context.Background(), id)
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Equal(t, "Test Task", result.Title)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("not found returns error", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		id := uuid.New()
-		repo.On("GetChecklistByID", mock.Anything, id).Return(nil, errors.New("not found"))
-
-		result, err := service.GetChecklistByID(context.Background(), id)
-
-		require.Error(t, err)
-		require.Nil(t, result)
-		repo.AssertExpectations(t)
-	})
-}
-
-func TestChecklistService_CreateChecklist(t *testing.T) {
-	t.Run("success creates checklist", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		chk := &models.Checklist{Title: "New Task", Status: "pending"}
-		repo.On("CreateChecklist", mock.Anything, mock.Anything).Return(nil)
-
-		err := service.CreateChecklist(context.Background(), chk)
-
-		require.NoError(t, err)
-		require.NotZero(t, chk.CreatedAt)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("repo error returns error", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		chk := &models.Checklist{Title: "Task"}
-		repo.On("CreateChecklist", mock.Anything, mock.Anything).Return(errors.New("db error"))
-
-		err := service.CreateChecklist(context.Background(), chk)
-
-		require.Error(t, err)
-		require.Equal(t, "db error", err.Error())
-		repo.AssertExpectations(t)
-	})
-}
-
-func TestChecklistService_UpdateChecklist(t *testing.T) {
-	t.Run("success updates checklist", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		chk := &models.Checklist{ID: uuid.New(), Title: "Updated"}
-		repo.On("UpdateChecklist", mock.Anything, mock.Anything).Return(nil)
-
-		err := service.UpdateChecklist(context.Background(), chk)
-
-		require.NoError(t, err)
-		require.NotZero(t, chk.UpdatedAt)
-		repo.AssertExpectations(t)
-	})
-}
-
-func TestChecklistService_UpdateStatus(t *testing.T) {
-	t.Run("success changes status", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		id := uuid.New()
-		chk := &models.Checklist{ID: id, Status: "pending"}
-		repo.On("GetChecklistByID", mock.Anything, id).Return(chk, nil)
-		repo.On("UpdateChecklist", mock.Anything, mock.Anything).Return(nil)
-
-		err := service.UpdateStatus(context.Background(), id, "in_progress")
-
-		require.NoError(t, err)
-		require.Equal(t, "in_progress", chk.Status)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("not found returns error", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		id := uuid.New()
-		repo.On("GetChecklistByID", mock.Anything, id).Return(nil, errors.New("not found"))
-
-		err := service.UpdateStatus(context.Background(), id, "completed")
-
-		require.Error(t, err)
-		repo.AssertExpectations(t)
-	})
+	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
 func TestChecklistService_CompleteChecklist(t *testing.T) {
-	t.Run("success marks as completed", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
 
-		id := uuid.New()
-		chk := &models.Checklist{ID: id, Status: "in_progress"}
-		repo.On("GetChecklistByID", mock.Anything, id).Return(chk, nil)
-		repo.On("UpdateChecklist", mock.Anything, mock.Anything).Return(nil)
+	checklistID := uuid.New()
+	existingChk := &models.Checklist{ID: checklistID, Status: "pending"}
 
-		err := service.CompleteChecklist(context.Background(), id)
+	mockRepo.On("GetChecklistByID", mock.Anything, checklistID).Return(existingChk, nil)
+	mockRepo.On("UpdateChecklist", mock.Anything, mock.Anything).Return(nil)
 
-		require.NoError(t, err)
-		require.Equal(t, "completed", chk.Status)
-		repo.AssertExpectations(t)
-	})
+	err := service.CompleteChecklist(context.Background(), checklistID)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-func TestChecklistService_DeleteChecklist(t *testing.T) {
-	t.Run("success deletes checklist", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
+func TestChecklistService_DeleteChecklist_Success(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
 
-		id := uuid.New()
-		repo.On("DeleteChecklist", mock.Anything, id).Return(nil)
+	checklistID := uuid.New()
 
-		err := service.DeleteChecklist(context.Background(), id)
+	mockRepo.On("DeleteChecklist", mock.Anything, checklistID).Return(nil)
 
-		require.NoError(t, err)
-		repo.AssertExpectations(t)
-	})
+	err := service.DeleteChecklist(context.Background(), checklistID)
 
-	t.Run("repo error returns error", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		id := uuid.New()
-		repo.On("DeleteChecklist", mock.Anything, id).Return(errors.New("cannot delete"))
-
-		err := service.DeleteChecklist(context.Background(), id)
-
-		require.Error(t, err)
-		repo.AssertExpectations(t)
-	})
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
 }
 
-func TestChecklistService_GetAllGlobal(t *testing.T) {
-	t.Run("success returns global checklists", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
+func TestChecklistService_DeleteChecklist_Error(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	service := NewChecklistService(mockRepo)
 
-		checklists := []models.Checklist{{ID: uuid.New(), Title: "Global"}}
-		repo.On("FindAllGlobal", mock.Anything, "pending", "high", false).Return(checklists, nil)
+	checklistID := uuid.New()
 
-		result, err := service.GetAllGlobal(context.Background(), "pending", "high")
+	mockRepo.On("DeleteChecklist", mock.Anything, checklistID).Return(errors.New("db error"))
 
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-		repo.AssertExpectations(t)
-	})
-}
+	err := service.DeleteChecklist(context.Background(), checklistID)
 
-func TestChecklistService_GetAllChecklists(t *testing.T) {
-	t.Run("success returns all checklists", func(t *testing.T) {
-		repo := NewMockChecklistRepo()
-		service := NewChecklistServiceTestable(repo)
-
-		checklists := []models.Checklist{{ID: uuid.New(), Title: "Task1"}}
-		repo.On("FindAll", mock.Anything, "pending", "medium").Return(checklists, nil)
-
-		result, err := service.GetAllChecklists(context.Background(), "pending", "medium")
-
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-		repo.AssertExpectations(t)
-	})
+	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
 }

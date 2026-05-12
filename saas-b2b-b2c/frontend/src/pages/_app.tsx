@@ -4,6 +4,7 @@ import type { AppProps } from 'next/app';
 import { Provider } from 'react-redux';
 import { store } from '../store';
 import { useState, useEffect } from 'react';
+import ThemeProvider from '../components/ThemeProvider';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import weekday from 'dayjs/plugin/weekday';
@@ -23,9 +24,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       try {
         const user = JSON.parse(userStr);
         if (user && user.role) {
-          store.dispatch({
-            type: 'auth/setAuthFromStorage',
-          });
+          store.dispatch({ type: 'auth/setAuthFromStorage' });
         }
       } catch (e) {
         console.error('Failed to parse user', e);
@@ -40,7 +39,9 @@ function MyApp({ Component, pageProps }: AppProps) {
 
   return (
     <Provider store={store}>
-      <Component {...pageProps} />
+      <ThemeProvider>
+        <Component {...pageProps} />
+      </ThemeProvider>
     </Provider>
   );
 }

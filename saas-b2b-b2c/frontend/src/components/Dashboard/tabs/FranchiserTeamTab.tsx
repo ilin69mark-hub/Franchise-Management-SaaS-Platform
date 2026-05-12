@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Row, Col, Card, Table, Tag, Typography, Space, Button, InputNumber, Select, Collapse, Statistic, Progress, Divider, Modal, message } from 'antd';
-import { 
-  ArrowUpOutlined, 
-  ArrowDownOutlined, 
-  TeamOutlined, 
+import { Row, Col, Card, Table, Tag, Typography, Space, Button, InputNumber, Select, Collapse, Statistic, Progress, Divider, Modal, message, Form, Input } from 'antd';
+import {
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  TeamOutlined,
   CheckCircleOutlined,
   WarningOutlined,
   EditOutlined,
   FilePdfOutlined,
   CopyOutlined,
   SaveOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import dynamic from 'next/dynamic';
 import dayjs from 'dayjs';
+import { useCreateEmployeeMutation } from '@/services/userApi';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -111,6 +113,9 @@ const FranchiserTeamTab: React.FC = () => {
   const [plansModalOpen, setPlansModalOpen] = useState(false);
   const [selectedQuarter, setSelectedQuarter] = useState('2026-Q2');
   const [plans, setPlans] = useState<ManagerPlans>(defaultPlans);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [addForm] = Form.useForm();
+  const [createEmployee, { isLoading: isCreating }] = useCreateEmployeeMutation();
 
   const getRowColor = (kpi: number) => {
     if (kpi >= 90) return '#f6ffed';
@@ -240,6 +245,25 @@ const FranchiserTeamTab: React.FC = () => {
     message.info('Скопировано из прошлого квартала');
   };
 
+  const handleAddManager = async (values: { email: string; password: string; first_name: string; last_name?: string; phone?: string }) => {
+    try {
+      await createEmployee({
+        email: values.email,
+        password: values.password,
+        first_name: values.first_name,
+        last_name: values.last_name,
+        phone: values.phone,
+        role: 'franchiser_manager',
+      }).unwrap();
+      message.success('Менеджер успешно зарегистрирован');
+      setAddModalOpen(false);
+      addForm.resetFields();
+    } catch (err: unknown) {
+      const error = err as { data?: { error?: string } };
+      message.error(error?.data?.error || 'Ошибка при регистрации менеджера');
+    }
+  };
+
   const renderDetailPanel = (managerId: string) => {
     const manager = managers.find(m => m.id === managerId);
     if (!manager) return null;
@@ -282,7 +306,10 @@ const FranchiserTeamTab: React.FC = () => {
       <Title level={4}>Моя команда</Title>
 
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<EditOutlined />} onClick={() => setPlansModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddModalOpen(true)}>
+          Добавить менеджера
+        </Button>
+        <Button icon={<EditOutlined />} onClick={() => setPlansModalOpen(true)}>
           Назначить планы
         </Button>
         <Text type="secondary">Квартал: {selectedQuarter}</Text>
@@ -394,6 +421,68 @@ const FranchiserTeamTab: React.FC = () => {
             <Button type="primary" icon={<SaveOutlined />} onClick={handleSavePlans}>Сохранить планы</Button>
           </Space>
         </Space>
+      </Modal>
+
+      <Modal
+        title="Зарегистрировать нового менеджера"
+        open={addModalOpen}
+        onCancel={() => { setAddModalOpen(false); addForm.resetFields(); }}
+        footer={null}
+        width={500}
+      >
+        <Form form={addForm} layout="vertical" onFinish={handleAddManager}>
+          <Form.Item
+            name="email"
+            label="Email"
+            rules={[
+              { required: true, message: 'Введите email' },
+              { type: 'email', message: 'Некорректный email' },
+            ]}
+          >
+            <Input placeholder="manager@example.com" />
+          </Form.Item>
+
+          <Form.Item
+            name="password"
+            label="Пароль"
+            rules={[
+              { required: true, message: 'Введите пароль' },
+              { min: 6, message: 'Минимум 6 символов' },
+            ]}
+          >
+            <Input.Password placeholder="Минимум 6 символов" />
+          </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="first_name"
+                label="Имя"
+                rules={[{ required: true, message: 'Введите имя' }]}
+              >
+                <Input placeholder="Иван" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="last_name" label="Фамилия">
+                <Input placeholder="Петров" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item name="phone" label="Телефон">
+            <Input placeholder="+7 (999) 123-45-67" />
+          </Form.Item>
+
+          <Space>
+            <Button type="primary" htmlType="submit" loading={isCreating} icon={<PlusOutlined />}>
+              Зарегистрировать
+            </Button>
+            <Button onClick={() => { setAddModalOpen(false); addForm.resetFields(); }}>
+              Отмена
+            </Button>
+          </Space>
+        </Form>
       </Modal>
     </div>
   );

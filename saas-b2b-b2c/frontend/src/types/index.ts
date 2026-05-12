@@ -174,11 +174,74 @@ export interface UnitTemplate {
   created_at?: string;
 }
 
+/* ---------- Профиль пользователя ---------- */
+export type UserStatus = 'online' | 'office' | 'meeting' | 'vacation' | 'dnd';
+
+export interface UserContacts {
+  email_visible: boolean;
+  phone_visible: boolean;
+  phone?: string;
+  telegram?: string;
+  whatsapp?: string;
+  working_hours?: string;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
+  position?: string;
+  bio?: string;
+  quote?: string;
+  avatar_url?: string;
+  status?: UserStatus;
+  available_for_questions?: boolean;
+  achievements?: string[];
+  contacts?: UserContacts;
+}
+
+export interface UpdateProfileRequest {
+  first_name?: string;
+  last_name?: string;
+  display_name?: string;
+  position?: string;
+  bio?: string;
+  quote?: string;
+  status?: UserStatus;
+  available_for_questions?: boolean;
+  contacts?: Partial<UserContacts>;
+}
+
+/* ---------- Создание сотрудника (для HR-модуля) ---------- */
+export interface CreateEmployeeRequest {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name?: string;
+  phone?: string;
+  role: string;
+  managed_by?: string;
+}
+
+export interface EmployeeResponse {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name?: string;
+  phone?: string;
+  role: string;
+  managed_by?: string;
+  created_at?: string;
+}
+
 /* -------------------------------------------------
    Всё готово к импорту:
    import type {
      User, AuthResponse, Employee, Checklist, Lead, LeadActivity,
      CreateLeadRequest, Dealer, Plan, Salon, Goal,
-     UnitEconomyInput, UnitEconomyResult, UnitTemplate
+     UnitEconomyInput, UnitEconomyResult, UnitTemplate,
+     UserProfile, UserStatus, UserContacts, UpdateProfileRequest
    } from '@/types';
    ------------------------------------------------- */

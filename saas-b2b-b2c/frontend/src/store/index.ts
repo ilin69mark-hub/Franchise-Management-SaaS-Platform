@@ -8,6 +8,7 @@ import checklistReducer from './checklistSlice';
 import { apiSlice } from '@/services/api';          // общий API‑slice
 import { planApi } from '@/services/planApi';      // сервис тарифных планов
 import { goalApi } from '@/services/goalApi';      // <-- НОВОЕ: сервис целей (Goal)
+import { userApi } from '@/services/userApi';      // <-- НОВОЕ: сервис профиля пользователя
 
 /* -----------------------------------------------------------------
    Безопасная обертка localStorage (для SSR в Next.js)
@@ -70,12 +71,14 @@ export const store = configureStore({
     [apiSlice.reducerPath]: apiSlice.reducer,
     [planApi.reducerPath]: planApi.reducer,
     [goalApi.reducerPath]: goalApi.reducer,   // <-- НОВОЕ
+    [userApi.reducerPath]: userApi.reducer,    // <-- НОВОЕ
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware()
       .concat(apiSlice.middleware)
       .concat(planApi.middleware)
-      .concat(goalApi.middleware),            // <-- НОВОЕ
+      .concat(goalApi.middleware)
+      .concat(userApi.middleware),           // <-- НОВОЕ
   preloadedState,
 });
 

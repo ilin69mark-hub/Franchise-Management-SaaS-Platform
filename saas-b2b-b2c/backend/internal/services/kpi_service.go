@@ -14,12 +14,17 @@ import (
 
 type KPIService struct {
 	DB       *gorm.DB // Публичное поле для доступа из хендлеров
-	kpiRepo  *repository.KPIRepository
-	schedRep *repository.ScheduleRepository
+	kpiRepo  repository.KPIRepositoryInterface
+	schedRep repository.ScheduleRepositoryInterface
+	analyticsRepo repository.AnalyticsRepositoryInterface
 }
 
-func NewKPIService(db *gorm.DB, kpiRepo *repository.KPIRepository, schedRep *repository.ScheduleRepository) *KPIService {
+func NewKPIService(db *gorm.DB, kpiRepo repository.KPIRepositoryInterface, schedRep repository.ScheduleRepositoryInterface) *KPIService {
 	return &KPIService{DB: db, kpiRepo: kpiRepo, schedRep: schedRep}
+}
+
+func NewKPIServiceWithAnalytics(db *gorm.DB, kpiRepo repository.KPIRepositoryInterface, schedRep repository.ScheduleRepositoryInterface, analyticsRepo repository.AnalyticsRepositoryInterface) *KPIService {
+	return &KPIService{DB: db, kpiRepo: kpiRepo, schedRep: schedRep, analyticsRepo: analyticsRepo}
 }
 
 // SetGoal - обертка для репозитория
@@ -28,6 +33,10 @@ func (s *KPIService) SetGoal(ctx context.Context, goal *models.DailyGoal) error 
 }
 
 func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, salonID uuid.UUID, isManager bool) (*models.DashboardStatsResponse, error) {
+	if s.analyticsRepo != nil {
+		return s.analyticsRepo.CalculateDashboardStats(ctx, &userID, &salonID, isManager)
+	}
+
 	today := time.Now()
 	todayStr := today.Format("2006-01-02")
 

@@ -81,7 +81,6 @@ const LoginPage: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f0f2f5',
         position: 'relative',
       }}
     >

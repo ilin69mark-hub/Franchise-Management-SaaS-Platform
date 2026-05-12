@@ -373,3 +373,95 @@ func TestUserService_CreateEmployee(t *testing.T) {
 		})
 	}
 }
+
+func TestUserService_UpdateEmployee_Success(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	req := models.UpdateEmployeeRequest{
+		FirstName: "John",
+		LastName:  "Doe",
+		Role:      models.RoleDealerManager,
+	}
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+	mockRepo.On("UpdateUserFields", mock.Anything, userID, mock.Anything).Return(nil)
+	mockRepo.On("GetUserByID", mock.Anything, userID).Return(&models.User{ID: userID, FirstName: "John"}, nil)
+
+	user, err := service.UpdateEmployee(userID, tenantID, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, user)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUserService_UpdateEmployee_NotFound(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	req := models.UpdateEmployeeRequest{FirstName: "John"}
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
+
+	user, err := service.UpdateEmployee(userID, tenantID, req)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	assert.Nil(t, user)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUserService_UpdateEmployee_InvalidRole(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	req := models.UpdateEmployeeRequest{Role: models.RoleSuperAdmin}
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+
+	user, err := service.UpdateEmployee(userID, tenantID, req)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid role")
+	assert.Nil(t, user)
+	mockRepo.AssertNotCalled(t, "UpdateUserFields")
+}
+
+func TestUserService_DeleteEmployee_Success(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+	mockRepo.On("DeleteUser", mock.Anything, userID).Return(nil)
+
+	err := service.DeleteEmployee(userID, tenantID)
+
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUserService_DeleteEmployee_NotFound(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
+
+	err := service.DeleteEmployee(userID, tenantID)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+	mockRepo.AssertExpectations(t)
+}
+

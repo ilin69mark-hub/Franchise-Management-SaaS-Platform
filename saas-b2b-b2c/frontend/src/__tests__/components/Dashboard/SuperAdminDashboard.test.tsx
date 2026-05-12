@@ -35,6 +35,10 @@ jest.mock('@/store/authSlice', () => ({
   logout: jest.fn(),
 }));
 
+jest.mock('@/components/ThemeProvider', () => ({
+  useThemeMode: () => ({ theme: 'light', setTheme: jest.fn(), toggleTheme: jest.fn() }),
+}));
+
 jest.mock('next/router', () => ({
   useRouter: () => ({
     push: jest.fn(),

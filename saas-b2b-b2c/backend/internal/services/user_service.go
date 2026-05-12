@@ -40,12 +40,55 @@ func (s *UserService) GetProfile(userID uuid.UUID) (*models.User, error) {
 }
 
 func (s *UserService) UpdateProfile(userID uuid.UUID, req models.UserUpdateRequest) (*models.User, error) {
-	updateData := map[string]interface{}{
-		"first_name": req.FirstName,
-		"last_name":  req.LastName,
-		"phone":      req.Phone,
-		"updated_at": time.Now(),
+	updateData := map[string]interface{}{}
+
+	if req.FirstName != "" {
+		updateData["first_name"] = req.FirstName
 	}
+	if req.LastName != "" {
+		updateData["last_name"] = req.LastName
+	}
+	if req.Phone != "" {
+		updateData["phone"] = req.Phone
+	}
+	if req.DisplayName != nil {
+		updateData["display_name"] = *req.DisplayName
+	}
+	if req.Position != nil {
+		updateData["position"] = *req.Position
+	}
+	if req.Bio != nil {
+		updateData["bio"] = *req.Bio
+	}
+	if req.Quote != nil {
+		updateData["quote"] = *req.Quote
+	}
+	if req.UserStatus != nil {
+		updateData["user_status"] = *req.UserStatus
+	}
+	if req.AvailableForQuestions != nil {
+		updateData["available_for_questions"] = *req.AvailableForQuestions
+	}
+	if req.ContactsEmailVisible != nil {
+		updateData["contacts_email_visible"] = *req.ContactsEmailVisible
+	}
+	if req.ContactsPhoneVisible != nil {
+		updateData["contacts_phone_visible"] = *req.ContactsPhoneVisible
+	}
+	if req.ContactsPhone != nil {
+		updateData["contacts_phone"] = *req.ContactsPhone
+	}
+	if req.ContactsTelegram != nil {
+		updateData["contacts_telegram"] = *req.ContactsTelegram
+	}
+	if req.ContactsWhatsApp != nil {
+		updateData["contacts_whatsapp"] = *req.ContactsWhatsApp
+	}
+	if req.ContactsWorkingHours != nil {
+		updateData["contacts_working_hours"] = *req.ContactsWorkingHours
+	}
+
+	updateData["updated_at"] = time.Now()
 	err := s.userRepo.UpdateUserFields(context.Background(), userID, updateData)
 	if err != nil {
 		return nil, err

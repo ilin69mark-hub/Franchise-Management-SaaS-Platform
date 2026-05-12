@@ -4,7 +4,6 @@ import { Layout } from 'antd';
 import { RootState } from '../store';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import Header from '@/components/Dashboard/Header';
 import FranchiserDashboard from '@/components/Dashboard/FranchiserDashboard';
 import FranchiserManagerDashboard from '@/components/Dashboard/FranchiserManagerDashboard';
 import DealerDashboard from '@/components/Dashboard/DealerDashboard';
@@ -27,7 +26,6 @@ const DashboardPage: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>Загрузка...</title></Head>
-        <Header />
         <Content />
       </Layout>
     );
@@ -43,7 +41,6 @@ const DashboardPage: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>{title}</title></Head>
-        <Header />
         <Content style={{ padding: 0 }}>
           <FranchiserDashboard user={user} title={title} />
         </Content>
@@ -56,7 +53,6 @@ const DashboardPage: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>{title}</title></Head>
-        <Header />
         <Content style={{ padding: 0 }}>
           <FranchiserManagerDashboard user={user} title={title} />
         </Content>
@@ -68,7 +64,6 @@ const DashboardPage: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>Личный кабинет дилера</title></Head>
-        <Header />
         <Content style={{ padding: 0 }}>
           <DealerDashboard user={user} title="Личный кабинет дилера" />
         </Content>
@@ -80,7 +75,6 @@ const DashboardPage: React.FC = () => {
     return (
       <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
         <Head><title>Личный кабинет менеджера салона</title></Head>
-        <Header />
         <Content style={{ padding: 0 }}>
           <SalonManagerDashboard user={user} title="Личный кабинет менеджера салона" />
         </Content>
@@ -91,7 +85,6 @@ const DashboardPage: React.FC = () => {
 return (
     <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
       <Head><title>Франчайзинг</title></Head>
-      <Header />
       <Content style={{ padding: 0 }}>
         <FranchiserDashboard user={user} title="Панель управления" />
       </Content>

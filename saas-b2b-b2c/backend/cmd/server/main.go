@@ -61,10 +61,11 @@ func main() {
 	goalRepo := repository.NewGoalRepository(db)
 	planRepo := repository.NewPlanRepository(db)
 	planService := services.NewPlanService(planRepo)
+	checklistRepo := repository.NewChecklistRepository(db)
 
 	authService := services.NewAuthService(db)
 	userService := services.NewUserService(db)
-	checklistService := services.NewChecklistService(db)
+	checklistService := services.NewChecklistService(checklistRepo)
 	adminService := services.NewAdminService(db)
 	notifService := services.NewNotificationService(notifRepo)
 	leadService := services.NewLeadService(leadRepo)
@@ -231,6 +232,8 @@ func main() {
 		protected.POST("/users", userHandler.CreateEmployee)
 		protected.PUT("/users/:id", userHandler.UpdateEmployee)
 		protected.DELETE("/users/:id", userHandler.DeleteEmployee)
+		protected.GET("/users/me", userHandler.GetProfile)
+		protected.PUT("/users/me", userHandler.UpdateProfile)
 
 		protected.GET("/leads", leadHandler.GetMyLeads)
 		protected.POST("/leads", leadHandler.CreateLead)

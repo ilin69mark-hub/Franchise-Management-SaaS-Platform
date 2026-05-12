@@ -69,9 +69,16 @@ const FranchiserDashboard: React.FC<FranchiserDashboardProps> = ({ user, title }
 
   const userMenuItems = [
     {
+      key: 'profile',
+      icon: <UserOutlined />,
+      label: 'Профиль',
+      onClick: () => router.push('/profile'),
+    },
+    {
       key: 'settings',
       icon: <SettingOutlined />,
       label: 'Настройки',
+      onClick: () => router.push('/settings'),
     },
     {
       key: 'divider',

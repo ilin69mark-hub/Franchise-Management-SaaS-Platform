@@ -23,7 +23,7 @@ const FranchiserManagerPage: React.FC = () => {
 
   if (!user) {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Загрузка...</title></Head>
         <Header />
         <Content />
@@ -34,7 +34,7 @@ const FranchiserManagerPage: React.FC = () => {
   if (user.role === 'franchiser') {
     const title = 'Личный кабинет Франчайзера';
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>{title}</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>
@@ -47,7 +47,7 @@ const FranchiserManagerPage: React.FC = () => {
   if (user.role === 'franchiser_manager') {
     const title = 'Личный кабинет Менеджера';
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>{title}</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>

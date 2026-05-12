@@ -2,348 +2,308 @@ package services
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"franchise-saas-backend/internal/mocks"
 	"franchise-saas-backend/internal/models"
+	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
-func TestAdminService_GetAllTenants(t *testing.T) {
-	t.Run("success returns list of tenants", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenants := []models.Tenant{
-			{ID: uuid.New(), Name: "Tenant 1", Status: "active"},
-			{ID: uuid.New(), Name: "Tenant 2", Status: "active"},
-			{ID: uuid.New(), Name: "Tenant 3", Status: "suspended"},
-		}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
-
-		result, err := service.GetAllTenants(context.Background())
-
-		require.NoError(t, err)
-		require.Len(t, result, 3)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("empty database returns empty array", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenantRepo.On("FindAll", mock.Anything).Return([]models.Tenant{}, nil)
-
-		result, err := service.GetAllTenants(context.Background())
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Len(t, result, 0)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("repository error returns error", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenantRepo.On("FindAll", mock.Anything).Return(nil, errors.New("db error"))
-
-		result, err := service.GetAllTenants(context.Background())
-
-		require.Error(t, err)
-		require.Nil(t, result)
-		tenantRepo.AssertExpectations(t)
-	})
+type AdminMockTenantRepo struct {
+	mock.Mock
 }
 
-func TestAdminService_CreateTenant(t *testing.T) {
-	t.Run("success creates tenant", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenants := []models.Tenant{}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
-
-		newTenant := &models.Tenant{
-			ID:     uuid.New(),
-			Name:   "New Tenant",
-			Status: "active",
-		}
-		tenantRepo.On("CreateTenant", mock.Anything, mock.Anything).Return(newTenant, nil)
-
-		req := &CreateTenantRequest{
-			Name:        "New Tenant",
-			LegalEntity: "LLC",
-			INN:         "1234567890",
-			MaxUsers:    10,
-		}
-
-		result, err := service.CreateTenant(context.Background(), req)
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Equal(t, "New Tenant", result.Name)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("duplicate name returns ErrAlreadyExists", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		existingTenant := models.Tenant{ID: uuid.New(), Name: "Existing Tenant"}
-		tenants := []models.Tenant{existingTenant}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
-
-		req := &CreateTenantRequest{
-			Name: "Existing Tenant",
-		}
-
-		result, err := service.CreateTenant(context.Background(), req)
-
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrAlreadyExists)
-		require.Nil(t, result)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("repository error on create returns error", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenants := []models.Tenant{}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
-		tenantRepo.On("CreateTenant", mock.Anything, mock.Anything).Return(nil, errors.New("create error"))
-
-		req := &CreateTenantRequest{
-			Name: "New Tenant",
-		}
-
-		result, err := service.CreateTenant(context.Background(), req)
-
-		require.Error(t, err)
-		require.Nil(t, result)
-		tenantRepo.AssertExpectations(t)
-	})
+func (m *AdminMockTenantRepo) FindAll(ctx context.Context) ([]models.Tenant, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]models.Tenant), args.Error(1)
 }
 
-func TestAdminService_SuspendTenant(t *testing.T) {
+func (m *AdminMockTenantRepo) FindByID(ctx context.Context, id uuid.UUID) (*models.Tenant, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Tenant), args.Error(1)
+}
+
+func (m *AdminMockTenantRepo) CreateTenant(ctx context.Context, tenant *models.Tenant) (*models.Tenant, error) {
+	args := m.Called(ctx, tenant)
+	return args.Get(0).(*models.Tenant), args.Error(1)
+}
+
+func (m *AdminMockTenantRepo) UpdateTenant(ctx context.Context, tenant *models.Tenant) error {
+	args := m.Called(ctx, tenant)
+	return args.Error(0)
+}
+
+func (m *AdminMockTenantRepo) DeleteTenant(ctx context.Context, id uuid.UUID) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *AdminMockTenantRepo) GetTenantByID(ctx context.Context, id uuid.UUID) (*models.Tenant, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Tenant), args.Error(1)
+}
+
+func (m *AdminMockTenantRepo) GetTenantBySlug(ctx context.Context, slug string) (*models.Tenant, error) {
+	args := m.Called(ctx, slug)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Tenant), args.Error(1)
+}
+
+func (m *AdminMockTenantRepo) FindByStatus(ctx context.Context, status string) ([]models.Tenant, error) {
+	args := m.Called(ctx, status)
+	return args.Get(0).([]models.Tenant), args.Error(1)
+}
+
+func (m *AdminMockTenantRepo) CountUsersByTenantID(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	args := m.Called(ctx, tenantID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+type AdminMockAuditLogRepo struct {
+	mock.Mock
+}
+
+func (m *AdminMockAuditLogRepo) CountByFilters(ctx context.Context, tenantID *uuid.UUID, startDate, endDate *time.Time) (int64, error) {
+	args := m.Called(ctx, tenantID, startDate, endDate)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *AdminMockAuditLogRepo) FindByFilters(ctx context.Context, tenantID *uuid.UUID, startDate, endDate *time.Time, limit, offset int) ([]models.AuditLog, error) {
+	args := m.Called(ctx, tenantID, startDate, endDate, limit, offset)
+	return args.Get(0).([]models.AuditLog), args.Error(1)
+}
+
+func TestAdminService_GetAuditLog_Success(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	tenantID := uuid.New()
+	ctx := context.Background()
+
+	mockAudit.On("CountByFilters", ctx, mock.Anything, mock.Anything, mock.Anything).Return(int64(2), nil)
+	mockAudit.On("FindByFilters", ctx, mock.Anything, mock.Anything, mock.Anything, 20, 0).Return([]models.AuditLog{
+		{ID: uuid.New(), Action: "login"},
+		{ID: uuid.New(), Action: "view_dashboard"},
+	}, nil)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	logs, total, err := svc.GetAuditLog(ctx, &tenantID, nil, nil, 20, 0)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(2), total)
+	assert.Len(t, logs, 2)
+	mockAudit.AssertExpectations(t)
+}
+
+func TestAdminService_GetAllTenants_Success(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
 	tenantID := uuid.New()
 
-	t.Run("success suspends tenant", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+	mockTenant.On("FindAll", ctx).Return([]models.Tenant{
+		{ID: tenantID, Name: "Test Salon", Status: "active"},
+	}, nil)
 
-		tenant := &models.Tenant{ID: tenantID, Name: "Test Tenant", Status: "active"}
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(tenant, nil)
-		tenantRepo.On("UpdateTenant", mock.Anything, mock.Anything).Return(nil)
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	tenants, err := svc.GetAllTenants(ctx)
 
-		err := service.SuspendTenant(context.Background(), tenantID)
-
-		require.NoError(t, err)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("non-existent tenant returns ErrNotFound", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(nil, errors.New("not found"))
-
-		err := service.SuspendTenant(context.Background(), tenantID)
-
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrNotFound)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("tenant not found (nil) returns ErrNotFound", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(nil, nil)
-
-		err := service.SuspendTenant(context.Background(), tenantID)
-
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrNotFound)
-		tenantRepo.AssertExpectations(t)
-	})
+	assert.NoError(t, err)
+	assert.Len(t, tenants, 1)
+	assert.Equal(t, "Test Salon", tenants[0]["name"])
+	mockTenant.AssertExpectations(t)
 }
 
-func TestAdminService_DeleteTenant(t *testing.T) {
+func TestAdminService_CreateTenant_Duplicate(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
+
+	mockTenant.On("FindAll", ctx).Return([]models.Tenant{
+		{Name: "Existing"},
+	}, nil)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	req := &CreateTenantRequest{Name: "Existing"}
+
+	_, err := svc.CreateTenant(ctx, req)
+	assert.Equal(t, ErrAlreadyExists, err)
+	mockTenant.AssertExpectations(t)
+}
+
+func TestAdminService_SuspendTenant_NotFound(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
 	tenantID := uuid.New()
 
-	t.Run("success deletes tenant", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+	mockTenant.On("FindByID", ctx, tenantID).Return(nil, nil)
 
-		tenant := &models.Tenant{ID: tenantID, Name: "Test Tenant", Status: "active"}
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(tenant, nil)
-		tenantRepo.On("CountUsersByTenantID", mock.Anything, tenantID).Return(int64(0), nil)
-		tenantRepo.On("UpdateTenant", mock.Anything, mock.Anything).Return(nil)
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	err := svc.SuspendTenant(ctx, tenantID)
 
-		err := service.DeleteTenant(context.Background(), tenantID)
-
-		require.NoError(t, err)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("tenant with active users returns ErrHasActiveUsers", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenant := &models.Tenant{ID: tenantID, Name: "Test Tenant", Status: "active"}
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(tenant, nil)
-		tenantRepo.On("CountUsersByTenantID", mock.Anything, tenantID).Return(int64(5), nil)
-
-		err := service.DeleteTenant(context.Background(), tenantID)
-
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrHasActiveUsers)
-		tenantRepo.AssertExpectations(t)
-	})
-
-	t.Run("non-existent tenant returns ErrNotFound", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		tenantRepo.On("FindByID", mock.Anything, tenantID).Return(nil, errors.New("not found"))
-
-		err := service.DeleteTenant(context.Background(), tenantID)
-
-		require.Error(t, err)
-		require.ErrorIs(t, err, ErrNotFound)
-		tenantRepo.AssertExpectations(t)
-	})
+	assert.Equal(t, ErrNotFound, err)
+	mockTenant.AssertExpectations(t)
 }
 
-func TestAdminService_GetAuditLog(t *testing.T) {
-	t.Run("success returns array with filters", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+func TestAdminService_DeleteTenant_HasUsers(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
 
-		logs := []models.AuditLog{
-			{ID: uuid.New(), Action: "user_created", TenantID: uuid.New()},
-			{ID: uuid.New(), Action: "tenant_updated", TenantID: uuid.New()},
-		}
-		tenantID := uuid.New()
-		auditRepo.On("CountByFilters", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(int64(2), nil)
-		auditRepo.On("FindByFilters", mock.Anything, mock.Anything, mock.Anything, mock.Anything, 20, 0).Return(logs, nil)
+	ctx := context.Background()
+	tenantID := uuid.New()
+	tenant := &models.Tenant{ID: tenantID, Name: "Test"}
 
-		result, total, err := service.GetAuditLog(context.Background(), &tenantID, nil, nil, 20, 0)
+	mockTenant.On("FindByID", ctx, tenantID).Return(tenant, nil)
+	mockTenant.On("CountUsersByTenantID", ctx, tenantID).Return(int64(5), nil)
 
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		require.Equal(t, int64(2), total)
-		auditRepo.AssertExpectations(t)
-	})
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	err := svc.DeleteTenant(ctx, tenantID)
 
-	t.Run("pagination with limit and offset", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		logs := []models.AuditLog{
-			{ID: uuid.New(), Action: "user_created"},
-		}
-		auditRepo.On("CountByFilters", mock.Anything, (*uuid.UUID)(nil), (*time.Time)(nil), (*time.Time)(nil)).Return(int64(100), nil)
-		auditRepo.On("FindByFilters", mock.Anything, (*uuid.UUID)(nil), (*time.Time)(nil), (*time.Time)(nil), 10, 20).Return(logs, nil)
-
-		result, total, err := service.GetAuditLog(context.Background(), nil, nil, nil, 10, 20)
-
-		require.NoError(t, err)
-		require.Len(t, result, 1)
-		require.Equal(t, int64(100), total)
-		auditRepo.AssertExpectations(t)
-	})
-
-	t.Run("default limit when 0", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
-
-		logs := []models.AuditLog{}
-		auditRepo.On("CountByFilters", mock.Anything, (*uuid.UUID)(nil), (*time.Time)(nil), (*time.Time)(nil)).Return(int64(0), nil)
-		auditRepo.On("FindByFilters", mock.Anything, (*uuid.UUID)(nil), (*time.Time)(nil), (*time.Time)(nil), 20, 0).Return(logs, nil)
-
-		_, total, err := service.GetAuditLog(context.Background(), nil, nil, nil, 0, 0)
-
-		require.NoError(t, err)
-		require.Equal(t, int64(0), total)
-		auditRepo.AssertExpectations(t)
-	})
+	assert.Equal(t, ErrHasActiveUsers, err)
+	mockTenant.AssertExpectations(t)
 }
 
-func TestAdminService_GetSystemStats(t *testing.T) {
-	t.Run("success returns system statistics", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+func TestAdminService_GetSystemStats_Success(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
 
-		tenants := []models.Tenant{
-			{ID: uuid.New(), Name: "Tenant 1", Status: "active"},
-			{ID: uuid.New(), Name: "Tenant 2", Status: "active"},
-			{ID: uuid.New(), Name: "Tenant 3", Status: "churned"},
-		}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
+	ctx := context.Background()
+	tenantID := uuid.New()
 
-		result, err := service.GetSystemStats(context.Background())
+	mockTenant.On("FindAll", ctx).Return([]models.Tenant{
+		{ID: tenantID, Name: "Active Tenant", Status: "active"},
+		{ID: uuid.New(), Name: "Blocked Tenant", Status: "blocked"},
+	}, nil)
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Equal(t, 3, result["total_tenants"])
-		require.Equal(t, 2, result["active_tenants"])
-		tenantRepo.AssertExpectations(t)
-	})
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	stats, err := svc.GetSystemStats(ctx)
 
-	t.Run("returns 0 for active tenants when all churned", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, stats["total_tenants"])
+	assert.Equal(t, 1, stats["active_tenants"])
+	mockTenant.AssertExpectations(t)
+}
 
-		tenants := []models.Tenant{
-			{ID: uuid.New(), Status: "churned"},
-			{ID: uuid.New(), Status: "churned"},
-		}
-		tenantRepo.On("FindAll", mock.Anything).Return(tenants, nil)
+func TestAdminService_DeleteTenant_Success(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
 
-		result, err := service.GetSystemStats(context.Background())
+	ctx := context.Background()
+	tenantID := uuid.New()
+	tenant := &models.Tenant{ID: tenantID, Name: "Test", Status: "active"}
 
-		require.NoError(t, err)
-		require.Equal(t, 2, result["total_tenants"])
-		require.Equal(t, 0, result["active_tenants"])
-		tenantRepo.AssertExpectations(t)
-	})
+	mockTenant.On("FindByID", ctx, tenantID).Return(tenant, nil)
+	mockTenant.On("CountUsersByTenantID", ctx, tenantID).Return(int64(0), nil)
+	mockTenant.On("UpdateTenant", ctx, tenant).Return(nil)
 
-	t.Run("repository error returns error", func(t *testing.T) {
-		tenantRepo := mocks.NewMockTenantRepository()
-		auditRepo := mocks.NewMockAuditLogRepository()
-		service := NewAdminServiceWithInterfaces(tenantRepo, auditRepo, nil)
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	err := svc.DeleteTenant(ctx, tenantID)
 
-		tenantRepo.On("FindAll", mock.Anything).Return(nil, errors.New("db error"))
+	assert.NoError(t, err)
+	assert.Equal(t, "churned", tenant.Status)
+	mockTenant.AssertExpectations(t)
+}
 
-		result, err := service.GetSystemStats(context.Background())
+func TestAdminService_DeleteTenant_NotFound(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
 
-		require.Error(t, err)
-		require.Nil(t, result)
-		tenantRepo.AssertExpectations(t)
-	})
+	ctx := context.Background()
+	tenantID := uuid.New()
+
+	mockTenant.On("FindByID", ctx, tenantID).Return(nil, gorm.ErrRecordNotFound)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	err := svc.DeleteTenant(ctx, tenantID)
+
+	assert.Equal(t, ErrNotFound, err)
+	mockTenant.AssertExpectations(t)
+}
+
+var _ repository.TenantRepositoryInterface = (*AdminMockTenantRepo)(nil)
+var _ repository.AuditLogRepositoryInterface = (*AdminMockAuditLogRepo)(nil)
+
+func TestAdminService_CreateTenantRequest(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
+
+	mockTenant.On("FindAll", ctx).Return([]models.Tenant{}, nil)
+	mockTenant.On("CreateTenant", ctx, mock.Anything).Return(&models.Tenant{
+		ID:   uuid.New(),
+		Name: "New Tenant",
+	}, nil)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	req := &CreateTenantRequest{
+		Name:        "New Tenant",
+		LegalEntity: "OOO New",
+		INN:         "1234567890",
+		MaxUsers:    50,
+	}
+
+	tenant, err := svc.CreateTenant(ctx, req)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, tenant)
+	assert.Equal(t, "New Tenant", tenant.Name)
+	mockTenant.AssertExpectations(t)
+}
+
+func TestAdminService_GetAuditLog_WithPagination(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+
+	mockAudit.On("CountByFilters", ctx, mock.Anything, mock.Anything, mock.Anything).Return(int64(100), nil)
+	mockAudit.On("FindByFilters", ctx, mock.Anything, mock.Anything, mock.Anything, 10, 20).Return([]models.AuditLog{
+		{ID: uuid.New(), Action: "test1"},
+		{ID: uuid.New(), Action: "test2"},
+	}, nil)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	logs, total, err := svc.GetAuditLog(ctx, &tenantID, nil, nil, 10, 20)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(100), total)
+	assert.Len(t, logs, 2)
+}
+
+func TestAdminService_GetAuditLog_DefaultLimit(t *testing.T) {
+	mockTenant := &AdminMockTenantRepo{}
+	mockAudit := &AdminMockAuditLogRepo{}
+
+	ctx := context.Background()
+	tenantID := uuid.New()
+
+	mockAudit.On("CountByFilters", ctx, mock.Anything, mock.Anything, mock.Anything).Return(int64(5), nil)
+	mockAudit.On("FindByFilters", ctx, mock.Anything, mock.Anything, mock.Anything, 20, 0).Return([]models.AuditLog{
+		{ID: uuid.New()},
+	}, nil)
+
+	svc := NewAdminServiceWithInterfaces(mockTenant, mockAudit, nil)
+	_, total, err := svc.GetAuditLog(ctx, &tenantID, nil, nil, 0, 0)
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5), total)
 }

@@ -22,7 +22,7 @@ const DealerPage: React.FC = () => {
 
   if (!user) {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Загрузка...</title></Head>
         <Header />
         <Content />
@@ -32,7 +32,7 @@ const DealerPage: React.FC = () => {
 
   if (user.role === 'dealer') {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Личный кабинет дилера</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>

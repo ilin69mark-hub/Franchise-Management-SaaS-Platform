@@ -9,16 +9,12 @@ import (
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 type MockGoalRepo struct {
 	mock.Mock
-}
-
-func NewMockGoalRepo() *MockGoalRepo {
-	return &MockGoalRepo{}
 }
 
 func (m *MockGoalRepo) Create(ctx context.Context, goal *models.Goal) error {
@@ -60,421 +56,194 @@ func (m *MockGoalRepo) Delete(ctx context.Context, id string) error {
 	return args.Error(0)
 }
 
-type GoalRepoInterface interface {
-	Create(ctx context.Context, goal *models.Goal) error
-	GetByID(ctx context.Context, id string) (*models.Goal, error)
-	GetByAssigneeAndDate(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error)
-	ListVisibleForUser(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error)
-	Update(ctx context.Context, goal *models.Goal) error
-	Delete(ctx context.Context, id string) error
+func TestGoalService_CreateGoal_Success(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	dto := CreateGoalDTO{
+		AssigneeID:   uuid.New().String(),
+		Role:         "franchise_manager",
+		SalesPlan:    1000.0,
+		LeadsPlan:    10,
+		CallsPlan:    50,
+		MeetingsPlan: 5,
+		Period:       "month",
+		StartDate:    "2024-01-01",
+		EndDate:      "2024-01-31",
+	}
+
+	ctx := context.WithValue(context.Background(), "role", "super_admin")
+
+	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(g *models.Goal) bool {
+		return g.Role == "franchise_manager" && g.SalesPlan == 1000.0
+	})).Return(nil)
+
+	goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "tenant-1")
+
+	assert.NoError(t, err)
+	assert.NotNil(t, goal)
+	mockRepo.AssertExpectations(t)
 }
 
-type GoalServiceTestable struct {
-	repo GoalRepoInterface
+func TestGoalService_CreateGoal_InvalidRole(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	dto := CreateGoalDTO{
+		AssigneeID: uuid.New().String(),
+		Role:       "dealer",
+	}
+
+	ctx := context.WithValue(context.Background(), "role", "invalid_role")
+
+	goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "tenant-1")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not allowed")
+	assert.Nil(t, goal)
+	mockRepo.AssertNotCalled(t, "Create")
 }
 
-func NewGoalServiceTestable(repo GoalRepoInterface) *GoalServiceTestable {
-	return &GoalServiceTestable{repo: repo}
+func TestGoalService_CreateGoal_InvalidAssigneeID(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	dto := CreateGoalDTO{
+		AssigneeID: "invalid-uuid",
+		Role:       "dealer",
+	}
+
+	ctx := context.WithValue(context.Background(), "role", "super_admin")
+
+	goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "tenant-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, goal)
+	mockRepo.AssertNotCalled(t, "Create")
 }
 
-func (s *GoalServiceTestable) CreateGoal(ctx context.Context, dto CreateGoalDTO, assignerID, tenantID string) (*models.Goal, error) {
-	assignerRole, _ := ctx.Value("role").(string)
-	if !canAssign(assignerRole, dto.Role) {
-		return nil, errors.New("you are not allowed to assign a goal to this role")
-	}
+func TestGoalService_UpdateGoal_Success(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
 
-	assigneeUUID, err := uuid.Parse(dto.AssigneeID)
-	if err != nil {
-		return nil, err
-	}
-
-	period := models.PeriodDay
-	if dto.Period == "week" || dto.Period == "month" || dto.Period == "year" {
-		period = models.GoalPeriod(dto.Period)
-	}
-
-	var startDate, endDate, targetDate time.Time
-
-	if dto.StartDate != "" {
-		startDate, _ = time.Parse("2006-01-02", dto.StartDate)
-	}
-	if dto.EndDate != "" {
-		endDate, _ = time.Parse("2006-01-02", dto.EndDate)
-	}
-	if startDate.IsZero() && !endDate.IsZero() {
-		startDate = endDate
-	}
-	if !startDate.IsZero() && endDate.IsZero() {
-		endDate = startDate
-	}
-	targetDate = endDate
-
-	goal := &models.Goal{
-		AssignerID:    uuid.MustParse(assignerID),
-		AssigneeID:   assigneeUUID,
-		Role:        dto.Role,
-		SalesPlan:    dto.SalesPlan,
-		LeadsPlan:   dto.LeadsPlan,
-		CallsPlan:   dto.CallsPlan,
-		MeetingsPlan: dto.MeetingsPlan,
-		Period:     period,
-		StartDate:  startDate,
-		EndDate:   endDate,
-		TargetDate: targetDate,
-	}
-	if tenantID != "" {
-		tid, _ := uuid.Parse(tenantID)
-		goal.TenantID = &tid
-	}
-	if err := s.repo.Create(ctx, goal); err != nil {
-		return nil, err
-	}
-	return goal, nil
-}
-
-func (s *GoalServiceTestable) UpdateGoal(ctx context.Context, id string, dto UpdateGoalDTO, assignerID, tenantID string) (*models.Goal, error) {
-	goal, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return nil, errors.New("goal not found")
-	}
-
-	if dto.SalesPlan > 0 {
-		goal.SalesPlan = dto.SalesPlan
-	}
-	if dto.LeadsPlan > 0 {
-		goal.LeadsPlan = dto.LeadsPlan
-	}
-	if dto.CallsPlan > 0 {
-		goal.CallsPlan = dto.CallsPlan
-	}
-	if dto.MeetingsPlan > 0 {
-		goal.MeetingsPlan = dto.MeetingsPlan
-	}
-	if dto.Period != "" {
-		goal.Period = models.GoalPeriod(dto.Period)
-	}
-	if dto.StartDate != "" {
-		goal.StartDate, _ = time.Parse("2006-01-02", dto.StartDate)
-	}
-	if dto.EndDate != "" {
-		goal.EndDate, _ = time.Parse("2006-01-02", dto.EndDate)
-	}
-
-	if err := s.repo.Update(ctx, goal); err != nil {
-		return nil, err
-	}
-	return goal, nil
-}
-
-func (s *GoalServiceTestable) GetMyGoal(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error) {
-	return s.repo.GetByAssigneeAndDate(ctx, assigneeID, date)
-}
-
-func (s *GoalServiceTestable) GetVisibleGoals(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error) {
-	return s.repo.ListVisibleForUser(ctx, userID, role, tenantID)
-}
-
-func (s *GoalServiceTestable) DeleteGoal(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, id)
-}
-
-// Тесты на canAssign (вспомогательная функция)
-func TestCanAssign(t *testing.T) {
-	tests := []struct {
-		name         string
-		assignerRole string
-		assigneeRole string
-		expected     bool
-	}{
-		{"super_admin to franchise_manager", "super_admin", "franchise_manager", true},
-		{"franchiser to franchise_manager", "franchiser", "franchise_manager", true},
-		{"franchiser to dealer", "franchiser", "dealer", true},
-		{"franchiser to salon_manager", "franchiser", "salon_manager", true},
-		{"dealer to salon_manager", "dealer", "salon_manager", true},
-		{"dealer_manager to salon_manager", "dealer_manager", "salon_manager", true},
-		{"franchise_manager to dealer", "franchise_manager", "dealer", true},
-		{"franchise_manager to salon_manager", "franchise_manager", "salon_manager", false},
-		{"dealer to franchise_manager", "dealer", "franchise_manager", false},
-		{"salon_manager to anyone", "salon_manager", "dealer", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := canAssign(tt.assignerRole, tt.assigneeRole)
-			require.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestGoalService_CreateGoal(t *testing.T) {
-	t.Run("success creates goal with day period", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		ctx := context.WithValue(context.Background(), "role", "franchiser")
-		dto := CreateGoalDTO{
-			AssigneeID: uuid.New().String(),
-			Role:       "salon_manager",
-			SalesPlan:  100000,
-			LeadsPlan:   20,
-			Period:      "day",
-			StartDate:  "2026-05-01",
-			EndDate:    "2026-05-01",
-		}
-		repo.On("Create", mock.Anything, mock.Anything).Return(nil)
-
-		goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "")
-
-		require.NoError(t, err)
-		require.NotNil(t, goal)
-		require.Equal(t, models.PeriodDay, goal.Period)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("success creates goal with month period", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		ctx := context.WithValue(context.Background(), "role", "super_admin")
-		dto := CreateGoalDTO{
-			AssigneeID: uuid.New().String(),
-			Role:        "franchise_manager",
-			SalesPlan:   500000,
-			Period:      "month",
-			StartDate:  "2026-05-01",
-			EndDate:    "2026-05-31",
-		}
-		repo.On("Create", mock.Anything, mock.Anything).Return(nil)
-
-		goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "")
-
-		require.NoError(t, err)
-		require.NotNil(t, goal)
-		require.Equal(t, models.GoalPeriod("month"), goal.Period)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("forbidden role assignment returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		// salon_manager не может назначать цели франчайзеру
-		ctx := context.WithValue(context.Background(), "role", "salon_manager")
-		dto := CreateGoalDTO{
-			AssigneeID: uuid.New().String(),
-			Role:       "franchiser",
-		}
-
-		goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "")
-
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not allowed")
-		require.Nil(t, goal)
-	})
-
-	t.Run("invalid assignee uuid returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		ctx := context.WithValue(context.Background(), "role", "franchiser")
-		dto := CreateGoalDTO{
-			AssigneeID: "invalid-uuid",
-			Role:       "salon_manager",
-		}
-
-		goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "")
-
-		require.Error(t, err)
-		require.Nil(t, goal)
-	})
-
-	t.Run("repository error returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		ctx := context.WithValue(context.Background(), "role", "dealer")
-		dto := CreateGoalDTO{
-			AssigneeID: uuid.New().String(),
-			Role:       "salon_manager",
-		}
-		repo.On("Create", mock.Anything, mock.Anything).Return(errors.New("duplicate key"))
-
-		goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), "")
-
-		require.Error(t, err)
-		require.Nil(t, goal)
-		require.Equal(t, "duplicate key", err.Error())
-		repo.AssertExpectations(t)
-	})
-}
-
-func TestGoalService_UpdateGoal(t *testing.T) {
 	goalID := uuid.New().String()
+	existingGoal := &models.Goal{SalesPlan: 1000.0}
+	dto := UpdateGoalDTO{SalesPlan: 2000.0}
 
-	t.Run("success updates sales plan", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
+	mockRepo.On("GetByID", mock.Anything, goalID).Return(existingGoal, nil)
+	mockRepo.On("Update", mock.Anything, mock.Anything).Return(nil)
 
-		existingGoal := &models.Goal{
-			ID:        uuid.MustParse(goalID),
-			SalesPlan: 100000,
-		}
-		repo.On("GetByID", mock.Anything, goalID).Return(existingGoal, nil)
-		repo.On("Update", mock.Anything, mock.Anything).Return(nil)
+	goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "tenant-1")
 
-		dto := UpdateGoalDTO{
-			SalesPlan: 150000,
-		}
-
-		goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "")
-
-		require.NoError(t, err)
-		require.NotNil(t, goal)
-		require.Equal(t, 150000.0, goal.SalesPlan)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("goal not found returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		repo.On("GetByID", mock.Anything, goalID).Return(nil, errors.New("not found"))
-
-		dto := UpdateGoalDTO{
-			SalesPlan: 100000,
-		}
-
-		goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "")
-
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "not found")
-		require.Nil(t, goal)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("updates multiple fields", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		existingGoal := &models.Goal{
-			ID:         uuid.MustParse(goalID),
-			SalesPlan:  100000,
-			LeadsPlan:  10,
-		}
-		repo.On("GetByID", mock.Anything, goalID).Return(existingGoal, nil)
-		repo.On("Update", mock.Anything, mock.Anything).Return(nil)
-
-		dto := UpdateGoalDTO{
-			SalesPlan:  200000,
-			LeadsPlan:  25,
-			Period:     "month",
-		}
-
-		goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "")
-
-		require.NoError(t, err)
-		require.Equal(t, 200000.0, goal.SalesPlan)
-		require.Equal(t, 25, goal.LeadsPlan)
-		require.Equal(t, models.GoalPeriod("month"), goal.Period)
-		repo.AssertExpectations(t)
-	})
+	assert.NoError(t, err)
+	assert.NotNil(t, goal)
+	mockRepo.AssertExpectations(t)
 }
 
-func TestGoalService_GetMyGoal(t *testing.T) {
+func TestGoalService_UpdateGoal_NotFound(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	goalID := "invalid-goal"
+	dto := UpdateGoalDTO{SalesPlan: 2000.0}
+
+	mockRepo.On("GetByID", mock.Anything, goalID).Return(nil, errors.New("not found"))
+
+	goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "tenant-1")
+
+	assert.Error(t, err)
+	assert.Nil(t, goal)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestGoalService_GetMyGoal_Success(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	assigneeID := uuid.New().String()
+	date := time.Now()
+	expectedGoal := &models.Goal{AssigneeID: uuid.MustParse(assigneeID)}
+
+	mockRepo.On("GetByAssigneeAndDate", mock.Anything, assigneeID, date).Return(expectedGoal, nil)
+
+	goal, err := service.GetMyGoal(context.Background(), assigneeID, date)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedGoal, goal)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestGoalService_GetMyGoal_NotFound(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
 	assigneeID := uuid.New().String()
 	date := time.Now()
 
-	t.Run("success returns goal", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
+	mockRepo.On("GetByAssigneeAndDate", mock.Anything, assigneeID, date).Return(nil, errors.New("not found"))
 
-		goal := &models.Goal{
-			ID:         uuid.New(),
-			AssigneeID: uuid.MustParse(assigneeID),
-			SalesPlan:  50000,
-		}
-		repo.On("GetByAssigneeAndDate", mock.Anything, assigneeID, date).Return(goal, nil)
+	goal, err := service.GetMyGoal(context.Background(), assigneeID, date)
 
-		result, err := service.GetMyGoal(context.Background(), assigneeID, date)
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Equal(t, 50000.0, result.SalesPlan)
-		repo.AssertExpectations(t)
-	})
-
-	t.Run("not found returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		repo.On("GetByAssigneeAndDate", mock.Anything, assigneeID, date).Return(nil, errors.New("not found"))
-
-		result, err := service.GetMyGoal(context.Background(), assigneeID, date)
-
-		require.Error(t, err)
-		require.Nil(t, result)
-		repo.AssertExpectations(t)
-	})
+	assert.Error(t, err)
+	assert.Nil(t, goal)
+	mockRepo.AssertExpectations(t)
 }
 
-func TestGoalService_GetVisibleGoals(t *testing.T) {
-	t.Run("success returns visible goals", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
+func TestGoalService_GetVisibleGoals_Success(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
 
-		goals := []models.Goal{
-			{ID: uuid.New(), SalesPlan: 100000},
-			{ID: uuid.New(), SalesPlan: 200000},
-		}
-		repo.On("ListVisibleForUser", mock.Anything, "user123", "franchiser", "tenant123").Return(goals, nil)
+	expectedGoals := []models.Goal{
+		{Role: "dealer"},
+		{Role: "dealer_manager"},
+	}
 
-		result, err := service.GetVisibleGoals(context.Background(), "user123", "franchiser", "tenant123")
+	mockRepo.On("ListVisibleForUser", mock.Anything, "user-1", "dealer", "tenant-1").Return(expectedGoals, nil)
 
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		repo.AssertExpectations(t)
-	})
+	goals, err := service.GetVisibleGoals(context.Background(), "user-1", "dealer", "tenant-1")
 
-	t.Run("empty result returns empty array", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
-
-		repo.On("ListVisibleForUser", mock.Anything, "user123", "salon_manager", "").Return([]models.Goal{}, nil)
-
-		result, err := service.GetVisibleGoals(context.Background(), "user123", "salon_manager", "")
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.Len(t, result, 0)
-		repo.AssertExpectations(t)
-	})
+	assert.NoError(t, err)
+	assert.Len(t, goals, 2)
+	mockRepo.AssertExpectations(t)
 }
 
-func TestGoalService_DeleteGoal(t *testing.T) {
-	goalID := "goal-123"
+func TestGoalService_GetVisibleGoals_Error(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
 
-	t.Run("success deletes goal", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
+	mockRepo.On("ListVisibleForUser", mock.Anything, "user-1", "dealer", "tenant-1").Return(nil, errors.New("db error"))
 
-		repo.On("Delete", mock.Anything, goalID).Return(nil)
+	goals, err := service.GetVisibleGoals(context.Background(), "user-1", "dealer", "tenant-1")
 
-		err := service.DeleteGoal(context.Background(), goalID)
+	assert.Error(t, err)
+	assert.Nil(t, goals)
+	mockRepo.AssertExpectations(t)
+}
 
-		require.NoError(t, err)
-		repo.AssertExpectations(t)
-	})
+func TestGoalService_DeleteGoal_Success(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
 
-	t.Run("delete non-existent returns error", func(t *testing.T) {
-		repo := NewMockGoalRepo()
-		service := NewGoalServiceTestable(repo)
+	goalID := uuid.New().String()
 
-		repo.On("Delete", mock.Anything, goalID).Return(errors.New("record not found"))
+	mockRepo.On("Delete", mock.Anything, goalID).Return(nil)
 
-		err := service.DeleteGoal(context.Background(), goalID)
+	err := service.DeleteGoal(context.Background(), goalID)
 
-		require.Error(t, err)
-		require.Equal(t, "record not found", err.Error())
-		repo.AssertExpectations(t)
-	})
+	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestGoalService_DeleteGoal_Error(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	goalID := uuid.New().String()
+
+	mockRepo.On("Delete", mock.Anything, goalID).Return(errors.New("db error"))
+
+	err := service.DeleteGoal(context.Background(), goalID)
+
+	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
 }

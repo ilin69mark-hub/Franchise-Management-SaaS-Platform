@@ -44,15 +44,28 @@ jobs:
         run: go build -v ./...
 
       - name: Run tests with coverage
-        run: go test -cover ./...
+        run: go test -coverprofile=coverage.out ./...
+
+      - name: Generate coverage summary
+        if: always()
+        run: |
+          go tool cover -func=coverage.out | tail -5
 
       - name: Upload coverage to Codecov
         if: always()
-        run: |
-          go test -coverprofile=coverage.out ./...
-          if [ -f coverage.out ]; then
-            echo "Coverage report generated"
-          fi
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          directory: ./backend
+          flags: unittests
+          name: backend-coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: backend/coverage.out
 
   frontend-test:
     name: Frontend Tests
@@ -74,9 +87,25 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test -- --coverage
+        run: npm test -- --coverage --coverageReporters=lcov
         env:
           CI: true
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage/lcov.info
+          directory: ./frontend
+          flags: frontend
+          name: frontend-coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
 
   frontend-build:
     name: Frontend Build & Lint

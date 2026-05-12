@@ -22,7 +22,7 @@ const AdminPage: React.FC = () => {
 
   if (!user) {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Загрузка...</title></Head>
         <Header />
         <Content />
@@ -32,7 +32,7 @@ const AdminPage: React.FC = () => {
 
   if (user.role === 'super_admin') {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f5f5f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>SaaS Платформа - Супер Админ</title></Head>
         <SuperAdminDashboard user={user} />
       </Layout>

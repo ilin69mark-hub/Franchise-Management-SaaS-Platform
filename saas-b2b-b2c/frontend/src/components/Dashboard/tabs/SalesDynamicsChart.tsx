@@ -101,7 +101,7 @@ const SalesDynamicsChart: React.FC<SalesDynamicsChartProps> = ({ data, view = 'm
             stroke="transparent"
             fill="#f0f0f0"
             fillOpacity={0.3}
-            name="План сети"
+            name="Зона плана"
           />
 
           <Line

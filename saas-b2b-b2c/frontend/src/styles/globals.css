@@ -9,11 +9,159 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  background-color: #f5f5f5;
+  background-color: #f0f2f5;
   line-height: 1.6;
-  /* Улучшение производительности рендеринга */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme='dark'] body,
+[data-theme='dark'] html {
+  background-color: #000;
+}
+
+[data-theme='dark'] .ant-layout,
+[data-theme='dark'] .ant-layout-content {
+  background-color: #141414 !important;
+}
+
+[data-theme='dark'] .ant-layout-header,
+[data-theme='dark'] .ant-card,
+[data-theme='dark'] .ant-table,
+[data-theme='dark'] .ant-table-thead > tr > th,
+[data-theme='dark'] .ant-table-tbody > tr > td,
+[data-theme='dark'] .ant-modal-content,
+[data-theme='dark'] .ant-select-dropdown,
+[data-theme='dark'] .ant-picker-dropdown,
+[data-theme='dark'] .ant-popover-inner,
+[data-theme='dark'] .ant-segmented {
+  background-color: #1f1f1f !important;
+}
+
+[data-theme='dark'] .ant-layout-sider {
+  background-color: #141414 !important;
+}
+
+[data-theme='dark'] .ant-layout-header,
+[data-theme='dark'] .ant-card-head,
+[data-theme='dark'] .ant-drawer-header {
+  border-bottom-color: #303030 !important;
+}
+
+[data-theme='dark'] .ant-table-wrapper .ant-table {
+  background: #1f1f1f !important;
+}
+
+[data-theme='dark'] .ant-table-wrapper .ant-table-thead > tr > th {
+  background: #262626 !important;
+  color: #fff !important;
+  border-bottom: 1px solid #303030 !important;
+}
+
+[data-theme='dark'] .ant-table-wrapper .ant-table-tbody > tr > td {
+  color: #e5e5e5 !important;
+  border-bottom-color: #303030 !important;
+}
+
+[data-theme='dark'] .ant-table-wrapper .ant-table-tbody > tr:hover > td {
+  background: #262626 !important;
+}
+
+[data-theme='dark'] .ant-form-item-label > label,
+[data-theme='dark'] .ant-typography,
+[data-theme='dark'] .ant-form-item-extra,
+[data-theme='dark'] .ant-statistic-title,
+[data-theme='dark'] .ant-descriptions-item-label {
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-input,
+[data-theme='dark'] .ant-input-affix-wrapper,
+[data-theme='dark'] .ant-select-selector,
+[data-theme='dark'] .ant-picker,
+[data-theme='dark'] .ant-input-number {
+  background-color: #262626 !important;
+  border-color: #434343 !important;
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-input::placeholder,
+[data-theme='dark'] .ant-input-affix-wrapper .ant-input::placeholder {
+  color: #888 !important;
+}
+
+[data-theme='dark'] .ant-select-arrow,
+[data-theme='dark'] .ant-picker-suffix,
+[data-theme='dark'] .ant-input-prefix {
+  color: #888 !important;
+}
+
+[data-theme='dark'] .ant-card-body,
+[data-theme='dark'] .ant-card-head {
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-tabs-tab {
+  color: #aaa !important;
+}
+
+[data-theme='dark'] .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: #fff !important;
+}
+
+[data-theme='dark'] .ant-tabs-ink-bar {
+  background: #1777ff !important;
+}
+
+[data-theme='dark'] .ant-dropdown-menu {
+  background: #1f1f1f !important;
+}
+
+[data-theme='dark'] .ant-dropdown-menu-item {
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-popconfirm-message-title {
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-descriptions-view table {
+  background: #1f1f1f !important;
+}
+
+[data-theme='dark'] .ant-descriptions-item-label {
+  background: #262626 !important;
+}
+
+[data-theme='dark'] .ant-descriptions-item-content {
+  background: #1f1f1f !important;
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-alert {
+  background: #262626 !important;
+  border-color: #434343 !important;
+}
+
+[data-theme='dark'] .ant-alert-message,
+[data-theme='dark'] .ant-alert-description {
+  color: #e5e5e5 !important;
+}
+
+[data-theme='dark'] .ant-empty-description {
+  color: #888 !important;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: #1a1a1a !important;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #434343 !important;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #555 !important;
 }
 
 a {

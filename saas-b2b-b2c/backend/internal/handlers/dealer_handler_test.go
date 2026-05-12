@@ -311,3 +311,93 @@ func TestTerritoryManagerRLS_DealerAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDealerTasks_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealerTasks(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealerRequests_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealerRequests(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealerMarketingBudget_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealerMarketingBudget(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealerAlerts_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealerAlerts(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetFranchiserDealers_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetFranchiserDealers(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetFranchiserRequests_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetFranchiserRequests(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetFranchiserAlerts_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetFranchiserAlerts(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealersHealth_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealersHealth(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealersMigration_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealersMigration(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestGetDealersGeography_Unauthorized(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	kpiHandler := &KPIHandler{}
+	kpiHandler.GetDealersGeography(c)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}

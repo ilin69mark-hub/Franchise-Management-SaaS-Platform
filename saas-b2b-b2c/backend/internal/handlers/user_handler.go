@@ -60,7 +60,7 @@ func (h *UserHandler) GetProfile(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
 		return
 	}
-	c.JSON(http.StatusOK, currentUser)
+	c.JSON(http.StatusOK, currentUser.ToProfileResponse())
 }
 
 // UpdateProfile
@@ -80,7 +80,7 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, updated.ToProfileResponse())
 }
 
 // ChangePassword

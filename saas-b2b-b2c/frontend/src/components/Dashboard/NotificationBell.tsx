@@ -262,7 +262,7 @@ const NotificationBell: React.FC = () => {
     </List.Item>
   );
 
-  const menu = (
+  const dropdownContent = (
     <div style={{ width: 360, maxHeight: 500, overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 8 }}>
       <div style={{ padding: '12px 16px', fontWeight: 'bold', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between' }}>
         <span>Алерты</span>
@@ -281,10 +281,30 @@ const NotificationBell: React.FC = () => {
     </div>
   );
 
-  const Text = require('antd').Typography.Text;
-
   return (
-    <Dropdown overlay={menu} trigger={['click']} placement="bottomRight">
+    <Dropdown
+      menu={{ items: [] }}
+      popupRender={() => (
+        <div style={{ width: 360, maxHeight: 500, overflowY: 'auto', background: '#fff', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', borderRadius: 8 }}>
+          <div style={{ padding: '12px 16px', fontWeight: 'bold', borderBottom: '1px solid #f0f0f0', display: 'flex', justifyContent: 'space-between' }}>
+            <span>Алерты</span>
+            <Tag color="red">{unreadCount}</Tag>
+          </div>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>
+          ) : alerts.length === 0 ? (
+            <Empty description="Нет алертов" style={{ padding: 40 }} />
+          ) : (
+            <List
+              dataSource={alerts}
+              renderItem={getAlertItem}
+            />
+          )}
+        </div>
+      )}
+      trigger={['click']}
+      placement="bottomRight"
+    >
       <Badge count={unreadCount} size="small" style={{ cursor: 'pointer', backgroundColor: unreadCount > 0 ? '#ff4d4f' : undefined }}>
         <BellOutlined style={{ fontSize: '18px', cursor: 'pointer', color: unreadCount > 0 ? '#ff4d4f' : undefined }} />
       </Badge>

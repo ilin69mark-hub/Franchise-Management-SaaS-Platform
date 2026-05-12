@@ -1,5 +1,9 @@
 # Franchise Management SaaS Platform
 
+[![Backend Tests](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/anomalyco/saas-b2b-b2c/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/anomalyco/saas-b2b-b2c)
+[![Frontend Tests](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml)
+
 Полнофункциональная SaaS-платформа для управления франчайзинговой сетью. Позволяет франчайзеру управлять дилерами, товарами, заказами и аналитикой через современный веб-интерфейс.
 
 ## Содержание
@@ -305,6 +309,38 @@ npm run dev
 # С hot-reload
 docker-compose -f docker-compose.dev.yml up -d
 ```
+
+### Тестирование
+
+**Backend:**
+```bash
+cd backend
+
+# Unit тесты (быстрые)
+make test
+
+# PostgreSQL интеграционные тесты
+make test-pg
+
+# Все тесты с покрытием
+make test-coverage
+```
+
+**Frontend:**
+```bash
+cd frontend
+
+# Тесты с покрытием
+npm test -- --coverage
+
+# Тесты в watch режиме
+npm run test:watch
+```
+
+**CI/CD:**
+- Тесты запускаются автоматически при push в main/develop
+- Coverage отчёты доступны в Codecov
+- Артефакты сохраняются в GitHub Actions
 
 ### Стандарты кода
 

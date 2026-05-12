@@ -10,10 +10,10 @@ import (
 )
 
 type LeadService struct {
-	repo *repository.LeadRepository
+	repo repository.LeadRepositoryInterface
 }
 
-func NewLeadService(repo *repository.LeadRepository) *LeadService {
+func NewLeadService(repo repository.LeadRepositoryInterface) *LeadService {
 	return &LeadService{repo: repo}
 }
 

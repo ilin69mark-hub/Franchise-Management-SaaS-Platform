@@ -168,7 +168,7 @@ const ChecklistsPage: React.FC = () => {
   ];
 
   return (
-    <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+    <Layout style={{ minHeight: '100vh',  }}>
       <Head><title>Чек-листы</title></Head>
       
       <Header />

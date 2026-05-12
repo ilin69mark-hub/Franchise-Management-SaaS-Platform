@@ -22,7 +22,7 @@ const SalonManagerPage: React.FC = () => {
 
   if (!user) {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Загрузка...</title></Head>
         <Header />
         <Content />
@@ -32,7 +32,7 @@ const SalonManagerPage: React.FC = () => {
 
   if (user.role === 'salon_manager') {
     return (
-      <Layout style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <Layout style={{ minHeight: '100vh',  }}>
         <Head><title>Личный кабинет менеджера салона</title></Head>
         <Header />
         <Content style={{ padding: 0 }}>

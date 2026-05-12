@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { Row, Col, Card, Table, Tag, Typography, Space, Button, Select, Checkbox, Input, InputNumber, Modal, message, Divider, CheckboxChangeEvent, Statistic } from 'antd';
 import { 
   ArrowUpOutlined, 
@@ -268,7 +268,7 @@ const FranchiserReportTab: React.FC = () => {
         );
       case 'territories':
         return (
-          <Card size="small" title="Рейтинг территорий" extra={<Button size="small" type="link" onClick={() => handleAddComment('territories')}>К��мментарий</Button>}>
+          <Card size="small" title="Рейтинг территорий" extra={<Button size="small" type="link" onClick={() => handleAddComment('territories')}>Комментарий</Button>}>
             <Table
               dataSource={territories.sort((a, b) => b.planPercent - a.planPercent)}
               columns={territoryColumns}

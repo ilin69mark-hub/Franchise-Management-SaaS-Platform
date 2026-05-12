@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/router';
 import { useDispatch } from 'react-redux';
 import { logout } from '@/store/authSlice';
+import { useThemeMode } from '@/components/ThemeProvider';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { useSuperAdminStore } from '@/store/superAdminStore';
@@ -66,7 +67,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
 
   const [currentDate, setCurrentDate] = useState(dayjs().format('D MMMM YYYY, dddd'));
   const [currentTime, setCurrentTime] = useState(dayjs().format('HH:mm'));
-  const [darkMode, setDarkMode] = useState(false);
+  const { theme: themeName, toggleTheme } = useThemeMode();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -122,7 +123,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
   };
 
   const handleThemeToggle = () => {
-    setDarkMode(!darkMode);
+    toggleTheme();
   };
 
   const userMenu = {
@@ -162,19 +163,19 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
     );
   };
 
-  const layoutStyle = darkMode
-    ? { minHeight: '100vh', background: '#141414' }
-    : { minHeight: '100vh', background: '#f5f5f5' };
+  const layoutStyle = themeName === 'dark'
+    ? { minHeight: '100vh' }
+    : { minHeight: '100vh' };
 
-  const headerStyle = darkMode
+  const headerStyle = themeName === 'dark'
     ? { background: '#1f1f1f', borderBottom: '1px solid #303030' }
     : { background: '#fff', borderBottom: '1px solid #f0f0f0' };
 
-  const sidebarStyle = darkMode
+  const sidebarStyle = themeName === 'dark'
     ? { background: '#1f1f1f', borderRight: '1px solid #303030' }
     : { background: '#fff', borderRight: '1px solid #f0f0f0' };
 
-  const contentStyle = darkMode
+  const contentStyle = themeName === 'dark'
     ? { background: '#141414', color: '#fff' }
     : { background: '#fff' };
 
@@ -198,7 +199,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
             SaaS Платформа
           </Title>
           <Badge status="processing" />
-          <Text type="secondary" style={{ color: darkMode ? '#aaa' : undefined }}>
+          <Text type="secondary" style={{ color: themeName === 'dark' ? '#aaa' : undefined }}>
             Супер Админ
           </Text>
         </div>
@@ -211,7 +212,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
                 value={stats.mrr}
                 precision={0}
                 prefix="₽ "
-                valueStyle={{ fontSize: 16, color: darkMode ? '#fff' : undefined }}
+                valueStyle={{ fontSize: 16, color: themeName === 'dark' ? '#fff' : undefined }}
               />
             </Card>
           </Col>
@@ -223,7 +224,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
                 precision={0}
                 prefix="₽ "
                 suffix="/год"
-                valueStyle={{ fontSize: 16, color: darkMode ? '#fff' : undefined }}
+                valueStyle={{ fontSize: 16, color: themeName === 'dark' ? '#fff' : undefined }}
               />
             </Card>
           </Col>
@@ -236,7 +237,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
                 suffix="%"
                 valueStyle={{
                   fontSize: 16,
-                  color: stats.churnRate > 10 ? '#ff4d4f' : darkMode ? '#fff' : undefined,
+                  color: stats.churnRate > 10 ? '#ff4d4f' : themeName === 'dark' ? '#fff' : undefined,
                 }}
               />
             </Card>
@@ -248,7 +249,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
                 value={stats.overduePayments}
                 valueStyle={{
                   fontSize: 16,
-                  color: stats.overduePayments > 0 ? '#ff4d4f' : darkMode ? '#fff' : undefined,
+                  color: stats.overduePayments > 0 ? '#ff4d4f' : themeName === 'dark' ? '#fff' : undefined,
                 }}
               />
             </Card>
@@ -260,14 +261,14 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
                 value={stats.arpu}
                 precision={0}
                 prefix="₽ "
-                valueStyle={{ fontSize: 16, color: darkMode ? '#fff' : undefined }}
+                valueStyle={{ fontSize: 16, color: themeName === 'dark' ? '#fff' : undefined }}
               />
             </Card>
           </Col>
         </Row>
 
         <Space size="middle">
-          <Text type="secondary" style={{ color: darkMode ? '#aaa' : undefined }}>
+          <Text type="secondary" style={{ color: themeName === 'dark' ? '#aaa' : undefined }}>
             {currentDate} {currentTime}
           </Text>
           <Badge count={alertCount} offset={[-5, 5]}>
@@ -275,12 +276,12 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
               style={{
                 fontSize: 20,
                 cursor: 'pointer',
-                color: darkMode ? '#fff' : undefined,
+                color: themeName === 'dark' ? '#fff' : undefined,
               }}
             />
           </Badge>
           <span onClick={handleThemeToggle} style={{ cursor: 'pointer', fontSize: 18 }}>
-            {darkMode ? <SunOutlined /> : <MoonOutlined />}
+            {themeName === 'dark' ? <SunOutlined /> : <MoonOutlined />}
           </span>
           <Dropdown menu={userMenu} placement="bottomRight">
             <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
@@ -303,7 +304,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
             style={{
               padding: '12px 16px',
               cursor: 'pointer',
-              borderBottom: `1px solid ${darkMode ? '#303030' : '#f0f0f0'}`,
+              borderBottom: `1px solid ${themeName === 'dark' ? '#303030' : '#f0f0f0'}`,
               textAlign: 'center',
             }}
           >

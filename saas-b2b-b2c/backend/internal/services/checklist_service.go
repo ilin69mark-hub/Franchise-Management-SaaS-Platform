@@ -8,16 +8,15 @@ import (
 	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type ChecklistService struct {
-	repo *repository.ChecklistRepository
+	repo repository.ChecklistRepositoryInterface
 }
 
-func NewChecklistService(db *gorm.DB) *ChecklistService {
+func NewChecklistService(repo repository.ChecklistRepositoryInterface) *ChecklistService {
 	return &ChecklistService{
-		repo: repository.NewChecklistRepository(db),
+		repo: repo,
 	}
 }
 

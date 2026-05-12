@@ -10,10 +10,10 @@ import (
 )
 
 type ScheduleService struct {
-	repo *repository.ScheduleRepository
+	repo repository.ScheduleRepositoryInterface
 }
 
-func NewScheduleService(repo *repository.ScheduleRepository) *ScheduleService {
+func NewScheduleService(repo repository.ScheduleRepositoryInterface) *ScheduleService {
 	return &ScheduleService{repo: repo}
 }
 
