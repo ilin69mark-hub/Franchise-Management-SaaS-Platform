@@ -784,6 +784,7 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 	// Период - текущий месяц
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
 	endOfMonth := targetDate
+	period := firstOfMonth.Format("2006-01")
 
 	// Общая выручка салона
 	var totalRevenue float64
@@ -791,6 +792,29 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"sale", "paid"}, firstOfMonth, endOfMonth).
 		Select("COALESCE(SUM(budget), 0)").Scan(&totalRevenue)
 	resp.TotalRevenue = totalRevenue
+
+	// === КАТАЛОГ ПРОДУКТОВ САЛОНА ===
+	type productRow struct {
+		ID           string
+		Name         string
+		Collection   string
+		Category     string
+		Price        float64
+		CostPrice    float64
+		ShowroomQty  int
+		WarehouseQty int
+		TurnoverDays int
+	}
+	var catalog []productRow
+	s.DB.Table("products").
+		Where("salon_id = ?", salonID).
+		Order("name").
+		Scan(&catalog)
+
+	catalogByName := make(map[string]productRow, len(catalog))
+	for _, p := range catalog {
+		catalogByName[p.Name] = p
+	}
 
 	// === ТОП-10 ТОВАРОВ (по interest_product) ===
 	// Группируем по interest_product (названию товара)
@@ -824,65 +848,83 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 		if totalRevenue > 0 {
 			share = (ps.Revenue / totalRevenue) * 100
 		}
+		margin := 0.0
+		collection := ""
+		category := ""
+		if prod, ok := catalogByName[ps.Name]; ok {
+			collection = prod.Collection
+			category = prod.Category
+			if prod.Price > 0 {
+				margin = ((prod.Price - prod.CostPrice) / prod.Price) * 100
+			}
+		} else {
+			category = "Прочее"
+		}
 		resp.TopProducts = append(resp.TopProducts, models.TopProduct{
 			ID:           ps.Name,
 			Name:         ps.Name,
-			Collection:   "Основная",
-			Category:     "Мебель",
+			Collection:   collection,
+			Category:     category,
 			Revenue:      ps.Revenue,
 			Quantity:     ps.Quantity,
 			SharePercent: share,
-			Margin:       25.0, // Заглушка
+			Margin:       margin,
 		})
 	}
 
-	// === ОСТАТКИ (заглушка - нужна таблица products/stock) ===
-	// Симулируем остатки для демонстрации
-	sampleProducts := []string{"Диван", "Кресло", "Кровать", "Шкаф", "Стол"}
-	for i, name := range sampleProducts {
-		showroom := 1 + i
-		warehouse := 5 + i*2
-		cost := float64((showroom + warehouse) * 50000)
-		turnover := 30 + i*10
-		if turnover > 90 {
-			turnover = 120 // Неликвид
+	// === ОСТАТКИ (из каталога products) ===
+	for _, p := range catalog {
+		totalQty := p.ShowroomQty + p.WarehouseQty
+		totalCost := float64(totalQty) * p.CostPrice
+		days := p.TurnoverDays
+		if days == 0 {
+			days = 90 // Неликвид по умолчанию без данных об оборачиваемости
 		}
 		resp.StockItems = append(resp.StockItems, models.StockItem{
-			ID:           name,
-			Name:         name,
-			Category:     "Мебель",
-			ShowroomQty:  showroom,
-			WarehouseQty: warehouse,
-			TotalCost:    cost,
-			TurnoverDays: turnover,
+			ID:           p.ID,
+			Name:         p.Name,
+			Category:     p.Category,
+			ShowroomQty:  p.ShowroomQty,
+			WarehouseQty: p.WarehouseQty,
+			TotalCost:    totalCost,
+			TurnoverDays: days,
 		})
 	}
 
-	// === УПУЩЕННЫЕ ПРОДАЖИ ===
-	lostReasons := map[string]float64{
-		"Нет в наличии":            150000,
-		"Долгий срок производства": 80000,
-		"Не устроила цена":         200000,
-		"Не подошёл дизайн":        120000,
+	// === УПУЩЕННЫЕ ПРОДАЖИ (из lost_sales) ===
+	type lostRow struct {
+		Reason        string
+		RequestsCount int
+		LostRevenue   float64
 	}
-	for reason, revenue := range lostReasons {
-		count := int(revenue / 50000) // Примерное количество
+	var lostRows []lostRow
+	s.DB.Table("lost_sales").
+		Where("salon_id = ? AND period = ?", salonID, period).
+		Order("lost_revenue DESC").
+		Scan(&lostRows)
+	for _, lr := range lostRows {
 		resp.LostSales = append(resp.LostSales, models.LostSale{
-			Reason:        reason,
-			RequestsCount: count,
-			LostRevenue:   revenue,
+			Reason:        lr.Reason,
+			RequestsCount: lr.RequestsCount,
+			LostRevenue:   lr.LostRevenue,
 		})
 	}
 
-	// === ОБОРАЧИВАЕМОСТЬ ПО КАТЕГОРИЯМ ===
-	categories := []string{"Диваны", "Кресла", "Кровати", "Шкафы", "Столы"}
-	for _, cat := range categories {
-		days := 30 + (len(cat) * 5) // Заглушка
-		slowMoving := days > 90
+	// === ОБОРАЧИВАЕМОСТЬ ПО КАТЕГОРИЯМ (из category_turnover) ===
+	type catRow struct {
+		Category string
+		AvgDays  int
+	}
+	var catRows []catRow
+	s.DB.Table("category_turnover").
+		Where("salon_id = ? AND period = ?", salonID, period).
+		Order("category").
+		Scan(&catRows)
+	for _, cr := range catRows {
 		resp.CategoryTurnover = append(resp.CategoryTurnover, models.CategoryTurnover{
-			Category:     cat,
-			AvgDays:      days,
-			IsSlowMoving: slowMoving,
+			Category:     cr.Category,
+			AvgDays:      cr.AvgDays,
+			IsSlowMoving: cr.AvgDays > 90,
 		})
 	}
 
@@ -953,10 +995,25 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 		}
 	}
 
-	byCategory := map[string]float64{
-		"Мебель": currentAmount * 0.7,
-		"Допы":   currentAmount * 0.2,
-		"Услуги": currentAmount * 0.1,
+	// === Распределение выручки по категориям (из каталога) ===
+	// Сопоставляем проданные товары (interest_product лидов) с категорией
+	// товара в каталоге; без каталога категория неизвестна - "Прочее".
+	byCategory := map[string]float64{}
+	if currentUser.SalonID != nil {
+		type saleCategory struct {
+			Category string
+			Revenue  float64
+		}
+		var catSales []saleCategory
+		s.DB.Table("leads").
+			Joins("LEFT JOIN products ON products.salon_id = leads.salon_id AND products.name = leads.interest_product").
+			Where("leads.salon_id = ? AND leads.status IN ? AND leads.created_at BETWEEN ? AND ?", currentUser.SalonID, []string{"sale", "paid"}, firstOfMonth, time.Now()).
+			Select("COALESCE(NULLIF(products.category, ''), 'Прочее') AS category, COALESCE(SUM(leads.budget), 0) AS revenue").
+			Group("COALESCE(NULLIF(products.category, ''), 'Прочее')").
+			Scan(&catSales)
+		for _, cs := range catSales {
+			byCategory[cs.Category] = cs.Revenue
+		}
 	}
 
 	resp.Plan = &models.TargetPlan{
@@ -966,9 +1023,18 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 		Percent:       percent,
 	}
 
-	// === Бенчмарки ===
-	resp.TargetConversion = 30.0    // 30% - цель
-	resp.TargetExtrasPercent = 15.0 // 15% - цель
+	// === Бенчмарки (из system_settings, с дефолтами) ===
+	getSetting := func(key string, def float64) float64 {
+		var v string
+		if err := s.DB.Table("system_settings").Where("key = ?", key).Select("value").Scan(&v).Error; err == nil && v != "" {
+			if parsed, perr := strconv.ParseFloat(v, 64); perr == nil {
+				return parsed
+			}
+		}
+		return def
+	}
+	resp.TargetConversion = getSetting("target_conversion", 30.0)
+	resp.TargetExtrasPercent = getSetting("target_extras_percent", 15.0)
 
 	// Текущая конверсия
 	var totalLeads, saleLeads int64
@@ -982,43 +1048,51 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	if totalLeads > 0 {
 		resp.CurrentConversion = (float64(saleLeads) / float64(totalLeads)) * 100
 	}
-	resp.CurrentExtrasPercent = 12.0 // Заглушка
 
-	// === Акции ===
-	now := time.Now()
-	promotions := []models.Promotion{
-		{
-			ID:          "1",
-			Name:        "Летняя распродажа",
-			Condition:   "При покупке дивана - кресло в подарок",
-			DiscountMin: 10,
-			DiscountMax: 25,
-			EndDate:     now.AddDate(0, 0, 5).Format("2006-01-02"),
-			IsExpiring:  true,
-		},
-		{
-			ID:          "2",
-			Name:        "Комплект со скидкой",
-			Condition:   "Мебель + услуги дизайнера",
-			DiscountMin: 15,
-			DiscountMax: 30,
-			EndDate:     now.AddDate(0, 0, 14).Format("2006-01-02"),
-			IsExpiring:  false,
-		},
-		{
-			ID:          "3",
-			Name:        "Акция выходного дня",
-			Condition:   "Скидка 20% в субботу и воскресенье",
-			DiscountMin: 20,
-			DiscountMax: 20,
-			EndDate:     now.AddDate(0, 0, 3).Format("2006-01-02"),
-			IsExpiring:  true,
-		},
+	// Текущая доля допов (категории НЕ "Мебель")
+	if currentAmount > 0 {
+		furniture := byCategory["Мебель"]
+		extras := currentAmount - furniture
+		resp.CurrentExtrasPercent = (extras / currentAmount) * 100
 	}
-	resp.Promotions = promotions
+
+	// === Акции (из таблицы promotions) ===
+	var promoRows []struct {
+		ID          string
+		Name        string
+		Condition   string
+		DiscountMin int
+		DiscountMax int
+		EndDate     *time.Time
+	}
+	promoErr := s.DB.Table("promotions").
+		Where("salon_id = ? AND is_active = TRUE", salonID).
+		Order("end_date").
+		Scan(&promoRows).Error
+	if promoErr != nil {
+		promoRows = nil
+	}
+	now := time.Now()
+	for _, pr := range promoRows {
+		expiring := false
+		endDate := ""
+		if pr.EndDate != nil {
+			endDate = pr.EndDate.Format("2006-01-02")
+			expiring = pr.EndDate.Before(now.AddDate(0, 0, 7))
+		}
+		resp.Promotions = append(resp.Promotions, models.Promotion{
+			ID:          pr.ID,
+			Name:        pr.Name,
+			Condition:   pr.Condition,
+			DiscountMin: pr.DiscountMin,
+			DiscountMax: pr.DiscountMax,
+			EndDate:     endDate,
+			IsExpiring:  expiring,
+		})
+	}
 
 	// === Прогноз премии ===
-	maxBonus := 50000.0 // Максимальная премия
+	maxBonus := getSetting("max_bonus", 50000.0)
 	if percent >= 100 {
 		resp.BonusForecast = maxBonus
 	} else if percent >= 80 {
@@ -1465,16 +1539,29 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 		})
 	}
 
-	// Остатки (заглушки)
-	stockItems := []string{"Диван", "Кресло", "Кровать", "Шкаф", "Стол"}
-	for _, name := range stockItems {
+	// Остатки (из каталога products по салонам дилера)
+	type invRow struct {
+		ID           string
+		Name         string
+		Collection   string
+		Category     string
+		ShowroomQty  int
+		WarehouseQty int
+		TurnoverDays int
+	}
+	var invRows []invRow
+	s.DB.Table("products").
+		Where("salon_id IN ?", salonIDs).
+		Order("name").
+		Scan(&invRows)
+	for _, ir := range invRows {
 		resp.Inventory = append(resp.Inventory, models.DealerInventoryItem{
-			ID:             name,
-			Collection:     "Основная",
-			StockWarehouse: 10,
-			OnDisplay:      5,
-			SoldPeriod:     3,
-			TurnoverDays:   45,
+			ID:             ir.ID,
+			Collection:     ir.Collection,
+			StockWarehouse: ir.WarehouseQty,
+			OnDisplay:      ir.ShowroomQty,
+			SoldPeriod:     0,
+			TurnoverDays:   ir.TurnoverDays,
 		})
 	}
 

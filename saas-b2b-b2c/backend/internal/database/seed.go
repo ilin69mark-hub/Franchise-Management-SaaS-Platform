@@ -199,3 +199,135 @@ func SeedAlerts(db *gorm.DB) error {
 
 	return nil
 }
+
+// SeedProductsAnalytics наполняет демо-данными продукты, упущенные
+// продажи, акции и оборачиваемость по категориям. Данные привязаны
+// к первому салону в базе (роль salon_manager), чтобы дашборды
+// GetDashboardProducts / GetManagerTargets показывали живые значения,
+// а не кодовые заглушки. Идемпотентно: по (salon_id, name).
+func SeedProductsAnalytics(db *gorm.DB) error {
+	if !tableExists(db, "products") {
+		log.Printf("Warning: table 'products' does not exist, skipping SeedProductsAnalytics")
+		return nil
+	}
+
+	// Первый салон в базе (создаётся GORM-миграцией/сидом салонов).
+	var salonID string
+	db.Table("salons").Order("created_at").Limit(1).Select("id").Scan(&salonID)
+	if salonID == "" {
+		log.Printf("Warning: no salons found, skipping SeedProductsAnalytics")
+		return nil
+	}
+
+	products := []struct {
+		Name       string
+		Collection string
+		Category   string
+		Price      float64
+		Cost       float64
+		Showroom   int
+		Warehouse  int
+		Turnover   int
+	}{
+		{"Диван", "Основная", "Мебель", 120000, 70000, 2, 6, 35},
+		{"Кресло", "Основная", "Мебель", 55000, 30000, 4, 12, 28},
+		{"Кровать", "Спальня", "Мебель", 180000, 110000, 1, 4, 45},
+		{"Шкаф", "Спальня", "Мебель", 150000, 90000, 2, 3, 120},
+		{"Стол обеденный", "Кухня", "Мебель", 95000, 56000, 3, 8, 40},
+		{"Тумба", "Кухня", "Мебель", 42000, 24000, 5, 10, 22},
+		{"Светильник", "Декор", "Допы", 15000, 8000, 6, 20, 30},
+		{"Подушка декоративная", "Декор", "Допы", 3500, 1500, 10, 40, 18},
+		{"Доставка и подъём", "Услуги", "Услуги", 5000, 0, 0, 0, 0},
+		{"Сборка мебели", "Услуги", "Услуги", 3000, 0, 0, 0, 0},
+	}
+
+	for _, p := range products {
+		var count int64
+		db.Table("products").Where("salon_id = ? AND name = ?", salonID, p.Name).Count(&count)
+		if count > 0 {
+			continue
+		}
+		db.Exec(`INSERT INTO products (id, salon_id, name, collection, category, price, cost_price, showroom_qty, warehouse_qty, turnover_days)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			salonID, p.Name, p.Collection, p.Category, p.Price, p.Cost, p.Showroom, p.Warehouse, p.Turnover)
+		log.Printf("Product created: %s", p.Name)
+	}
+
+	// Упущенные продажи за текущий месяц
+	if tableExists(db, "lost_sales") {
+		period := time.Now().Format("2006-01")
+		lost := []struct {
+			Reason  string
+			Count   int
+			Revenue float64
+		}{
+			{"Нет в наличии", 3, 150000},
+			{"Долгий срок производства", 2, 80000},
+			{"Не устроила цена", 4, 200000},
+			{"Не подошёл дизайн", 2, 120000},
+		}
+		for _, l := range lost {
+			var count int64
+			db.Table("lost_sales").Where("salon_id = ? AND reason = ? AND period = ?", salonID, l.Reason, period).Count(&count)
+			if count > 0 {
+				continue
+			}
+			db.Exec(`INSERT INTO lost_sales (id, salon_id, reason, requests_count, lost_revenue, period)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
+				salonID, l.Reason, l.Count, l.Revenue, period)
+			log.Printf("Lost sale created: %s", l.Reason)
+		}
+	}
+
+	// Акции (для директив менеджера)
+	if tableExists(db, "promotions") {
+		now := time.Now()
+		promos := []struct {
+			Name      string
+			Condition string
+			Min, Max  int
+			EndIn     int
+		}{
+			{"Летняя распродажа", "При покупке дивана - кресло в подарок", 10, 25, 5},
+			{"Комплект со скидкой", "Мебель + услуги дизайнера", 15, 30, 14},
+			{"Акция выходного дня", "Скидка 20% в субботу и воскресенье", 20, 20, 3},
+		}
+		for _, pr := range promos {
+			var count int64
+			db.Table("promotions").Where("salon_id = ? AND name = ?", salonID, pr.Name).Count(&count)
+			if count > 0 {
+				continue
+			}
+			db.Exec(`INSERT INTO promotions (id, salon_id, name, condition, discount_min, discount_max, start_date, end_date, is_active)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, TRUE)`,
+				salonID, pr.Name, pr.Condition, pr.Min, pr.Max, now, now.AddDate(0, 0, pr.EndIn))
+			log.Printf("Promotion created: %s", pr.Name)
+		}
+	}
+
+	// Оборачиваемость по категориям
+	if tableExists(db, "category_turnover") {
+		period := time.Now().Format("2006-01")
+		cats := []struct {
+			Category string
+			Days     int
+		}{
+			{"Мебель", 90},
+			{"Допы", 30},
+			{"Услуги", 7},
+		}
+		for _, c := range cats {
+			var count int64
+			db.Table("category_turnover").Where("salon_id = ? AND category = ? AND period = ?", salonID, c.Category, period).Count(&count)
+			if count > 0 {
+				continue
+			}
+			db.Exec(`INSERT INTO category_turnover (id, salon_id, category, avg_days, period)
+				VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
+				salonID, c.Category, c.Days, period)
+			log.Printf("Category turnover created: %s", c.Category)
+		}
+	}
+
+	return nil
+}

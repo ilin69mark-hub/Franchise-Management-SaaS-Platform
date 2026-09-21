@@ -47,6 +47,9 @@ func main() {
 	if err := database.SeedAlerts(db); err != nil {
 		log.Printf("Seed alerts error: %v", err)
 	}
+	if err := database.SeedProductsAnalytics(db); err != nil {
+		log.Printf("Seed products analytics error: %v", err)
+	}
 
 	_, err = cache.ConnectRedis()
 	if err != nil {

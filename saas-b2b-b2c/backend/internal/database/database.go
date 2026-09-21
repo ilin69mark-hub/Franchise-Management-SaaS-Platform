@@ -72,6 +72,10 @@ func runMigrations(db *gorm.DB) error {
 		migrateDealerRequests,
 		migrateMarketingBudgets,
 		migrateDealerExpenses,
+		migrateProducts,
+		migrateLostSales,
+		migratePromotions,
+		migrateCategoryTurnover,
 	}
 
 	for _, m := range migrations {
@@ -457,6 +461,72 @@ func migrateDealerExpenses(db *gorm.DB) error {
 			dealer_id UUID,
 			category VARCHAR(50),
 			amount NUMERIC(12,2) DEFAULT 0,
+			period VARCHAR(20),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateProducts(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS products (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID,
+			name VARCHAR(255) NOT NULL,
+			collection VARCHAR(150),
+			category VARCHAR(100),
+			price NUMERIC(12,2) DEFAULT 0,
+			cost_price NUMERIC(12,2) DEFAULT 0,
+			showroom_qty INT DEFAULT 0,
+			warehouse_qty INT DEFAULT 0,
+			turnover_days INT DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateLostSales(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS lost_sales (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID,
+			reason VARCHAR(255),
+			requests_count INT DEFAULT 0,
+			lost_revenue NUMERIC(12,2) DEFAULT 0,
+			period VARCHAR(20),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migratePromotions(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS promotions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID,
+			name VARCHAR(255) NOT NULL,
+			condition TEXT,
+			discount_min INT DEFAULT 0,
+			discount_max INT DEFAULT 0,
+			start_date TIMESTAMP,
+			end_date TIMESTAMP,
+			is_active BOOLEAN DEFAULT TRUE,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateCategoryTurnover(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS category_turnover (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID,
+			category VARCHAR(100),
+			avg_days INT DEFAULT 0,
 			period VARCHAR(20),
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
