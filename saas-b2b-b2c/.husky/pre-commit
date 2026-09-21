@@ -33,4 +33,14 @@ if git diff --cached --name-only | grep -E '(^|/)(\.env)(\.|$)' | grep -v '\.env
     exit 1
 fi
 
+# 3. Gitleaks — скан ЗАСТЕЙДЖЕННОГО (быстрый detect по индексу).
+#    Полный скан истории — в CI (.github/workflows/secrets-scan.yml).
+if command -v gitleaks >/dev/null 2>&1; then
+    if ! gitleaks detect --no-banner --redact=40 --staged --source . --config .gitleaks.toml >/dev/null 2>&1; then
+        echo "Ошибка: Gitleaks обнаружил потенциальные секреты в застейдженном. Проверьте gitleaks detect --staged."
+        echo "Если это документация/allowlist — обновите .gitleaks.toml [allowlist]."
+        exit 1
+    fi
+fi
+
 exit 0

@@ -1,0 +1,35 @@
+# gitleaks 8.x — конфиг для репо Franchise-Management-SaaS-Platform
+# Используется: CI (.github/workflows/secrets-scan.yml) и локально (pre-commit hook)
+
+title = "Franchise-Management-SaaS-Platform gitleaks config"
+
+# Базовые правила gitleaks (все стандартные встроенные правила РАБОТАЮТ поверх).
+# Здесь только ТЮНИНГ: allowlist'ы для НАШИХ безопасных dev-placeholders.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Локальные dev-placeholders и тест-константы — НЕ прод-секреты"
+regexes = [
+  # JWT dev-fallback'и (безопасные плейсхолдеры, задаются в .env на проде)
+  '''default_secret_key_for_development_change_me_in_production''',
+  '''my_strong_and_fixed_secret_key_development_change_in_production''',
+  '''unsafe-default-jwt-secret-change-me''',
+  '''CHANGE_ME_JWT_SECRET''',
+  '''CHANGE_ME_JWT_SECRET_KEY''',
+  # Docker-/compose-фолбэки
+  '''unsafe-default-dev-db-password-change-me''',
+  '''CHANGE_ME_DB_PASSWORD''',
+  '''postgres''',
+  # Старые литералы, которые filter-repo УЖЕ заменил на плейсхолдеры — просто чтобы
+  # CI не падал, если кто-то случайно вернёт их в dev-config. В прод НЕ идут.
+  '''supersecretkeyfordevelopment''',
+  '''default_secret_key_for_development''',
+  '''default_secret_key''',
+  '''default_secret''',
+  # Husky/.env-блок
+  '''\.env(\.example)?$''',
+  # JWT-ПРИМЕРЫ в README (формат Bearer <token>, оборвано на "...") — НЕ реальные токены
+  '''eyJhbGciOiJIUzI1NiIs[A-Za-z0-9_+/]*\.\.\.''',
+]
