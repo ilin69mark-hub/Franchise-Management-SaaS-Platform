@@ -33,7 +33,7 @@ jobs:
           context: .
           file: ./Dockerfile.backend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/backend:latest
+          tags: ${{ env.REGISTRY }}/saas-b2b-b2c/franchise-saas/backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -43,15 +43,15 @@ jobs:
           context: .
           file: ./Dockerfile.frontend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest
+          tags: ${{ env.REGISTRY }}/saas-b2b-b2c/franchise-saas/frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Deploy to server
         run: |
           echo "Deploy instructions:"
-          echo "1. Pull ${{ env.REGISTRY }}/${{ github.repository }}/backend:latest"
-          echo "2. Pull ${{ env.REGISTRY }}/${{ github.repository }}/frontend:latest"
+          echo "1. Pull ${{ env.REGISTRY }}/saas-b2b-b2c/franchise-saas/backend:latest"
+          echo "2. Pull ${{ env.REGISTRY }}/saas-b2b-b2c/franchise-saas/frontend:latest"
           echo "3. Run docker-compose up -d"
           echo ""
           echo "Or use kubectl:"

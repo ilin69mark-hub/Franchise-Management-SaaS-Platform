@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/router';
 import { useDispatch } from 'react-redux';
 import { logout } from '@/store/authSlice';
+import apiClient from '@/api/axiosClient';
 import { useThemeMode } from '@/components/ThemeProvider';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -83,21 +84,16 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ user }) => {
     const fetchStats = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('accessToken');
-        const res = await fetch('/api/v1/admin/stats', {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await apiClient.get('/admin/stats');
+        const data = res.data;
+        setStats({
+          mrr: data.mrr || 0,
+          arr: data.arr || 0,
+          churnRate: data.churnRate || 0,
+          overduePayments: data.overduePayments || 0,
+          arpu: data.arpu || 0,
         });
-        if (res.ok) {
-          const data = await res.json();
-          setStats({
-            mrr: data.mrr || 0,
-            arr: data.arr || 0,
-            churnRate: data.churnRate || 0,
-            overduePayments: data.overduePayments || 0,
-            arpu: data.arpu || 0,
-          });
-          setAlertCount(data.alerts || 0);
-        }
+        setAlertCount(data.alerts || 0);
       } catch {
         setStats({
           mrr: 2500000,

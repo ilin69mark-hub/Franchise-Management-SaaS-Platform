@@ -25,8 +25,7 @@ const RegisterPage: React.FC = () => {
       first_name: values.firstName,
       last_name: values.lastName,
       company_name: values.companyName,
-      role: 'user',
-      tenant_id: 'default',
+      role: 'franchiser',
     };
     await dispatch((register as any)(payload));
     router.push('/login');

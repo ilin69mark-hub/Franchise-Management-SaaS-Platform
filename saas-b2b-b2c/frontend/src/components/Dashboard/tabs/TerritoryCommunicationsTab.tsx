@@ -1,11 +1,12 @@
 // src/components/Dashboard/tabs/TerritoryCommunicationsTab.tsx
 import React, { useState, useMemo } from 'react';
-import { Card, Row, Col, Typography, Table, Tag, Space, Input, Button, Select, Modal, Form, DatePicker, Badge, Tabs, Segmented, TextArea, Upload, message, Timeline, Popconfirm } from 'antd';
+import { Card, Row, Col, Typography, Table, Tag, Space, Input, Button, Select, Modal, Form, DatePicker, Badge, Tabs, Segmented, Upload, message, Timeline, Popconfirm } from 'antd';
 import { MessageOutlined, TeamOutlined, CheckCircleOutlined, ClockCircleOutlined, UserOutlined, PlusOutlined, SearchOutlined, FilterOutlined, SendOutlined, PhoneOutlined, MailOutlined, FileTextOutlined, DollarOutlined, WarningOutlined, ExclamationCircleOutlined, TagOutlined, CalendarOutlined, UploadOutlined } from '@ant-design/icons';
 import { useTerritoryManagerStore } from '@/store/territoryManagerStore';
 import dayjs from 'dayjs';
 
 const { Text } = Typography;
+const { TextArea } = Input;
 
 interface Request {
   id: string;

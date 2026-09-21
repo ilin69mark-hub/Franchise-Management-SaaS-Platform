@@ -28,20 +28,20 @@ type CreateGoalDTO struct {
 	LeadsPlan    int     `json:"leads_plan"`
 	CallsPlan    int     `json:"calls_plan"`
 	MeetingsPlan int     `json:"meetings_plan"`
-	Period      string  `json:"period"`       // "day", "week", "month"
+	Period       string  `json:"period"`      // "day", "week", "month"
 	StartDate    string  `json:"start_date"`  // YYYY-MM-DD
-	EndDate     string  `json:"end_date"`   // YYYY-MM-DD
-	TargetDate  string  `json:"target_date"` // deprecated
+	EndDate      string  `json:"end_date"`    // YYYY-MM-DD
+	TargetDate   string  `json:"target_date"` // deprecated
 }
 
 type UpdateGoalDTO struct {
 	SalesPlan    float64 `json:"sales_plan"`
-	LeadsPlan   int     `json:"leads_plan"`
-	CallsPlan   int     `json:"calls_plan"`
+	LeadsPlan    int     `json:"leads_plan"`
+	CallsPlan    int     `json:"calls_plan"`
 	MeetingsPlan int     `json:"meetings_plan"`
-	Period     string  `json:"period"`
-	StartDate   string  `json:"start_date"`
-	EndDate    string  `json:"end_date"`
+	Period       string  `json:"period"`
+	StartDate    string  `json:"start_date"`
+	EndDate      string  `json:"end_date"`
 }
 
 /* Реализация */
@@ -52,11 +52,11 @@ func NewGoalService(r repository.GoalRepository) GoalService { return &goalServi
 /* ---------- Проверка прав: кто может назначать план кому ---------- */
 func canAssign(assignerRole, assigneeRole string) bool {
 	allowed := map[string][]string{
-		"super_admin":       {"franchise_manager"},
-		"franchiser":       {"franchise_manager", "dealer", "dealer_manager", "salon_manager"},
-		"franchise_manager": {"dealer", "dealer_manager"},
-		"dealer":           {"salon_manager"},
-		"dealer_manager":   {"salon_manager"},
+		string(models.RoleSuperAdmin):        {string(models.RoleFranchisor), string(models.RoleFranchisorManager), string(models.RoleDealer), string(models.RoleDealerManager)},
+		string(models.RoleFranchisor):        {string(models.RoleFranchisorManager), string(models.RoleDealer), string(models.RoleDealerManager)},
+		string(models.RoleFranchisorManager): {string(models.RoleDealer), string(models.RoleDealerManager)},
+		string(models.RoleDealer):            {string(models.RoleDealerManager)},
+		string(models.RoleDealerManager):     {},
 	}
 	for _, r := range allowed[assignerRole] {
 		if r == assigneeRole {
@@ -68,7 +68,13 @@ func canAssign(assignerRole, assigneeRole string) bool {
 
 /* ---------- CreateGoal ---------- */
 func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assignerID, tenantID string) (*models.Goal, error) {
-	assignerRole, _ := ctx.Value("role").(string)
+	assignerRole := ""
+	switch v := ctx.Value("role").(type) {
+	case string:
+		assignerRole = v
+	case models.Role:
+		assignerRole = string(v)
+	}
 	if !canAssign(assignerRole, dto.Role) {
 		return nil, errors.New("you are not allowed to assign a goal to this role")
 	}
@@ -86,7 +92,7 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 	}
 
 	var startDate, endDate, targetDate time.Time
-	
+
 	if dto.StartDate != "" {
 		startDate, _ = time.Parse("2006-01-02", dto.StartDate)
 	}
@@ -102,17 +108,17 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 	targetDate = endDate
 
 	goal := &models.Goal{
-		AssignerID:    uuid.MustParse(assignerID),
+		AssignerID:   uuid.MustParse(assignerID),
 		AssigneeID:   assigneeUUID,
-		Role:        dto.Role,
+		Role:         dto.Role,
 		SalesPlan:    dto.SalesPlan,
-		LeadsPlan:   dto.LeadsPlan,
-		CallsPlan:   dto.CallsPlan,
+		LeadsPlan:    dto.LeadsPlan,
+		CallsPlan:    dto.CallsPlan,
 		MeetingsPlan: dto.MeetingsPlan,
-		Period:     period,
-		StartDate:  startDate,
-		EndDate:   endDate,
-		TargetDate: targetDate,
+		Period:       period,
+		StartDate:    startDate,
+		EndDate:      endDate,
+		TargetDate:   targetDate,
 	}
 	if tenantID != "" {
 		tid, _ := uuid.Parse(tenantID)

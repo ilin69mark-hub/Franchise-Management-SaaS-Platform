@@ -15,6 +15,7 @@ import {
   HeartOutlined,
 } from '@ant-design/icons';
 import { useRouter } from 'next/router';
+import { useDispatch } from 'react-redux';
 import { logout } from '@/store/authSlice';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
@@ -44,6 +45,7 @@ interface FranchiserDashboardProps {
 
 const FranchiserDashboard: React.FC<FranchiserDashboardProps> = ({ user, title }) => {
   const router = useRouter();
+  const dispatch = useDispatch();
   const [activeTab, setActiveTab] = useState('network');
   
   const {
@@ -60,7 +62,7 @@ const FranchiserDashboard: React.FC<FranchiserDashboardProps> = ({ user, title }
   }, [fetchSummary]);
 
   const handleLogout = () => {
-    logout();
+    dispatch(logout());
     localStorage.removeItem('accessToken');
     router.push('/login');
   };

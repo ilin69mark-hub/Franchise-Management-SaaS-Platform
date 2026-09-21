@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Badge, Dropdown, List, Button, Spin, Empty, Tag, Tooltip, message } from 'antd';
+import { Badge, Dropdown, List, Button, Spin, Empty, Tag, Tooltip, message, Typography } from 'antd';
 import { BellOutlined, WarningOutlined, ExclamationCircleOutlined, InfoCircleOutlined, CloseOutlined, LinkOutlined } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
+
+const { Text } = Typography;
 
 interface AlertItem {
   id: string;
@@ -69,10 +71,12 @@ const NotificationBell: React.FC = () => {
 
   // Инициализация WebSocket
   const initWebSocket = useCallback(() => {
-    const userId = localStorage.getItem('userId') || localStorage.getItem('user_id');
+    const userId = localStorage.getItem('id') || localStorage.getItem('userId') || localStorage.getItem('user_id');
     if (!userId) return;
 
-    const wsUrl = `ws://${window.location.host}/ws/alerts?user_id=${userId}`;
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || `http://${window.location.host}`).replace(/\/+$/, '');
+    const wsProtocol = apiBase.startsWith('https') ? 'wss' : 'ws';
+    const wsUrl = `${wsProtocol}${apiBase.replace(/^https?:\/\//, '')}/ws/alerts?user_id=${userId}`;
 
     try {
       const ws = new WebSocket(wsUrl);

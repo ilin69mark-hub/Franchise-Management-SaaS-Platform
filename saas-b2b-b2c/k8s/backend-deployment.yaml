@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: ghcr.io/REPLACE_WITH_ORG/franchise-saas/backend:latest
+          image: ghcr.io/saas-b2b-b2c/franchise-saas/backend:latest
           ports:
             - containerPort: 8080
           envFrom:

@@ -154,6 +154,7 @@ describe('authSlice', () => {
 
       await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
 
+      expect(mockApiClient.post).toHaveBeenCalledWith('/auth/login', { email: 'test@example.com', password: 'password' });
       expect(store.getState().auth.loading).toBe(false);
       expect(store.getState().auth.isAuthenticated).toBe(true);
       expect(store.getState().auth.accessToken).toBe('access-token-123');
@@ -263,6 +264,7 @@ describe('authSlice', () => {
 
       await store.dispatch(register({ email: 'new@example.com', password: 'password123' }));
 
+      expect(mockApiClient.post).toHaveBeenCalledWith('/auth/register', { email: 'new@example.com', password: 'password123' });
       expect(store.getState().auth.loading).toBe(false);
       expect(store.getState().auth.isAuthenticated).toBe(true);
       expect(store.getState().auth.accessToken).toBe('new-access-token');

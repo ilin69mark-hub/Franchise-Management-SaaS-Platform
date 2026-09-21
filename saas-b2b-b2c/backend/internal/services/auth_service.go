@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"franchise-saas-backend/internal/cache"
@@ -16,6 +17,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
+
+// ErrUserBlocked - возвращается при попытке входа заблокированного/приостановленного
+// пользователя. Хендлер маппит его в HTTP 403.
+var ErrUserBlocked = errors.New("account is blocked")
 
 type AuthService struct {
 	userRepo   repository.UserRepositoryInterface
@@ -99,6 +104,12 @@ func (s *AuthService) Authenticate(email, password string) (*models.User, error)
 		return nil, errors.New("failed to fetch user details")
 	}
 
+	// Заблокированные/приостановленные пользователи не могут войти.
+	switch strings.ToLower(strings.TrimSpace(freshUser.Status)) {
+	case "blocked", "suspended", "banned":
+		return nil, ErrUserBlocked
+	}
+
 	return freshUser, nil
 }
 
@@ -106,7 +117,7 @@ func (s *AuthService) Authenticate(email, password string) (*models.User, error)
 func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
 	if secret == "" {
-		secret = "CHANGE_ME_JWT_SECRET_change_in_production"
+		return "", "", errors.New("jwt_secret is not configured")
 	}
 
 	tidStr := ""
@@ -135,8 +146,14 @@ func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models
 		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(),
 	})
 
-	accessStr, _ := accessToken.SignedString([]byte(secret))
-	refreshStr, _ := refreshToken.SignedString([]byte(secret))
+	accessStr, err := accessToken.SignedString([]byte(secret))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to sign access token: %w", err)
+	}
+	refreshStr, err := refreshToken.SignedString([]byte(secret))
+	if err != nil {
+		return "", "", fmt.Errorf("failed to sign refresh token: %w", err)
+	}
 
 	return accessStr, refreshStr, nil
 }
@@ -144,10 +161,16 @@ func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models
 // RefreshTokens - Обновление токенов с ротацией
 func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
+	if secret == "" {
+		return "", "", errors.New("jwt_secret is not configured")
+	}
 
 	token, err := jwt.Parse(oldRefreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
 		return []byte(secret), nil
-	})
+	}, jwt.WithValidMethods([]string{"HS256"}))
 	if err != nil || !token.Valid {
 		return "", "", errors.New("invalid refresh token")
 	}
@@ -163,8 +186,16 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 	}
 
 	tokenID, _ := claims["jti"].(string)
-	if tokenID != "" {
-		cache.RevokeRefreshToken(context.Background(), tokenID)
+	if tokenID == "" {
+		return "", "", errors.New("refresh token missing jti")
+	}
+	if cache.IsTokenRevoked(context.Background(), tokenID) {
+		return "", "", errors.New("refresh token revoked")
+	}
+
+	// Ротация: старый refresh-токен отзывается.
+	if err := cache.RevokeRefreshToken(context.Background(), tokenID); err != nil {
+		return "", "", err
 	}
 
 	uid, _ := uuid.Parse(userIDStr)
@@ -174,6 +205,36 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 	}
 
 	return s.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+}
+
+// Logout - отзывает refresh-токен, извлекая его jti.
+func (s *AuthService) Logout(refreshToken string) error {
+	secret := viper.GetString("jwt_secret")
+	if secret == "" {
+		return errors.New("jwt_secret is not configured")
+	}
+
+	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil || !token.Valid {
+		return errors.New("invalid refresh token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return errors.New("invalid token claims")
+	}
+
+	tokenID, _ := claims["jti"].(string)
+	if tokenID == "" {
+		return errors.New("refresh token missing jti")
+	}
+
+	return cache.RevokeRefreshToken(context.Background(), tokenID)
 }
 
 // GetUserByID - Получение пользователя по ID

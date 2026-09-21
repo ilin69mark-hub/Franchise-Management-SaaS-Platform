@@ -117,6 +117,7 @@ describe('checklistSlice', () => {
 
       await store.dispatch(fetchChecklists());
 
+      expect(mockApiClient.get).toHaveBeenCalledWith('/checklists');
       expect(store.getState().checklist.loading).toBe(false);
       expect(store.getState().checklist.items).toHaveLength(2);
       expect(store.getState().checklist.items[0].title).toBe('Checklist 1');
@@ -177,6 +178,7 @@ it('sets error on rejected', async () => {
 
       await store.dispatch(fetchChecklistById('cl-1'));
 
+      expect(mockApiClient.get).toHaveBeenCalledWith('/checklists/cl-1');
       expect(store.getState().checklist.loading).toBe(false);
       expect(store.getState().checklist.currentChecklist).toEqual(mockChecklist);
     });
@@ -238,6 +240,7 @@ it('sets error on rejected', async () => {
 
       await store.dispatch(createChecklist(newChecklistData));
 
+      expect(mockApiClient.post).toHaveBeenCalledWith('/checklists', newChecklistData);
       expect(store.getState().checklist.loading).toBe(false);
       expect(store.getState().checklist.items).toHaveLength(1);
       expect(store.getState().checklist.items[0].title).toBe('New Checklist');
@@ -309,6 +312,7 @@ it('sets error on rejected', async () => {
 
       await storeWithItems.dispatch(updateChecklist({ id: 'cl-1', title: 'Updated Title' }));
 
+      expect(mockApiClient.put).toHaveBeenCalledWith('/checklists/cl-1', { title: 'Updated Title' });
       const item = storeWithItems.getState().checklist.items.find(i => i.id === 'cl-1');
       expect(item?.title).toBe('Updated Title');
     });
@@ -376,6 +380,7 @@ it('sets error on rejected', async () => {
 
       await storeWithItems.dispatch(deleteChecklist('cl-1'));
 
+      expect(mockApiClient.delete).toHaveBeenCalledWith('/checklists/cl-1');
       expect(storeWithItems.getState().checklist.items).toHaveLength(1);
       expect(storeWithItems.getState().checklist.items[0].id).toBe('cl-2');
     });
@@ -461,6 +466,7 @@ it('sets error on rejected', async () => {
 
       await storeWithItems.dispatch(completeChecklist('cl-1'));
 
+      expect(mockApiClient.post).toHaveBeenCalledWith('/checklists/cl-1/complete', {});
       expect(storeWithItems.getState().checklist.items[0].status).toBe('completed');
     });
 

@@ -13,6 +13,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFormatFloat(t *testing.T) {
+	t.Run("single digit value", func(t *testing.T) {
+		require.Equal(t, "7%", formatFloat(7.0))
+	})
+	t.Run("two digit value", func(t *testing.T) {
+		require.Equal(t, "30%", formatFloat(30.5))
+		require.Equal(t, "33%", formatFloat(33.33))
+	})
+	t.Run("large value rounded by FormatFloat", func(t *testing.T) {
+		require.Equal(t, "121%", formatFloat(120.9))
+	})
+	t.Run("conversion drop message has single percent sign", func(t *testing.T) {
+		drop := 33.33
+		msg := "Конверсия упала на " + formatFloat(drop) + " относительно среднего"
+		require.Equal(t, "Конверсия упала на 33% относительно среднего", msg)
+	})
+}
+
 func TestAlertService_CreateAlert(t *testing.T) {
 	userID := uuid.New()
 

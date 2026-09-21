@@ -20,6 +20,27 @@ func NewChecklistHandler(service *services.ChecklistService) *ChecklistHandler {
 	return &ChecklistHandler{service: service}
 }
 
+// checklistOwnedByCaller — true, если вызывающий пользователь владеет чек-листом
+// (создатель, исполнитель или тот же тенант). super_admin видит всё.
+func checklistOwnedByCaller(user *models.User, chk *models.Checklist) bool {
+	if user == nil || chk == nil {
+		return false
+	}
+	if user.Role == models.RoleSuperAdmin {
+		return true
+	}
+	if chk.UserID == user.ID {
+		return true
+	}
+	if chk.AssignedTo != nil && *chk.AssignedTo == user.ID {
+		return true
+	}
+	if chk.TenantID != nil && user.TenantID != nil && *chk.TenantID == *user.TenantID {
+		return true
+	}
+	return false
+}
+
 func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
 	currentUser, err := getCurrentUser(c)
 	if err != nil {
@@ -92,7 +113,25 @@ func (h *ChecklistHandler) CreateChecklist(c *gin.Context) {
 
 func (h *ChecklistHandler) CompleteChecklist(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	existing, err := h.service.GetChecklistByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	if !checklistOwnedByCaller(user, existing) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 	if err := h.service.CompleteChecklist(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -102,10 +141,23 @@ func (h *ChecklistHandler) CompleteChecklist(c *gin.Context) {
 
 func (h *ChecklistHandler) GetChecklistByID(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	item, err := h.service.GetChecklistByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	if !checklistOwnedByCaller(user, item) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	c.JSON(http.StatusOK, item)
@@ -122,6 +174,16 @@ func (h *ChecklistHandler) UpdateChecklist(c *gin.Context) {
 	existing, err := h.service.GetChecklistByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if !checklistOwnedByCaller(user, existing) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 
@@ -149,7 +211,25 @@ func (h *ChecklistHandler) UpdateChecklist(c *gin.Context) {
 
 func (h *ChecklistHandler) DeleteChecklist(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID format"})
+		return
+	}
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	existing, err := h.service.GetChecklistByID(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+	if !checklistOwnedByCaller(user, existing) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 	if err := h.service.DeleteChecklist(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -179,6 +259,16 @@ func (h *ChecklistHandler) UpdateStatus(c *gin.Context) {
 	existing, err := h.service.GetChecklistByID(c.Request.Context(), id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+		return
+	}
+
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if !checklistOwnedByCaller(user, existing) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 

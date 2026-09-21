@@ -38,7 +38,7 @@ func setupAuthRouter() *gin.Engine {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		
+
 		tokenStr := authHeader[7:]
 		token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 			return []byte(testSecret), nil
@@ -47,7 +47,7 @@ func setupAuthRouter() *gin.Engine {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return
 		}
-		
+
 		claims := token.Claims.(jwt.MapClaims)
 		c.Set("userID", claims["user_id"])
 		c.Set("email", claims["email"])
@@ -56,33 +56,6 @@ func setupAuthRouter() *gin.Engine {
 		c.Next()
 	})
 	return r
-}
-
-// RequireRole - Role-based middleware for testing
-func RequireRole(requiredRole string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		roleVal, exists := c.Get("role")
-		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "role not found"})
-			c.Abort()
-			return
-		}
-		
-		userRole, ok := roleVal.(string)
-		if !ok {
-			c.JSON(http.StatusForbidden, gin.H{"error": "invalid role"})
-			c.Abort()
-			return
-		}
-		
-		if userRole != requiredRole {
-			c.JSON(http.StatusForbidden, gin.H{"error": "insufficient permissions"})
-			c.Abort()
-			return
-		}
-		
-		c.Next()
-	}
 }
 
 func TestAuthHandler_MissingHeader(t *testing.T) {
@@ -234,10 +207,10 @@ func TestAuthHandler_AllRoles(t *testing.T) {
 
 func TestRoleMiddleware_DealerAccess(t *testing.T) {
 	tests := []struct {
-		name       string
-		userRole   string
-		required   string
-		wantCode   int
+		name     string
+		userRole string
+		required string
+		wantCode int
 	}{
 		{"dealer accessing dealer resource", "dealer", "dealer", http.StatusOK},
 		{"dealer accessing franchiser resource", "dealer", "franchiser", http.StatusForbidden},
@@ -304,7 +277,7 @@ func TestAuthorization_Required(t *testing.T) {
 
 func TestChained_Middleware(t *testing.T) {
 	r := setupAuthRouter()
-	
+
 	callCount := 0
 	r.GET("/admin", func(c *gin.Context) {
 		callCount++

@@ -73,21 +73,16 @@ const DealerDashboardNew: React.FC<DealerDashboardNewProps> = ({ user, title }) 
     const fetchSummary = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('accessToken');
-        const res = await fetch('/api/v1/dealer/summary', {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await apiClient.get('/dealer/summary');
+        const data = res.data;
+        setSummary({
+          netProfit: data.netProfit || 0,
+          grossRevenue: data.grossRevenue || 0,
+          planCompletionPercent: data.planCompletionPercent || 0,
+          marginProfit: data.marginProfit || 0,
+          activeAlerts: data.activeAlerts || 0,
         });
-        if (res.ok) {
-          const data = await res.json();
-          setSummary({
-            netProfit: data.netProfit || 0,
-            grossRevenue: data.grossRevenue || 0,
-            planCompletionPercent: data.planCompletionPercent || 0,
-            marginProfit: data.marginProfit || 0,
-            activeAlerts: data.activeAlerts || 0,
-          });
-          setAlerts(data.activeAlerts || 0);
-        }
+        setAlerts(data.activeAlerts || 0);
       } catch (e) {
         console.error('Summary fetch error', e);
 setSummary({

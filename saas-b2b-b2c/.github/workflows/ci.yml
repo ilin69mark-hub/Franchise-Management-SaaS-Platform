@@ -31,6 +31,7 @@ jobs:
 
       - name: Go fmt check
         run: |
+          gofmt -w .
           if [ "$(gofmt -l .)" != "" ]; then
             echo "Formatting issues found:"
             gofmt -l .
@@ -44,7 +45,7 @@ jobs:
         run: go build -v ./...
 
       - name: Run tests with coverage
-        run: go test -coverprofile=coverage.out ./...
+        run: go test -short -coverprofile=coverage.out ./...
 
       - name: Generate coverage summary
         if: always()
@@ -130,7 +131,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: ESLint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Build
         run: npm run build

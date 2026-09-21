@@ -216,7 +216,7 @@ const plans = plansRes.data as Array<Record<string, unknown>> || [];
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24}>
           <Card title="Риски (истекающие договоры)">
-            {cashflow?.risks?.length > 0 ? (
+            {cashflow && cashflow.risks && cashflow.risks.length > 0 ? (
               cashflow.risks.map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
                   <span>{item.date}</span>

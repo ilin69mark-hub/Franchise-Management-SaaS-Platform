@@ -19,6 +19,7 @@ import {
 } from '@ant-design/icons';
 import { useRouter } from 'next/router';
 import { logout } from '@/store/authSlice';
+import apiClient from '@/api/axiosClient';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { useTerritoryManagerStore, TerritorySummary, DealerMetrics } from '@/store/territoryManagerStore';
@@ -92,21 +93,16 @@ const FranchiserManagerDashboard: React.FC<FranchiserManagerDashboardProps> = ({
     const fetchSummary = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('accessToken');
-        const res = await fetch('/api/v1/territory/summary', {
-          headers: { Authorization: `Bearer ${token}` },
+        const res = await apiClient.get('/territory/summary');
+        const data = res.data;
+        setSummary({
+          planCompletionPercent: data.planCompletionPercent || 0,
+          quarterForecastPercent: data.quarterForecastPercent || 0,
+          redZoneDealersCount: data.redZoneDealersCount || 0,
+          avgConversion: data.avgConversion || 0,
+          activeAlerts: data.activeAlerts || 0,
         });
-        if (res.ok) {
-          const data = await res.json();
-          setSummary({
-            planCompletionPercent: data.planCompletionPercent || 0,
-            quarterForecastPercent: data.quarterForecastPercent || 0,
-            redZoneDealersCount: data.redZoneDealersCount || 0,
-            avgConversion: data.avgConversion || 0,
-            activeAlerts: data.activeAlerts || 0,
-          });
-          setAlerts(data.activeAlerts || 0);
-        }
+        setAlerts(data.activeAlerts || 0);
       } catch (e) {
         setSummary({
           planCompletionPercent: 82,

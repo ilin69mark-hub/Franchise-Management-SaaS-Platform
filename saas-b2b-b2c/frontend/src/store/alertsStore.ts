@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import apiClient from '../api/axiosClient';
 
 interface Alert {
   id: string;
@@ -44,24 +45,29 @@ export const useAlertStore = create<AlertState>((set, get) => ({
   loadAlerts: async () => {
     set({ isLoading: true });
     try {
-      const res = await fetch('/api/admin/alerts/unread');
-      const data = await res.json();
-      get().setAlerts(data);
+      const res = await apiClient.get('/admin/alerts/unread');
+      get().setAlerts(Array.isArray(res.data) ? res.data : (res.data?.alerts || []));
+    } catch (e) {
+      // Backend currently has no /admin/alerts routes — keep empty alerts, don't throw.
     } finally {
       set({ isLoading: false });
     }
   },
   markAsRead: async (id: string) => {
-    await fetch(`/api/admin/alerts/${id}/read`, { method: 'PATCH' });
+    try {
+      await apiClient.patch(`/admin/alerts/${id}/read`);
+    } catch (e) {
+      // Backend has no /admin/alerts route — keep the local state update.
+    }
     const alerts = get().alerts.map(a => a.id === id ? { ...a, read: true } : a);
     get().setAlerts(alerts);
   },
   updateSettings: async (settings: Partial<AlertSettings>) => {
-    await fetch('/api/admin/alert-settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
-    });
+    try {
+      await apiClient.put('/admin/alert-settings', settings);
+    } catch (e) {
+      // Backend has no /admin/alert-settings route — keep local settings, don't throw.
+    }
     get().loadAlerts();
   },
 }));

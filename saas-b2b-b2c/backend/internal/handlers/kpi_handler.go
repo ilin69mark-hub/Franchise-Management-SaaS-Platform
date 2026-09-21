@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -57,6 +58,26 @@ func (h *KPIHandler) GetSalonStats(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid salon_id"})
 		return
+	}
+
+	// IDOR-защита: салон должен принадлежать салону/тенанту вызывающего.
+	var salon models.Salon
+	if err := h.db.First(&salon, "id = ?", salonID).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	if user.Role != models.RoleSuperAdmin {
+		allowed := false
+		if user.SalonID != nil && *user.SalonID == salon.ID {
+			allowed = true
+		}
+		if user.TenantID != nil && salon.TenantID == *user.TenantID {
+			allowed = true
+		}
+		if !allowed {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 	}
 
 	stats, err := h.kpiSvc.GetDashboardStats(c.Request.Context(), user.ID, salonID, false)
@@ -303,19 +324,19 @@ func (h *KPIHandler) GetTopBar(c *gin.Context) {
 	}
 
 	type TopBarResponse struct {
-		SalonName       string  `json:"salon_name"`
-		PlanPercent     int     `json:"plan_percent"`
-		AvgCheck        float64 `json:"avg_check"`
-		PrepaymentsSum  float64 `json:"prepayments_sum"`
-		AlertsCount     int     `json:"alerts_count"`
+		SalonName      string  `json:"salon_name"`
+		PlanPercent    int     `json:"plan_percent"`
+		AvgCheck       float64 `json:"avg_check"`
+		PrepaymentsSum float64 `json:"prepayments_sum"`
+		AlertsCount    int     `json:"alerts_count"`
 	}
 
 	resp := TopBarResponse{
-		SalonName: "Мой салон",
-		PlanPercent: 0,
-		AvgCheck: 0,
+		SalonName:      "Мой салон",
+		PlanPercent:    0,
+		AvgCheck:       0,
 		PrepaymentsSum: 0,
-		AlertsCount: 0,
+		AlertsCount:    0,
 	}
 
 	data, err := h.kpiSvc.GetDashboardMain(c.Request.Context(), user.ID, time.Now().Format("2006-01-02"))
@@ -439,7 +460,7 @@ func (h *KPIHandler) GetAlerts(c *gin.Context) {
 	}
 
 	type AlertResponse struct {
-		Alerts     []models.Notification `json:"alerts"`
+		Alerts      []models.Notification `json:"alerts"`
 		UnreadCount int                   `json:"unread_count"`
 	}
 
@@ -745,6 +766,20 @@ func (h *KPIHandler) UpdateDealerTask(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// IDOR-защита: обновлять задачу может только дилер-владелец (dealer_id).
+	// Если таблицы/задачи нет — пропускаем к сервису (он сам скоупит по dealer_id).
+	var owned int64
+	var total int64
+	h.db.Table("dealer_tasks").Where("id = ? AND dealer_id = ?", taskID, user.ID).Count(&owned)
+	if owned == 0 {
+		h.db.Table("dealer_tasks").Where("id = ?", taskID).Count(&total)
+		if total > 0 {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	}
+
 	err = h.kpiSvc.UpdateDealerTask(c.Request.Context(), user.ID.String(), taskID, req.Status)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -781,7 +816,7 @@ func (h *KPIHandler) CreateDealerRequest(c *gin.Context) {
 	var req struct {
 		Type        string  `json:"type" binding:"required"`
 		Description string  `json:"description" binding:"required"`
-		Amount     float64 `json:"amount"`
+		Amount      float64 `json:"amount"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -908,7 +943,7 @@ func (h *KPIHandler) GetFranchiserAlerts(c *gin.Context) {
 	}
 	notifRepo := repository.NewNotificationRepository(h.db)
 	notifSvc := services.NewNotificationService(notifRepo)
-	
+
 	var tenantID uuid.UUID
 	if user.TenantID != nil {
 		tenantID = *user.TenantID
@@ -980,16 +1015,16 @@ func (h *KPIHandler) SetManagerPlans(c *gin.Context) {
 	var req struct {
 		Quarter string `json:"quarter"`
 		Plans   []struct {
-			ManagerID   string  `json:"manager_id"`
-			PlanAmount  float64 `json:"plan_amount"`
-			TargetDealers int   `json:"target_dealers"`
+			ManagerID     string  `json:"manager_id"`
+			PlanAmount    float64 `json:"plan_amount"`
+			TargetDealers int     `json:"target_dealers"`
 		} `json:"plans"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-err = h.kpiSvc.SetManagerPlans(c.Request.Context(), user.ID.String(), req.Quarter, req.Plans)
+	err = h.kpiSvc.SetManagerPlans(c.Request.Context(), user.ID.String(), req.Quarter, req.Plans)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1100,10 +1135,35 @@ func (h *KPIHandler) MarkFranchiserAlertRead(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid alert ID"})
 		return
 	}
+
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	// IDOR-защита: отметить алерт прочитанным может только его владелец.
+	var notif models.Notification
+	if err := h.db.First(&notif, "id = ?", alertID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Alert not found"})
+		return
+	}
+	if user.Role != models.RoleSuperAdmin {
+		isOwner := notif.UserID != nil && *notif.UserID == user.ID
+		if !isOwner {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	}
+
 	notifRepo := repository.NewNotificationRepository(h.db)
 	notifSvc := services.NewNotificationService(notifRepo)
-	err = notifSvc.MarkAsRead(c.Request.Context(), alertID)
+	err = notifSvc.MarkAsRead(c.Request.Context(), alertID, user.ID)
 	if err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1117,10 +1177,17 @@ func (h *KPIHandler) MarkAllFranchiserAlertsRead(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
 		return
 	}
-	notifRepo := repository.NewNotificationRepository(h.db)
-	notifSvc := services.NewNotificationService(notifRepo)
-	err = notifSvc.MarkAllAsRead(c.Request.Context(), user.ID)
-	if err != nil {
+
+	// IDOR-защита: помечаем только собственные уведомления пользователя
+	// (и тенантские broadcast-уведомления с user_id = NULL).
+	query := h.db.Model(&models.Notification{}).Where("is_read = ?", false)
+	if user.Role != models.RoleSuperAdmin {
+		if user.TenantID != nil {
+			query = query.Where("tenant_id = ?", *user.TenantID)
+		}
+		query = query.Where("user_id IS NULL OR user_id = ?", user.ID)
+	}
+	if err := query.Update("is_read", true).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1205,8 +1272,8 @@ func (h *KPIHandler) GeneratePDF(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Blocks   []string `json:"blocks"`
-		Comment  string   `json:"comment"`
+		Blocks  []string `json:"blocks"`
+		Comment string   `json:"comment"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

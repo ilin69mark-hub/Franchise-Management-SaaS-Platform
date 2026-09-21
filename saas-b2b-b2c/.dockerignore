@@ -1,1 +1,30 @@
 **/node_modules
+**/__pycache__
+
+# Go build artifacts / binaries
+backend/backend
+backend/main
+backend/server
+/b80
+/backend_bin
+
+# Stray root junk
+/Paid
+/logs.txt
+
+# Secrets & env
+**/.env
+**/.env.local
+
+# VCS & IDE
+.git
+.gitignore
+.vscode/
+.idea/
+
+# Logs & coverage
+*.log
+coverage/
+
+# OS
+.DS_Store

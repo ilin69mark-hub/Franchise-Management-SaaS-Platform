@@ -129,9 +129,15 @@ func main() {
 	protected.Use(middleware.AuthMiddleware())
 	protected.Use(middleware.LoggingMiddleware(userRepo))
 	{
+		// Роли для дашбордов дилера/салон-менеджера (общие для /dealer, /dashboard, /salon-manager).
+		dealerDashRoles := middleware.RequireRole("dealer", "salon_manager", "franchiser", "franchiser_manager", "super_admin")
+		// Роли для франшизных разделов.
+		franchiserRoles := middleware.RequireRole("franchiser", "franchiser_manager", "super_admin")
+
 		protected.GET("/auth/me", userHandler.GetProfile)
 		protected.PUT("/auth/me", userHandler.UpdateProfile)
 		protected.POST("/auth/change-password", userHandler.ChangePassword)
+		protected.POST("/auth/logout", authHandler.Logout)
 
 		protected.GET("/stats/my", kpiHandler.GetMyStats)
 		protected.GET("/stats/salon", kpiHandler.GetSalonStats)
@@ -146,69 +152,96 @@ func main() {
 		protected.POST("/schedule", kpiHandler.CreateEvent)
 		protected.PUT("/schedule/:id/status", kpiHandler.UpdateEventStatus)
 
-		// Dashboard Main (Salon Manager)
-		protected.GET("/dashboard/main", kpiHandler.GetDashboardMain)
-		protected.GET("/salon-manager/top-bar", kpiHandler.GetTopBar)
-		protected.GET("/dashboard/funnel", kpiHandler.GetDashboardFunnel)
-		protected.GET("/dashboard/team", kpiHandler.GetDashboardTeam)
-		protected.GET("/dashboard/team/:id/history", kpiHandler.GetSalesRepHistory)
-		protected.GET("/dashboard/products", kpiHandler.GetDashboardProducts)
 		protected.GET("/alerts", kpiHandler.GetAlerts)
 		protected.PATCH("/alerts/:id/read", kpiHandler.MarkAlertRead)
-		protected.GET("/manager/targets", kpiHandler.GetManagerTargets)
+
+		// Dashboard Main (Salon Manager)
+		dashboardGroup := protected.Group("/dashboard")
+		dashboardGroup.Use(dealerDashRoles)
+		{
+			dashboardGroup.GET("/main", kpiHandler.GetDashboardMain)
+			dashboardGroup.GET("/funnel", kpiHandler.GetDashboardFunnel)
+			dashboardGroup.GET("/team", kpiHandler.GetDashboardTeam)
+			dashboardGroup.GET("/team/:id/history", kpiHandler.GetSalesRepHistory)
+			dashboardGroup.GET("/products", kpiHandler.GetDashboardProducts)
+		}
+
+		salonManagerGroup := protected.Group("/salon-manager")
+		salonManagerGroup.Use(dealerDashRoles)
+		{
+			salonManagerGroup.GET("/top-bar", kpiHandler.GetTopBar)
+		}
 
 		// Dashboard Dealer
-		protected.GET("/dealer/summary", kpiHandler.GetDealerSummary)
-		protected.GET("/dealer/finance", kpiHandler.GetDealerFinance)
-		protected.GET("/dealer/funnel", kpiHandler.GetDealerFunnel)
-		protected.GET("/dealer/products", kpiHandler.GetDealerProducts)
-		protected.GET("/dealer/tasks", kpiHandler.GetDealerTasks)
-		protected.PATCH("/dealer/tasks/:id", kpiHandler.UpdateDealerTask)
-		protected.GET("/dealer/requests", kpiHandler.GetDealerRequests)
-		protected.POST("/dealer/requests", kpiHandler.CreateDealerRequest)
-		protected.GET("/dealer/marketing-budget", kpiHandler.GetDealerMarketingBudget)
-		protected.GET("/dealer/alerts", kpiHandler.GetDealerAlerts)
-		protected.PATCH("/dealer/alerts/:id/read", kpiHandler.MarkDealerAlertRead)
-		protected.PATCH("/dealer/alerts/read-all", kpiHandler.MarkAllDealerAlertsRead)
+		dealerGroup := protected.Group("/dealer")
+		dealerGroup.Use(dealerDashRoles)
+		{
+			dealerGroup.GET("/summary", kpiHandler.GetDealerSummary)
+			dealerGroup.GET("/finance", kpiHandler.GetDealerFinance)
+			dealerGroup.GET("/funnel", kpiHandler.GetDealerFunnel)
+			dealerGroup.GET("/products", kpiHandler.GetDealerProducts)
+			dealerGroup.GET("/tasks", kpiHandler.GetDealerTasks)
+			dealerGroup.PATCH("/tasks/:id", kpiHandler.UpdateDealerTask)
+			dealerGroup.GET("/requests", kpiHandler.GetDealerRequests)
+			dealerGroup.POST("/requests", kpiHandler.CreateDealerRequest)
+			dealerGroup.GET("/marketing-budget", kpiHandler.GetDealerMarketingBudget)
+			dealerGroup.GET("/alerts", kpiHandler.GetDealerAlerts)
+			dealerGroup.PATCH("/alerts/:id/read", kpiHandler.MarkDealerAlertRead)
+			dealerGroup.PATCH("/alerts/read-all", kpiHandler.MarkAllDealerAlertsRead)
+		}
 
 		// Dashboard Franchiser
-		protected.GET("/franchiser/summary", kpiHandler.GetFranchiserSummary)
-		protected.GET("/franchiser/network", kpiHandler.GetFranchiserNetwork)
-		protected.GET("/franchiser/network/territories", kpiHandler.GetTerritoriesHeatmap)
-		protected.GET("/franchiser/health", kpiHandler.GetFranchiserHealth)
-		protected.GET("/franchiser/team", kpiHandler.GetFranchiserTeam)
-		protected.GET("/franchiser/team/:id/dynamics", kpiHandler.GetManagerDynamics)
-		protected.GET("/franchiser/team/:id/dealers", kpiHandler.GetManagerDealers)
-		protected.POST("/franchiser/team/plans", kpiHandler.SetManagerPlans)
-		protected.GET("/franchiser/team/plans", kpiHandler.GetManagerPlans)
-		protected.GET("/franchiser/dealers", kpiHandler.GetFranchiserDealers)
-		protected.GET("/franchiser/dealers/health", kpiHandler.GetDealersHealth)
-		protected.GET("/franchiser/dealers/migration", kpiHandler.GetDealersMigration)
-		protected.GET("/franchiser/dealers/system-issues", kpiHandler.GetSystemIssues)
-		protected.GET("/franchiser/dealers/geography", kpiHandler.GetDealersGeography)
-		protected.GET("/franchiser/dealers/marketing-roi", kpiHandler.GetMarketingROI)
-		protected.GET("/franchiser/requests", kpiHandler.GetFranchiserRequests)
-		protected.GET("/franchiser/alerts", kpiHandler.GetFranchiserAlerts)
-		protected.PATCH("/franchiser/alerts/:id/read", kpiHandler.MarkFranchiserAlertRead)
-		protected.PATCH("/franchiser/alerts/read-all", kpiHandler.MarkAllFranchiserAlertsRead)
-		protected.PATCH("/franchiser/alerts/:id/assign", kpiHandler.AssignAlert)
-		protected.GET("/franchiser/alert-settings", kpiHandler.GetAlertSettings)
-		protected.PUT("/franchiser/alert-settings", kpiHandler.UpdateAlertSettings)
+		franchiserGroup := protected.Group("/franchiser")
+		franchiserGroup.Use(franchiserRoles)
+		{
+			franchiserGroup.GET("/summary", kpiHandler.GetFranchiserSummary)
+			franchiserGroup.GET("/network", kpiHandler.GetFranchiserNetwork)
+			franchiserGroup.GET("/network/territories", kpiHandler.GetTerritoriesHeatmap)
+			franchiserGroup.GET("/health", kpiHandler.GetFranchiserHealth)
+			franchiserGroup.GET("/team", kpiHandler.GetFranchiserTeam)
+			franchiserGroup.GET("/team/:id/dynamics", kpiHandler.GetManagerDynamics)
+			franchiserGroup.GET("/team/:id/dealers", kpiHandler.GetManagerDealers)
+			franchiserGroup.POST("/team/plans", kpiHandler.SetManagerPlans)
+			franchiserGroup.GET("/team/plans", kpiHandler.GetManagerPlans)
+			franchiserGroup.GET("/dealers", kpiHandler.GetFranchiserDealers)
+			franchiserGroup.GET("/dealers/health", kpiHandler.GetDealersHealth)
+			franchiserGroup.GET("/dealers/migration", kpiHandler.GetDealersMigration)
+			franchiserGroup.GET("/dealers/system-issues", kpiHandler.GetSystemIssues)
+			franchiserGroup.GET("/dealers/geography", kpiHandler.GetDealersGeography)
+			franchiserGroup.GET("/dealers/marketing-roi", kpiHandler.GetMarketingROI)
+			franchiserGroup.GET("/requests", kpiHandler.GetFranchiserRequests)
+			franchiserGroup.GET("/alerts", kpiHandler.GetFranchiserAlerts)
+			franchiserGroup.PATCH("/alerts/:id/read", kpiHandler.MarkFranchiserAlertRead)
+			franchiserGroup.PATCH("/alerts/read-all", kpiHandler.MarkAllFranchiserAlertsRead)
+			franchiserGroup.PATCH("/alerts/:id/assign", kpiHandler.AssignAlert)
+			franchiserGroup.GET("/alert-settings", kpiHandler.GetAlertSettings)
+			franchiserGroup.PUT("/alert-settings", kpiHandler.UpdateAlertSettings)
 
-		// Report B2B
-		protected.GET("/franchiser/report/data", kpiHandler.GetReportData)
-		protected.POST("/franchiser/report/generate-pdf", kpiHandler.GeneratePDF)
-		protected.POST("/franchiser/report/send", kpiHandler.SendReport)
-		protected.GET("/franchiser/report/history", kpiHandler.GetReportHistory)
-		protected.POST("/franchiser/report/draft", kpiHandler.SaveDraft)
-		protected.GET("/franchiser/report/draft", kpiHandler.GetDraft)
+			// Report B2B
+			franchiserGroup.GET("/report/data", kpiHandler.GetReportData)
+			franchiserGroup.POST("/report/generate-pdf", kpiHandler.GeneratePDF)
+			franchiserGroup.POST("/report/send", kpiHandler.SendReport)
+			franchiserGroup.GET("/report/history", kpiHandler.GetReportHistory)
+			franchiserGroup.POST("/report/draft", kpiHandler.SaveDraft)
+			franchiserGroup.GET("/report/draft", kpiHandler.GetDraft)
+		}
+
+		managerGroup := protected.Group("/manager")
+		managerGroup.Use(franchiserRoles)
+		{
+			managerGroup.GET("/targets", kpiHandler.GetManagerTargets)
+		}
 
 		// Dashboard Territory Manager
-		protected.GET("/territory/summary", kpiHandler.GetTerritorySummary)
-		protected.GET("/territory/funnel", kpiHandler.GetTerritoryFunnel)
-		protected.GET("/territory/planfact", kpiHandler.GetTerritoryPlanFact)
-		protected.GET("/territory/communications", kpiHandler.GetTerritoryCommunications)
-		protected.GET("/territory/benchmarks", kpiHandler.GetTerritoryBenchmarks)
+		territoryGroup := protected.Group("/territory")
+		territoryGroup.Use(franchiserRoles)
+		{
+			territoryGroup.GET("/summary", kpiHandler.GetTerritorySummary)
+			territoryGroup.GET("/funnel", kpiHandler.GetTerritoryFunnel)
+			territoryGroup.GET("/planfact", kpiHandler.GetTerritoryPlanFact)
+			territoryGroup.GET("/communications", kpiHandler.GetTerritoryCommunications)
+			territoryGroup.GET("/benchmarks", kpiHandler.GetTerritoryBenchmarks)
+		}
 
 		protected.GET("/stats/team/analytics", kpiHandler.GetTeamAnalytics)
 		protected.GET("/schedule/all", kpiHandler.GetAllSchedule)

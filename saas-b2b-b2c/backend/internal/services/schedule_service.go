@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 	"time"
@@ -55,14 +56,18 @@ func (s *ScheduleService) UpdateEvent(ctx context.Context, id uuid.UUID, data *m
 
 	// Парсинг времени, если передано
 	if data.StartTime != "" {
-		if t, err := time.Parse(time.RFC3339, data.StartTime); err == nil {
-			updates["start_time"] = t
+		t, err := time.Parse(time.RFC3339, data.StartTime)
+		if err != nil {
+			return errors.New("invalid start_time format")
 		}
+		updates["start_time"] = t
 	}
 	if data.EndTime != "" {
-		if t, err := time.Parse(time.RFC3339, data.EndTime); err == nil {
-			updates["end_time"] = t
+		t, err := time.Parse(time.RFC3339, data.EndTime)
+		if err != nil {
+			return errors.New("invalid end_time format")
 		}
+		updates["end_time"] = t
 	}
 
 	return s.repo.UpdateEvent(ctx, id, updates)

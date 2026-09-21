@@ -325,12 +325,9 @@ const FranchiserTeamTab: React.FC = () => {
             rowExpandable: (record) => record.id !== undefined,
           }}
           pagination={false}
-          rowStyle={(record) => ({
-            background: getRowColor(record.integralKpi),
-          })}
           onRow={(record) => ({
             onClick: () => setSelectedManager(record.id),
-            style: { cursor: 'pointer' },
+            style: { cursor: 'pointer', background: getRowColor(record.integralKpi) },
           })}
         />
       </Card>

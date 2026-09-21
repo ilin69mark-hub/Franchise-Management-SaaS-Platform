@@ -22,10 +22,13 @@ metadata:
   namespace: franchise
 type: Opaque
 stringData:
+  # NOTE: Values below are NON-SECRET placeholders and must NOT be used in production.
+  # Set real secrets via CI/CD (kubectl apply -f) or recommend ExternalSecrets (ESO) with a
+  # SecretStore backed by Vault/AWS Secrets Manager, then drop this inline Secret.
   DB_USER: "postgres"
-  DB_PASSWORD: "REPLACE_WITH_STRONG_PASSWORD"
+  DB_PASSWORD: "CHANGE_ME_JWT_SECRET"
   JWT_SECRET: "CHANGE_ME_JWT_SECRET"
-  REDIS_PASSWORD: ""
+  REDIS_PASSWORD: "CHANGE_ME_JWT_SECRET"
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

@@ -333,7 +333,7 @@ const TerritoryBenchmarkTab: React.FC<TerritoryBenchmarkTabProps> = ({ loading }
               <Table.Summary>
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0}><Text strong>Формула индекса:</Text></Table.Summary.Cell>
-                  <Table.Summary.Cell colSpan={7}>
+                  <Table.Summary.Cell index={0} colSpan={7}>
                     <Text type="secondary">
                       % плана (40%) + Конверсия (25%) + Маржа (20%) + Дебиторка (10%) + Отчёты (5%)
                     </Text>

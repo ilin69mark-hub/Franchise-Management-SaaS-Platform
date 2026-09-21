@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"franchise-saas-backend/internal/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 )
@@ -14,7 +16,7 @@ import (
 func setupAuthTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	
+
 	r.POST("/auth/register", func(c *gin.Context) {
 		var req struct {
 			Email    string `json:"email"`
@@ -34,7 +36,7 @@ func setupAuthTestRouter() *gin.Engine {
 		}
 		c.JSON(http.StatusCreated, gin.H{"message": "user created"})
 	})
-	
+
 	r.POST("/auth/login", func(c *gin.Context) {
 		var req struct {
 			Email    string `json:"email"`
@@ -54,7 +56,7 @@ func setupAuthTestRouter() *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"token": "test_token", "refresh_token": "test_refresh"})
 	})
-	
+
 	r.POST("/auth/refresh", func(c *gin.Context) {
 		var req struct {
 			RefreshToken string `json:"refresh_token"`
@@ -69,7 +71,7 @@ func setupAuthTestRouter() *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"token": "new_token"})
 	})
-	
+
 	return r
 }
 
@@ -84,7 +86,7 @@ func TestAuthHandlerHTTP_Register_ValidRequest(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -102,7 +104,7 @@ func TestAuthHandlerHTTP_Register_EmptyEmail(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -120,7 +122,7 @@ func TestAuthHandlerHTTP_Register_ShortPassword(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -132,7 +134,7 @@ func TestAuthHandlerHTTP_Register_InvalidJSON(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer([]byte("invalid")))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -150,7 +152,7 @@ func TestAuthHandlerHTTP_Login_ValidCredentials(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -169,7 +171,7 @@ func TestAuthHandlerHTTP_Login_InvalidCredentials(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -186,7 +188,7 @@ func TestAuthHandlerHTTP_Login_MissingEmail(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -203,7 +205,7 @@ func TestAuthHandlerHTTP_Login_MissingPassword(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/login", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -220,7 +222,7 @@ func TestAuthHandlerHTTP_Refresh_ValidToken(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/refresh", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
@@ -235,9 +237,76 @@ func TestAuthHandlerHTTP_Refresh_MissingToken(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", "/auth/refresh", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestRegister_RejectsPrivilegedAndUnknownRoles проверяет защиту от
+// privilege escalation при самостоятельной регистрации.
+func TestRegister_RejectsPrivilegedAndUnknownRoles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewAuthHandler(nil)
+	r := gin.New()
+	r.POST("/auth/register", h.Register)
+
+	cases := []struct {
+		name string
+		role string
+	}{
+		{"super_admin", "super_admin"},
+		{"unknown_role", "hacker"},
+		{"admin_role", "admin"},
+	}
+
+	if h.service != nil {
+		t.Fatalf("expected nil service for validation-only tests")
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]string{
+				"email":    "new@test.com",
+				"password": "secret123",
+				"role":     tc.role,
+			})
+			req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusBadRequest, w.Code)
+			assert.Contains(t, w.Body.String(), "invalid role")
+		})
+	}
+}
+
+// TestRegister_RejectsEmptyCredentials проверяет обязательность email/password.
+func TestRegister_RejectsEmptyCredentials(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h := NewAuthHandler(nil)
+	r := gin.New()
+	r.POST("/auth/register", h.Register)
+
+	body, _ := json.Marshal(map[string]string{"email": "", "password": ""})
+	req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// TestRegister_RoleWhitelist проверяет сам whitelist допустимых ролей.
+func TestRegister_RoleWhitelist(t *testing.T) {
+	assert.True(t, isAllowedRegisterRole(models.RoleFranchisor))
+	assert.True(t, isAllowedRegisterRole(models.RoleFranchisorManager))
+	assert.True(t, isAllowedRegisterRole(models.RoleDealer))
+	assert.True(t, isAllowedRegisterRole(models.RoleDealerManager))
+
+	assert.False(t, isAllowedRegisterRole(models.RoleSuperAdmin))
+	assert.False(t, isAllowedRegisterRole("hacker"))
+	assert.False(t, isAllowedRegisterRole(""))
 }

@@ -93,6 +93,20 @@ func migrateUsers(db *gorm.DB) error {
 			first_name VARCHAR(255),
 			last_name VARCHAR(255),
 			phone VARCHAR(50),
+			display_name VARCHAR(255),
+			position VARCHAR(255),
+			bio TEXT,
+			quote VARCHAR(255),
+			avatar_url VARCHAR(500),
+			user_status VARCHAR(50) DEFAULT 'online',
+			available_for_questions BOOLEAN DEFAULT TRUE,
+			achievements TEXT,
+			contacts_telegram VARCHAR(100),
+			contacts_phone VARCHAR(50),
+			contacts_email_visible BOOLEAN DEFAULT TRUE,
+			contacts_phone_visible BOOLEAN DEFAULT TRUE,
+			contacts_whatsapp VARCHAR(50),
+			contacts_working_hours VARCHAR(100),
 			deleted_at TIMESTAMP,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -107,6 +121,20 @@ func migrateUsers(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS managed_by UUID`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS position VARCHAR(255)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS quote VARCHAR(255)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS user_status VARCHAR(50) DEFAULT 'online'`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS available_for_questions BOOLEAN DEFAULT TRUE`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS achievements TEXT`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_telegram VARCHAR(100)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_phone VARCHAR(50)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_email_visible BOOLEAN DEFAULT TRUE`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_phone_visible BOOLEAN DEFAULT TRUE`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_whatsapp VARCHAR(50)`)
+	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_working_hours VARCHAR(100)`)
 	return nil
 }
 
@@ -129,8 +157,6 @@ func migrateTenants(db *gorm.DB) error {
 	`).Error; err != nil {
 		return err
 	}
-	// Удалить FK если есть проблемы
-	db.Exec(`ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_plan_id_fkey`)
 	// Добавить колонки если таблица уже существует
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity TEXT`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS inn VARCHAR(20)`)
@@ -146,16 +172,22 @@ func migrateTenants(db *gorm.DB) error {
 }
 
 func migrateSalons(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS salons (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id UUID NOT NULL,
+			dealer_id UUID,
 			name VARCHAR(255) NOT NULL,
 			address TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS dealer_id UUID`)
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP`)
+	return nil
 }
 
 func migrateOrders(db *gorm.DB) error {
@@ -227,12 +259,15 @@ func migrateNotifications(db *gorm.DB) error {
 	return db.Exec(`
 		CREATE TABLE IF NOT EXISTS notifications (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			user_id UUID NOT NULL,
+			tenant_id UUID,
+			user_id UUID,
 			type VARCHAR(50) DEFAULT 'info',
 			title VARCHAR(255) NOT NULL,
 			message TEXT,
+			data TEXT,
 			is_read BOOLEAN DEFAULT FALSE,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`).Error
 }
@@ -271,16 +306,21 @@ func migrateLeads(db *gorm.DB) error {
 }
 
 func migrateLeadActivities(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS lead_activities (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			lead_id UUID NOT NULL,
 			user_id UUID,
+			salon_id UUID,
 			type VARCHAR(50) DEFAULT 'note',
 			description TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE lead_activities ADD COLUMN IF NOT EXISTS salon_id UUID`)
+	return nil
 }
 
 func migrateChecklistTemplates(db *gorm.DB) error {

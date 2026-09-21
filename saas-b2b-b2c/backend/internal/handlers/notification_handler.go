@@ -1,81 +1,107 @@
 package handlers
 
 import (
-    "net/http"
-    "franchise-saas-backend/internal/services"
+	"errors"
+	"franchise-saas-backend/internal/services"
+	"net/http"
 
-    "github.com/gin-gonic/gin"
-    "github.com/google/uuid"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type NotificationHandler struct {
-    service *services.NotificationService
+	service *services.NotificationService
 }
 
 func NewNotificationHandler(service *services.NotificationService) *NotificationHandler {
-    return &NotificationHandler{service: service}
+	return &NotificationHandler{service: service}
+}
+
+// currentUserID достаёт ID аутентифицированного пользователя из контекста.
+func currentUserID(c *gin.Context) (uuid.UUID, bool) {
+	uid, err := uuid.Parse(c.GetString("userID"))
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return uid, true
 }
 
 func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
-    // Получаем tenantID
-    val, exists := c.Get("tenantID")
-    
-    // Если ключа нет или он пуст (например, super_admin), возвращаем пустой список
-    if !exists || val == "" {
-        c.JSON(http.StatusOK, []interface{}{}) // Пустой массив, чтобы фронтенд не падал
-        return
-    }
+	// Получаем tenantID
+	val, exists := c.Get("tenantID")
 
-    // Безопасное приведение типов
-    tenantIDStr, ok := val.(string)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid tenant ID format"})
-        return
-    }
+	// Если ключа нет или он пуст (например, super_admin), возвращаем пустой список
+	if !exists || val == "" {
+		c.JSON(http.StatusOK, []interface{}{}) // Пустой массив, чтобы фронтенд не падал
+		return
+	}
 
-    tenantID, err := uuid.Parse(tenantIDStr)
-    if err != nil {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID"})
-        return
-    }
+	// Безопасное приведение типов
+	tenantIDStr, ok := val.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid tenant ID format"})
+		return
+	}
 
-    notifications, err := h.service.GetNotifications(c.Request.Context(), tenantID)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    c.JSON(http.StatusOK, notifications)
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UUID"})
+		return
+	}
+
+	notifications, err := h.service.GetNotifications(c.Request.Context(), tenantID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, notifications)
 }
 
 func (h *NotificationHandler) MarkAsRead(c *gin.Context) {
-    id := c.Param("id")
-    uid, _ := uuid.Parse(id)
+	id := c.Param("id")
+	uid, _ := uuid.Parse(id)
 
-    if err := h.service.MarkAsRead(c.Request.Context(), uid); err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    c.JSON(http.StatusOK, gin.H{"message": "Marked as read"})
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	if err := h.service.MarkAsRead(c.Request.Context(), uid, userID); err != nil {
+		if errors.Is(err, services.ErrForbidden) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Marked as read"})
 }
 
 func (h *NotificationHandler) MarkAllAsRead(c *gin.Context) {
-    val, exists := c.Get("tenantID")
-    if !exists || val == "" {
-        c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant ID required"})
-        return
-    }
+	val, exists := c.Get("tenantID")
+	if !exists || val == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Tenant ID required"})
+		return
+	}
 
-    tenantIDStr, ok := val.(string)
-    if !ok {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid tenant ID"})
-        return
-    }
+	tenantIDStr, ok := val.(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid tenant ID"})
+		return
+	}
 
-    tenantID, _ := uuid.Parse(tenantIDStr)
+	tenantID, _ := uuid.Parse(tenantIDStr)
 
-    if err := h.service.MarkAllAsRead(c.Request.Context(), tenantID); err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-        return
-    }
-    c.JSON(http.StatusOK, gin.H{"message": "All marked as read"})
+	userID, ok := currentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	if err := h.service.MarkAllAsRead(c.Request.Context(), tenantID, userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "All marked as read"})
 }

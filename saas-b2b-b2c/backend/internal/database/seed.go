@@ -1,26 +1,61 @@
 package database
 
 import (
+	"crypto/rand"
+	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
+// seedPassword возвращает пароль для сид-аккаунтов.
+// Берётся из env SEED_PASSWORD; если не задан — генерируется
+// случайный пароль, который один раз печатается в stderr.
+func seedPassword() string {
+	if pwd := os.Getenv("SEED_PASSWORD"); pwd != "" {
+		return pwd
+	}
+	pwd := randomPassword()
+	fmt.Fprintf(os.Stderr, "[seed] SEED_PASSWORD not set — generated password for seeded users: %s\n", pwd)
+	return pwd
+}
+
+func randomPassword() string {
+	const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "P@ssw0rdSeeded!"
+	}
+	for i := range b {
+		b[i] = chars[int(b[i])%len(chars)]
+	}
+	return string(b)
+}
+
+// tableExists проверяет существование таблицы в текущей схеме.
+func tableExists(db *gorm.DB, name string) bool {
+	var count int64
+	db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema() AND table_name = ?", name).Scan(&count)
+	return count > 0
+}
+
 func SeedUsers(db *gorm.DB) error {
+	password := seedPassword()
+
 	users := []struct {
 		Email     string
-		Password  string
 		Role      string
 		FirstName string
 		LastName  string
 	}{
-		{Email: "admin@mail.ru", Password: "qwerty", Role: "super_admin", FirstName: "Super", LastName: "Admin"},
-		{Email: "fr@mail.ru", Password: "qwerty", Role: "franchiser", FirstName: "Franchise", LastName: "Owner"},
-		{Email: "manager1@1.ru", Password: "qwerty", Role: "franchiser_manager", FirstName: "Александр", LastName: "Петров"},
-		{Email: "dealer1@1.ru", Password: "qwerty", Role: "dealer", FirstName: "Иван", LastName: "Смирнов"},
-		{Email: "salon1@1.ru", Password: "qwerty", Role: "salon_manager", FirstName: "Екатерина", LastName: "Сидорова"},
+		{Email: "admin@mail.ru", Role: "super_admin", FirstName: "Super", LastName: "Admin"},
+		{Email: "fr@mail.ru", Role: "franchiser", FirstName: "Franchise", LastName: "Owner"},
+		{Email: "manager1@1.ru", Role: "franchiser_manager", FirstName: "Александр", LastName: "Петров"},
+		{Email: "dealer1@1.ru", Role: "dealer", FirstName: "Иван", LastName: "Смирнов"},
+		{Email: "salon1@1.ru", Role: "salon_manager", FirstName: "Екатерина", LastName: "Сидорова"},
 	}
 
 	for _, u := range users {
@@ -31,7 +66,7 @@ func SeedUsers(db *gorm.DB) error {
 			continue
 		}
 
-		hashed, err := bcrypt.GenerateFromPassword([]byte(u.Password), bcrypt.DefaultCost)
+		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 		if err != nil {
 			return err
 		}
@@ -59,10 +94,10 @@ func SeedUsers(db *gorm.DB) error {
 
 func SeedGoals(db *gorm.DB) error {
 	today := time.Now().Format("2006-01-02")
-	
+
 	goals := []struct {
-		SalesPlan    float64
-		SalesFact   float64
+		SalesPlan  float64
+		SalesFact  float64
 		Role       string
 		TargetDate string
 	}{
@@ -87,8 +122,10 @@ func SeedGoals(db *gorm.DB) error {
 			continue
 		}
 
-		db.Exec(`INSERT INTO goals (id, assignee_id, sales_plan, sales_fact, role, target_date, status)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, 'active')`,
+		// assigner_id подставляется как NULL: в фиксированной схеме
+		// колонка nullable, сеялка не назначает цели от чужого лица.
+		db.Exec(`INSERT INTO goals (id, assigner_id, assignee_id, sales_plan, sales_fact, role, target_date, status)
+			VALUES (gen_random_uuid(), NULL, $1, $2, $3, $4, $5, 'active')`,
 			userID, g.SalesPlan, g.SalesFact, g.Role, g.TargetDate)
 		log.Printf("Goal created: %s plan=%v fact=%v", g.Role, g.SalesPlan, g.SalesFact)
 	}
@@ -97,6 +134,11 @@ func SeedGoals(db *gorm.DB) error {
 }
 
 func SeedChecklists(db *gorm.DB) error {
+	if !tableExists(db, "checklists") {
+		log.Printf("Warning: table 'checklists' does not exist, skipping SeedChecklists")
+		return nil
+	}
+
 	checklists := []struct {
 		Title       string
 		Description string
@@ -115,8 +157,8 @@ func SeedChecklists(db *gorm.DB) error {
 			continue
 		}
 
-		db.Exec(`INSERT INTO checklists (id, assignee_id, title, description, status, created_at, updated_at)
-			VALUES (gen_random_uuid(), $1, $2, $3, 'pending', NOW(), NOW())`,
+		db.Exec(`INSERT INTO checklists (id, user_id, assigned_to, title, description, status, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, $1, $2, $3, 'pending', NOW(), NOW())`,
 			userID, c.Title, c.Description)
 		log.Printf("Checklist created: %s", c.Title)
 	}
@@ -125,10 +167,15 @@ func SeedChecklists(db *gorm.DB) error {
 }
 
 func SeedAlerts(db *gorm.DB) error {
+	if !tableExists(db, "alerts") {
+		log.Printf("Warning: table 'alerts' does not exist, skipping SeedAlerts")
+		return nil
+	}
+
 	alerts := []struct {
-		Category   string
-		Priority   string
-		Title      string
+		Category    string
+		Priority    string
+		Title       string
 		Description string
 	}{
 		{Category: "plan", Priority: "critical", Title: "План выполнен на 65%", Description: "Дилер Москва: план 15М, факт 9.7М"},

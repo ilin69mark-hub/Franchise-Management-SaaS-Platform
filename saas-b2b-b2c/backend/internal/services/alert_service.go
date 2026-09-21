@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -201,7 +202,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 				TenantID:  salonID,
 				Type:      models.NotificationTypeSystem,
 				Title:     "Падение конверсии",
-				Message:   "Конверсия упала на " + formatFloat(drop) + "% относительно среднего",
+				Message:   "Конверсия упала на " + formatFloat(drop) + " относительно среднего",
 				IsRead:    false,
 				Data:      mustJson(map[string]string{"type": "conversion_drop"}),
 				CreatedAt: now,
@@ -231,7 +232,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 				TenantID:  salonID,
 				Type:      models.NotificationTypeSystem,
 				Title:     "Падение трафика",
-				Message:   "Трафик упал на " + formatFloat(drop) + "% относительно среднего",
+				Message:   "Трафик упал на " + formatFloat(drop) + " относительно среднего",
 				IsRead:    false,
 				Data:      mustJson(map[string]string{"type": "traffic_drop"}),
 				CreatedAt: now,
@@ -249,5 +250,5 @@ func mustJson(v interface{}) string {
 }
 
 func formatFloat(v float64) string {
-	return string(rune(int(v)+'0')) + "%"
+	return strconv.FormatFloat(v, 'f', 0, 64) + "%"
 }

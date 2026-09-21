@@ -1,5 +1,17 @@
 import { useAlertStore } from '@/store/alertsStore';
 
+jest.mock('@/api/axiosClient', () => ({
+  get: jest.fn(),
+  post: jest.fn(),
+  patch: jest.fn(),
+  put: jest.fn(),
+  delete: jest.fn(),
+}));
+
+import apiClient from '@/api/axiosClient';
+
+const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;
+
 describe('alertsStore', () => {
   beforeEach(() => {
     useAlertStore.setState({
@@ -8,6 +20,7 @@ describe('alertsStore', () => {
       settings: null,
       isLoading: false,
     });
+    jest.clearAllMocks();
   });
 
   describe('initial state', () => {
@@ -81,20 +94,12 @@ describe('alertsStore', () => {
 
   describe('loadAlerts async', () => {
     it('sets loading true during fetch', async () => {
-      global.fetch = jest.fn().mockImplementation(() => 
-        Promise.resolve({
-          json: () => Promise.resolve([
-            { id: '1', type: 'billing' as const, title: 'Alert', message: 'Msg', timestamp: '2026-01-01', read: false },
-          ]),
-        })
-      ) as jest.Mock;
-
       const loadPromise = useAlertStore.getState().loadAlerts();
-      
+
       expect(useAlertStore.getState().isLoading).toBe(true);
-      
+
       await loadPromise;
-      
+
       expect(useAlertStore.getState().isLoading).toBe(false);
     });
 
@@ -103,11 +108,7 @@ describe('alertsStore', () => {
         { id: '1', type: 'billing' as const, title: 'Alert 1', message: 'Msg 1', timestamp: '2026-01-01', read: false },
       ];
 
-      global.fetch = jest.fn().mockImplementation(() => 
-        Promise.resolve({
-          json: () => Promise.resolve(mockAlerts),
-        })
-      ) as jest.Mock;
+      (mockApiClient.get as jest.Mock).mockResolvedValue({ data: mockAlerts });
 
       await useAlertStore.getState().loadAlerts();
 
@@ -116,11 +117,7 @@ describe('alertsStore', () => {
     });
 
     it('handles empty alerts response', async () => {
-      global.fetch = jest.fn().mockImplementation(() => 
-        Promise.resolve({
-          json: () => Promise.resolve([]),
-        })
-      ) as jest.Mock;
+      (mockApiClient.get as jest.Mock).mockResolvedValue({ data: [] });
 
       await useAlertStore.getState().loadAlerts();
 
@@ -159,9 +156,7 @@ describe('alertsStore', () => {
         unreadCount: 1,
       });
 
-      global.fetch = jest.fn().mockImplementation(() => 
-        Promise.resolve({})
-      ) as jest.Mock;
+      (mockApiClient.patch as jest.Mock).mockResolvedValue({});
 
       await useAlertStore.getState().markAsRead('nonexistent');
 
@@ -171,22 +166,17 @@ describe('alertsStore', () => {
 
   describe('updateSettings async', () => {
     it('calls API and reloads alerts', async () => {
-      const fetchMock = jest.fn().mockImplementation(() => 
-        Promise.resolve({ json: () => Promise.resolve([]) })
-      ) as jest.Mock;
-      global.fetch = fetchMock;
+      (mockApiClient.put as jest.Mock).mockResolvedValue({});
+      (mockApiClient.get as jest.Mock).mockResolvedValue({ data: [] });
 
       await useAlertStore.getState().updateSettings({
         channels: ['telegram'],
       });
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        '/api/admin/alert-settings',
-        expect.objectContaining({
-          method: 'PUT',
-          body: expect.any(String),
-        })
-      );
+      expect(mockApiClient.put).toHaveBeenCalledWith('/admin/alert-settings', {
+        channels: ['telegram'],
+      });
+      expect(mockApiClient.get).toHaveBeenCalledWith('/admin/alerts/unread');
     });
   });
 });

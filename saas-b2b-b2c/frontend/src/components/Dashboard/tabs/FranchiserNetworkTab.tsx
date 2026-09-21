@@ -327,12 +327,9 @@ const FranchiserNetworkTab: React.FC<FranchiserNetworkTabProps> = ({ summary }) 
           columns={columns}
           rowKey="id"
           pagination={false}
-          rowStyle={(record) => ({
-            background: getHeatmapColor(getTerritoryStatus(record)) + '20',
-          })}
           onRow={(record) => ({
             onClick: () => setSelectedManager(record.id),
-            style: { cursor: 'pointer' },
+            style: { cursor: 'pointer', background: getHeatmapColor(getTerritoryStatus(record)) + '20' },
           })}
         />
       </Card>

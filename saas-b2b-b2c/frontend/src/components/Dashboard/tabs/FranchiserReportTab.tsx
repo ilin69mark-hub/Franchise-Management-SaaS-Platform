@@ -199,7 +199,7 @@ const FranchiserReportTab: React.FC = () => {
               <Col span={6}>
                 <Space>
                   <Text strong>Тренд:</Text>
-                  <Text mark={executive.trend === 'up' ? '🟢' : executive.trend === 'down' ? '🔴' : '🟡'}>
+                  <Text mark={executive.trend === 'up' || executive.trend === 'down'}>
                     {executive.trend === 'up' ? 'Рост' : executive.trend === 'down' ? 'Падение' : 'Стабильно'}
                   </Text>
                 </Space>

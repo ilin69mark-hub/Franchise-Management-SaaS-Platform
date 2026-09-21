@@ -200,7 +200,8 @@ const TerritoryFunnelTab: React.FC<TerritoryFunnelTabProps> = ({ loading }) => {
               .map((d, i) => (
                 <Line
                   key={d.dealerId}
-                  type={d.dealerId === '3' ? 'dashed' : 'monotone'}
+                  type="monotone"
+                  strokeDasharray={d.dealerId === '3' ? '5 5' : undefined}
                   dataKey={d.dealerName}
                   stroke={colors[i % colors.length]}
                   strokeWidth={d.dealerId === '3' ? 2 : 1}

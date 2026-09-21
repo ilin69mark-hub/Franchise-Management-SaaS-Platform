@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"franchise-saas-backend/internal/models"
 
@@ -205,6 +206,47 @@ func TestScheduleService_UpdateEvent_Error(t *testing.T) {
 	err := service.UpdateEvent(context.Background(), eventID, &models.UpdateScheduleEventRequest{Title: "Test"})
 
 	assert.Error(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestScheduleService_UpdateEvent_InvalidStartTime(t *testing.T) {
+	mockRepo := new(MockScheduleRepo)
+	service := NewScheduleService(mockRepo)
+
+	err := service.UpdateEvent(context.Background(), uuid.New(), &models.UpdateScheduleEventRequest{StartTime: "not-a-time"})
+
+	assert.Error(t, err)
+	assert.Equal(t, "invalid start_time format", err.Error())
+	mockRepo.AssertNotCalled(t, "UpdateEvent")
+}
+
+func TestScheduleService_UpdateEvent_InvalidEndTime(t *testing.T) {
+	mockRepo := new(MockScheduleRepo)
+	service := NewScheduleService(mockRepo)
+
+	err := service.UpdateEvent(context.Background(), uuid.New(), &models.UpdateScheduleEventRequest{StartTime: "2024-01-15T10:00:00Z", EndTime: "bad-time"})
+
+	assert.Error(t, err)
+	assert.Equal(t, "invalid end_time format", err.Error())
+	mockRepo.AssertNotCalled(t, "UpdateEvent")
+}
+
+func TestScheduleService_UpdateEvent_TimesParsed(t *testing.T) {
+	mockRepo := new(MockScheduleRepo)
+	service := NewScheduleService(mockRepo)
+
+	eventID := uuid.New()
+	start := "2024-01-15T10:00:00Z"
+	parsedStart, _ := time.Parse(time.RFC3339, start)
+
+	mockRepo.On("UpdateEvent", mock.Anything, eventID, mock.MatchedBy(func(u map[string]interface{}) bool {
+		st, ok := u["start_time"].(time.Time)
+		return ok && st.Equal(parsedStart)
+	})).Return(nil)
+
+	err := service.UpdateEvent(context.Background(), eventID, &models.UpdateScheduleEventRequest{StartTime: start})
+
+	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
 }
 

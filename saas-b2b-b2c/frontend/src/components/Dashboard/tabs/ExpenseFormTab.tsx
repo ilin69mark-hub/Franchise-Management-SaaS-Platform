@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { UploadProps } from 'antd';
+import apiClient from '@/api/axiosClient';
 
 const { Text, Title } = Typography;
 const { RangePicker } = DatePicker;
@@ -54,23 +55,26 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
   const fetchExpenses = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`/api/dealer/expenses?month=${monthStr}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
+      let data: ExpenseRecord | null = null;
+      try {
+        const res = await apiClient.get('/dealer/expenses', { params: { month: monthStr } });
+        data = res.data;
+      } catch (e) {
+        // 404/нет данных — переходим к проверке прошлого месяца
+      }
+      if (data) {
         setInitialData(data);
         form.setFieldsValue(data);
       } else {
         setInitialData(null);
         form.resetFields();
-        const prevRes = await fetch(`/api/dealer/expenses?month=${dayjs(selectedMonth).subtract(1, 'month').format('YYYY-MM')}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (prevRes.ok) {
-          const prevData = await prevRes.json();
-          setPrevMonthData(prevData);
+        try {
+          const prevRes = await apiClient.get('/dealer/expenses', {
+            params: { month: dayjs(selectedMonth).subtract(1, 'month').format('YYYY-MM') },
+          });
+          setPrevMonthData(prevRes.data);
+        } catch (e) {
+          // Нет данных за прошлый месяц
         }
       }
     } catch (e) {
@@ -144,23 +148,11 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
       if (onSave) {
         await onSave(payload);
       } else {
-        const token = localStorage.getItem('accessToken');
-        const res = await fetch('/api/dealer/expenses', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(payload),
-        });
-        if (res.ok) {
-          message.success('Расходы сохранены');
-          setInitialData(payload);
-          setHasChanges(false);
-          fetchExpenses();
-        } else {
-          message.error('Ошибка сохранения');
-        }
+        await apiClient.post('/dealer/expenses', payload);
+        message.success('Расходы сохранены');
+        setInitialData(payload);
+        setHasChanges(false);
+        fetchExpenses();
       }
     } catch (e) {
       message.error('Ошибка сохранения');
@@ -180,24 +172,14 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
       } else {
         const formData = new FormData();
         formData.append('file', file);
-        
-        const token = localStorage.getItem('accessToken');
-        const res = await fetch('/api/dealer/expenses/import', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          form.setFieldsValue(data);
-          setHasChanges(true);
-          message.success('Импорт завершён');
-          onSuccess?.('ok');
-        } else {
-          message.error('Ошибка импорта');
-          onError?.(new Error('Import failed'));
-        }
+
+        const res = await apiClient.post('/dealer/expenses/import', formData);
+
+        const data = res.data;
+        form.setFieldsValue(data);
+        setHasChanges(true);
+        message.success('Импорт завершён');
+        onSuccess?.('ok');
       }
     } catch (e) {
       message.error('Ошибка импорта');

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"log"
 	"net/http"
 
@@ -18,6 +19,20 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 	return &AuthHandler{service: service}
 }
 
+// allowedRegisterRoles - роли, которые пользователь может выбрать при
+// самостоятельной регистрации. Ни super_admin, ни другие неизвестные роли
+// недопустимы (иначе это privilege escalation).
+var allowedRegisterRoles = map[models.Role]bool{
+	models.RoleFranchisor:        true,
+	models.RoleFranchisorManager: true,
+	models.RoleDealer:            true,
+	models.RoleDealerManager:     true,
+}
+
+func isAllowedRegisterRole(role models.Role) bool {
+	return allowedRegisterRoles[role]
+}
+
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.UserRegisterRequest
 
@@ -27,8 +42,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	if req.Email == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email and password are required"})
+		return
+	}
+
 	if req.Role == "" {
 		req.Role = models.RoleFranchisor
+	}
+
+	if !isAllowedRegisterRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+		return
 	}
 
 	user := &models.User{
@@ -55,7 +80,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// ИСПРАВЛЕНО: Передаем user.SalonID
-	token, refresh, _ := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+	token, refresh, err := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, models.AuthResponse{
 		User:         *user,
@@ -73,12 +102,20 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	user, err := h.service.Authenticate(req.Email, req.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrUserBlocked) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked"})
+			return
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
 	// ИСПРАВЛЕНО: Передаем user.SalonID (чтобы токен содержал актуальный салон)
-	token, refresh, _ := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+	token, refresh, err := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
 
 	c.JSON(http.StatusOK, models.AuthResponse{
 		User:         *user,
@@ -106,4 +143,22 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		"token":         access,
 		"refresh_token": refresh,
 	})
+}
+
+// Logout - отзывает refresh token (по jti) и завершает сессию.
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.service.Logout(req.RefreshToken); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }

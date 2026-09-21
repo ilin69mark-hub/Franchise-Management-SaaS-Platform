@@ -32,6 +32,17 @@ postgres_data/
 .DS_Store
 Thumbs.db
 
+# Go build artifacts
+backend/backend
+backend/main
+backend/server
+
+# Stray build artifacts / root junk (never commit binaries)
+/b80
+/backend_bin
+/Paid
+/logs.txt
+
 # Coverage
 coverage/
 .nyc_output/

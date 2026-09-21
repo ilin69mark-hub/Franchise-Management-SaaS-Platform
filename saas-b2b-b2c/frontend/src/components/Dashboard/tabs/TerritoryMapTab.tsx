@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Input, Select, Collapse, List, Avatar, Tooltip, Progress, Segmented, Spin, Button } from 'antd';
 import { ShopOutlined, WarningOutlined, CheckCircleOutlined, ClockCircleOutlined, SearchOutlined, ArrowUpOutlined, ArrowDownOutlined, DollarOutlined, PercentageOutlined, RiseOutlined, UserOutlined, AlertOutlined, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useTerritoryManagerStore, DealerMetrics } from '@/store/territoryManagerStore';
+import apiClient from '@/api/axiosClient';
 
 const { Text } = Typography;
 const { Search } = Input;
@@ -39,7 +40,7 @@ const TerritoryMapTab: React.FC<TerritoryMapTabProps> = ({ dealers: initialDeale
   const filteredDealers = useMemo(() => {
     return dealers.filter(d => {
       const matchesSearch = d.dealerName.toLowerCase().includes(searchText.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
+      const matchesStatus = statusFilter === 'all' || statusFilter === 'leaders' || statusFilter === 'problem' || d.status === statusFilter;
       const matchesLeader = statusFilter === 'leaders' ? d.planPercent >= 100 : true;
       const matchesProblem = statusFilter === 'problem' ? d.planPercent < 70 : true;
       return matchesSearch && matchesStatus && (statusFilter !== 'leaders' || matchesLeader) && (statusFilter !== 'problem' || matchesProblem);
@@ -58,9 +59,9 @@ const TerritoryMapTab: React.FC<TerritoryMapTabProps> = ({ dealers: initialDeale
     const totalPlan = dealers.reduce((s, d) => s + (d.plan || 0), 0);
     const totalFact = dealers.reduce((s, d) => s + (d.fact || 0), 0);
     const avgConversion = dealers.length ? dealers.reduce((s, d) => s + d.conversion, 0) / dealers.length : 0;
-    const avgMargin = dealers.length ? dealers.reduce((s, d) => s + d.margin, 0) / dealers.length : 0;
+    const avgMargin = dealers.length ? dealers.reduce((s, d) => s + (d.margin || 0), 0) / dealers.length : 0;
     const redZoneCount = dealers.filter(d => d.status === 'red').length;
-    const totalDebt = dealers.reduce((s, d) => s + d.debt, 0);
+    const totalDebt = dealers.reduce((s, d) => s + (d.debt || 0), 0);
     return { totalPlan, totalFact, avgConversion, avgMargin, redZoneCount, totalDebt };
   }, [dealers]);
 
@@ -78,14 +79,8 @@ const TerritoryMapTab: React.FC<TerritoryMapTabProps> = ({ dealers: initialDeale
 
   const fetchDealerDetails = async (dealerId: string) => {
     try {
-      const token = localStorage.getItem('accessToken');
-      const res = await fetch(`/api/franchiser/dealers/${dealerId}/details`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDetailData(data);
-      }
+      const res = await apiClient.get(`/franchiser/dealers/${dealerId}/details`);
+      setDetailData(res.data);
     } catch (e) {
       setDetailData({
         dealerId,
@@ -408,7 +403,7 @@ const TerritoryMapTab: React.FC<TerritoryMapTabProps> = ({ dealers: initialDeale
             expandedRowRender: () => renderDetailPanel(),
             rowExpandable: () => true,
           }}
-          expandedRowKeys={[expandedDealer]}
+          expandedRowKeys={expandedDealer ? [expandedDealer] : []}
           onExpand={(expanded, record) => handleExpand(record.dealerId)}
         />
       </Card>

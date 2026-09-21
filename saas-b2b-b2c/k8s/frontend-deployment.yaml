@@ -20,12 +20,9 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: ghcr.io/REPLACE_WITH_ORG/franchise-saas/frontend:latest
+          image: ghcr.io/saas-b2b-b2c/franchise-saas/frontend:latest
           ports:
             - containerPort: 3000
-          env:
-            - name: NEXT_PUBLIC_API_URL
-              value: "http://franchise-backend:8080"
           livenessProbe:
             httpGet:
               path: /

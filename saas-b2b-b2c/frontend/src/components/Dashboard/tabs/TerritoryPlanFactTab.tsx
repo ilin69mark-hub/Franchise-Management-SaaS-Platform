@@ -275,9 +275,9 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
             <RechartsTooltip />
             <Legend />
             <Area type="monotone" dataKey="fact" fill="#ff4d4f" fillOpacity={0.2} stroke="transparent" />
-            <Line type="dashed" dataKey="plan" stroke="#d9d9d9" strokeDasharray="5 5" name="План" />
-            <Line type="solid" dataKey="fact" stroke="#52c41a" strokeWidth={2} name="Факт" />
-            <Line type="dashed" dataKey="forecast" stroke="#1890ff" strokeDasharray="3 3" name="Прогноз" />
+            <Line type="monotone" dataKey="plan" stroke="#d9d9d9" strokeDasharray="5 5" name="План" />
+            <Line type="monotone" dataKey="fact" stroke="#52c41a" strokeWidth={2} name="Факт" />
+            <Line type="monotone" dataKey="forecast" stroke="#1890ff" strokeDasharray="3 3" name="Прогноз" />
           </ComposedChart>
         </ResponsiveContainer>
       </Card>

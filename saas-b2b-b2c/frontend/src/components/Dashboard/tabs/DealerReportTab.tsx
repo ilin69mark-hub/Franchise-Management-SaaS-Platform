@@ -1,6 +1,6 @@
 // src/components/Dashboard/tabs/DealerReportTab.tsx
 import React, { useState, useMemo } from 'react';
-import { Card, Row, Col, Table, Tag, Button, Space, Modal, Form, Input, Select, Typography, Empty, Spin, Progress, message, DatePicker, List, Avatar, Divider } from 'antd';
+import { Card, Row, Col, Table, Tag, Button, Space, Modal, Form, Input, Select, Typography, Empty, Spin, Progress, Statistic, message, DatePicker, List, Avatar, Divider } from 'antd';
 import { 
   FilePdfOutlined, 
   DownloadOutlined, 

@@ -1,0 +1,34 @@
+package middleware
+
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
+
+// RequireRole returns a middleware that allows the request only when the
+// authenticated user's role (set as "role" in the context by AuthMiddleware)
+// is present in the provided allow-list. Otherwise it aborts with 403.
+func RequireRole(roles ...string) gin.HandlerFunc {
+	allowed := make(map[string]struct{}, len(roles))
+	for _, r := range roles {
+		allowed[r] = struct{}{}
+	}
+
+	return func(c *gin.Context) {
+		role := c.GetString("role")
+		if role == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			c.Abort()
+			return
+		}
+
+		if _, ok := allowed[role]; !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}

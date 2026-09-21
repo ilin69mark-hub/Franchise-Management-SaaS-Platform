@@ -58,7 +58,7 @@ export const fetchChecklists = createAsyncThunk<Checklist[], void, { rejectValue
   'checklist/fetchChecklists',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get<Checklist[]>('/api/v1/checklists');
+      const response = await apiClient.get<Checklist[]>('/checklists');
       return response.data;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка получения чек-листов'));
@@ -70,7 +70,7 @@ export const fetchChecklistById = createAsyncThunk<Checklist, string, { rejectVa
   'checklist/fetchChecklistById',
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.get<Checklist>(`/api/v1/checklists/${id}`);
+      const response = await apiClient.get<Checklist>(`/checklists/${id}`);
       return response.data;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка получения чек-листа'));
@@ -84,7 +84,7 @@ export const createChecklist = createAsyncThunk<Checklist, Partial<Checklist>, {
   async (checklistData, { rejectWithValue }) => {
     try {
       // Бэкенд должен сам добавить id, user_id, tenant_id, created_at и т.д.
-      const response = await apiClient.post<Checklist>('/api/v1/checklists', checklistData);
+      const response = await apiClient.post<Checklist>('/checklists', checklistData);
       return response.data;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка создания чек-листа'));
@@ -96,7 +96,7 @@ export const updateChecklist = createAsyncThunk<Checklist, { id: string } & Part
   'checklist/updateChecklist',
   async ({ id, ...updateData }, { rejectWithValue }) => {
     try {
-      const response = await apiClient.put<Checklist>(`/api/v1/checklists/${id}`, updateData);
+      const response = await apiClient.put<Checklist>(`/checklists/${id}`, updateData);
       return response.data;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка обновления чек-листа'));
@@ -108,7 +108,7 @@ export const deleteChecklist = createAsyncThunk<string, string, { rejectValue: A
   'checklist/deleteChecklist',
   async (id, { rejectWithValue }) => {
     try {
-      await apiClient.delete(`/api/v1/checklists/${id}`);
+      await apiClient.delete(`/checklists/${id}`);
       return id;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка удаления чек-листа'));
@@ -120,7 +120,7 @@ export const completeChecklist = createAsyncThunk<Checklist, string, { rejectVal
   'checklist/completeChecklist',
   async (id, { rejectWithValue }) => {
     try {
-      const response = await apiClient.post<Checklist>(`/api/v1/checklists/${id}/complete`, {});
+      const response = await apiClient.post<Checklist>(`/checklists/${id}/complete`, {});
       return response.data;
     } catch (error) {
       return rejectWithValue(handleAsyncError(error, 'Ошибка завершения чек-листа'));

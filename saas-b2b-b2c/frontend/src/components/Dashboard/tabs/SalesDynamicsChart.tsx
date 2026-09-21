@@ -105,7 +105,7 @@ const SalesDynamicsChart: React.FC<SalesDynamicsChartProps> = ({ data, view = 'm
           />
 
           <Line
-            type="dash"
+            type="monotone"
             dataKey="plan"
             stroke="#8c8c8c"
             strokeWidth={2}
@@ -125,7 +125,7 @@ const SalesDynamicsChart: React.FC<SalesDynamicsChartProps> = ({ data, view = 'm
           />
 
           <Line
-            type="dash"
+            type="monotone"
             dataKey="forecast"
             stroke="#1890ff"
             strokeWidth={2}

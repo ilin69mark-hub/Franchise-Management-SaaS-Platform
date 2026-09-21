@@ -21,10 +21,17 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		tokenString := ""
-		if len(authHeader) >= 7 && strings.ToUpper(authHeader[0:6]) == "BEARER" {
+		if len(authHeader) >= 7 && strings.HasPrefix(strings.ToUpper(authHeader), "BEARER ") {
 			tokenString = authHeader[7:]
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header format"})
+			c.Abort()
+			return
+		}
+
+		secret := viper.GetString("jwt_secret")
+		if secret == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
 		}
@@ -33,8 +40,8 @@ func AuthMiddleware() gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("unexpected signing method")
 			}
-			return []byte(viper.GetString("jwt_secret")), nil
-		})
+			return []byte(secret), nil
+		}, jwt.WithValidMethods([]string{"HS256"}))
 
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
