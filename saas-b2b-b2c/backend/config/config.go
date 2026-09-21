@@ -53,7 +53,7 @@ func LoadConfig() *Config {
 	}
 	
 	if config.JWTSecret == "" {
-		config.JWTSecret = "CHANGE_ME_JWT_SECRET"
+		config.JWTSecret = "unsafe-default-jwt-secret-change-me"
 	}
 	
 	if config.RedisURL == "" {
@@ -73,7 +73,7 @@ func LoadConfig() *Config {
 	}
 	
 	if config.DBPassword == "" {
-		config.DBPassword = "password"
+		config.DBPassword = "postgres"
 	}
 	
 	if config.DBName == "" {
