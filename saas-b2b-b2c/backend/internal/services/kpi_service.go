@@ -1177,14 +1177,17 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		Amount   float64
 	}
 
+	// Период = текущий месяц в формате YYYY-MM (таблица dealer_expenses)
+	period := targetDate.Format("2006-01")
+
 	var expenses []Expense
 	// Читаем расходы из БД - используем raw SQL для безопасности
 	rows, err := s.DB.Raw(`
 		SELECT category, SUM(amount) as amount 
 		FROM dealer_expenses 
-		WHERE dealer_id = ? AND period = '2026-04'
+		WHERE dealer_id = ? AND period = ?
 		GROUP BY category
-	`, userID).Rows()
+	`, userID, period).Rows()
 
 	if err == nil {
 		defer rows.Close()
@@ -1207,23 +1210,9 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		resp.Marketing = expenseMap["marketing"]
 		resp.Defects = expenseMap["defects"]
 		resp.OtherExpenses = expenseMap["other"]
-	} else {
-		// Fallback если таблица пустая
-		resp.Rent = 430000
 	}
 
-	// Fallback только если все нули (данных нет в таблице)
-	if resp.Rent == 0 && resp.Utilities == 0 && resp.Payroll == 0 {
-		resp.Rent = 430000
-		resp.Utilities = 45000
-		resp.Payroll = 650000
-		resp.Taxes = 180000
-		resp.Logistics = 95000
-		resp.Marketing = 60000
-		resp.Defects = 35000
-		resp.OtherExpenses = 0
-		resp.Bonus = 0
-	}
+	// Если в таблице нет данных - возвращаем нули, не фейковые числа
 
 	// Чистая прибыль
 	resp.NetProfit = resp.Revenue - resp.COGS - resp.Rent - resp.Utilities - resp.Payroll - resp.Taxes - resp.Logistics - resp.Marketing - resp.Defects - resp.OtherExpenses - resp.Bonus
@@ -1234,8 +1223,22 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 	dailyAvg := resp.NetProfit / float64(daysInMonth)
 	resp.NetProfitForecast = resp.NetProfit + (dailyAvg * float64(daysLeft))
 
-	// Прошлый месяц (заглушка - 80% от текущего)
-	resp.PrevMonthNetProfit = resp.NetProfit * 0.8
+	// Прошлый месяц: выручка и расходы из БД, а не жёсткий коэффициент
+	prevFirstOfMonth := firstOfMonth.AddDate(0, -1, 0)
+	prevLastOfMonth := firstOfMonth.AddDate(0, 0, -1)
+	var prevRevenue float64
+	s.DB.Model(&models.Lead{}).
+		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, prevFirstOfMonth, prevLastOfMonth).
+		Select("COALESCE(SUM(budget), 0)").Scan(&prevRevenue)
+
+	prevPeriod := prevFirstOfMonth.Format("2006-01")
+	var prevExpensesTotal float64
+	s.DB.Raw(`
+		SELECT COALESCE(SUM(amount), 0) FROM dealer_expenses 
+		WHERE dealer_id = ? AND period = ?
+	`, userID, prevPeriod).Scan(&prevExpensesTotal)
+
+	resp.PrevMonthNetProfit = prevRevenue - (prevRevenue * 0.65) - prevExpensesTotal
 
 	// Заполняем expense_breakdown
 	expenseItems := []struct {
@@ -2297,18 +2300,14 @@ func (s *KPIService) GetDealerMarketingBudget(ctx context.Context, userID uuid.U
 		WHERE dealer_id = ? AND quarter = ?
 	`, userID.String(), quarter).Scan(&mb)
 
-	useDefaults := func() {
-		resp.TotalAmount = 200000
-		resp.UsedAmount = 60000
-	}
-
 	switch {
 	case result.Error != nil && isMissingTableErr(result.Error):
-		useDefaults()
+		return nil, result.Error
 	case result.Error != nil:
 		return nil, result.Error
 	case result.RowsAffected == 0:
-		useDefaults()
+		resp.TotalAmount = 0
+		resp.UsedAmount = 0
 	default:
 		resp.TotalAmount = mb.TotalAmount
 		resp.UsedAmount = mb.UsedAmount

@@ -67,6 +67,11 @@ func runMigrations(db *gorm.DB) error {
 		migrateChecklistTemplateItems,
 		migrateAssignedChecklists,
 		migrateChecklistResponses,
+		migrateAlerts,
+		migrateDealerTasks,
+		migrateDealerRequests,
+		migrateMarketingBudgets,
+		migrateDealerExpenses,
 	}
 
 	for _, m := range migrations {
@@ -371,6 +376,90 @@ func migrateChecklistResponses(db *gorm.DB) error {
 			is_completed BOOLEAN DEFAULT FALSE,
 			response_text TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateAlerts(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS alerts (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID,
+			tenant_id UUID,
+			type VARCHAR(50),
+			category VARCHAR(50),
+			priority VARCHAR(50),
+			severity VARCHAR(20),
+			title VARCHAR(255),
+			message TEXT,
+			description TEXT,
+			link VARCHAR(500),
+			data TEXT,
+			is_read BOOLEAN DEFAULT FALSE,
+			status VARCHAR(50) DEFAULT 'new',
+			read_at TIMESTAMP,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateDealerTasks(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS dealer_tasks (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			dealer_id UUID,
+			tenant_id UUID,
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			status VARCHAR(50) DEFAULT 'pending',
+			priority VARCHAR(50) DEFAULT 'normal',
+			due_date TIMESTAMP,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateDealerRequests(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS dealer_requests (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			dealer_id UUID,
+			type VARCHAR(50),
+			description TEXT,
+			amount NUMERIC(12,2) DEFAULT 0,
+			status VARCHAR(50) DEFAULT 'pending',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateMarketingBudgets(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS marketing_budgets (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			dealer_id UUID,
+			quarter VARCHAR(20),
+			total_amount NUMERIC(12,2) DEFAULT 0,
+			used_amount NUMERIC(12,2) DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error
+}
+
+func migrateDealerExpenses(db *gorm.DB) error {
+	return db.Exec(`
+		CREATE TABLE IF NOT EXISTS dealer_expenses (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			dealer_id UUID,
+			category VARCHAR(50),
+			amount NUMERIC(12,2) DEFAULT 0,
+			period VARCHAR(20),
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`).Error
 }

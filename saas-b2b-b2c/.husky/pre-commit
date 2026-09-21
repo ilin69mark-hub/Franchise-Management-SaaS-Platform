@@ -1,0 +1,36 @@
+#!/bin/sh
+# Pre-commit hook: проверка форматирования Go и блокировка коммита секретов.
+# CI выполняет go vet/test/tsc/jest; локально ограничиваемся быстрыми проверками.
+
+# 1. gofmt для изменённых Go-файлов (пути из git относительно корня репо,
+#    бэкенд лежит в .../backend, модифицируем пути через реальный каталог)
+gofiles=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+if [ -n "$gofiles" ]; then
+    # Нормализуем пути: убираем относительный префикс к backend/ перед gofmt
+    unformatted=""
+    for f in $gofiles; do
+        case "$f" in
+            */backend/*)
+                rel=${f#*/backend/}
+                cd backend 2>/dev/null || continue
+                out=$(gofmt -l "$rel")
+                cd - >/dev/null 2>&1 || true
+                [ -n "$out" ] && unformatted="$unformatted $f"
+                ;;
+        esac
+    done
+    if [ -n "$unformatted" ]; then
+        echo "gofmt: следующие файлы не отформатированы:"
+        echo "$unformatted"
+        echo "Запустите: gofmt -w <файлы> и добавьте в индекс."
+        exit 1
+    fi
+fi
+
+# 2. Запрет коммита env-файлов с секретами (без .example)
+if git diff --cached --name-only | grep -E '(^|/)(\.env)(\.|$)' | grep -v '\.env\.example'; then
+    echo "Ошибка: коммит секретов запрещён (.env). Используйте .env.example."
+    exit 1
+fi
+
+exit 0

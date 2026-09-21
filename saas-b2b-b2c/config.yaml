@@ -1,4 +1,12 @@
-jwt_secret: CHANGE_ME_JWT_SECRET
+# Конфигурация по умолчанию для локальной разработки.
+# ПРОДАКШН-СЕКРЕТЫ НЕ ХРАНЯТСЯ В РЕПО. Задаются через переменные окружения:
+#   JWT_SECRET, DB_PASSWORD (которые перекрывают значения ниже).
+# Секреты для prod: docker-compose.prod.yml + k8s Secret / ExternalSecrets.
+
+# Swarm fix: убран хардкод-секрет jwt_secret. Пустое значение → fail-closed (401)
+# в auth_service.go / middleware/auth.go, пока JWT_SECRET не задан из env.
+jwt_secret: ""
+
 db_host: franchise-postgres
 db_port: 5432
 db_user: postgres

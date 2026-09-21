@@ -136,7 +136,7 @@ func TestKPIService_GetDealerRequests_RealErrorPropagates(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestKPIService_GetDealerMarketingBudget_DefaultsWhenNoRow(t *testing.T) {
+func TestKPIService_GetDealerMarketingBudget_NoRowReturnsZeros(t *testing.T) {
 	db := newTestSQLiteDB(t)
 	require.NoError(t, db.Exec(`
 		CREATE TABLE marketing_budgets (
@@ -146,10 +146,10 @@ func TestKPIService_GetDealerMarketingBudget_DefaultsWhenNoRow(t *testing.T) {
 	svc := NewKPIService(db, nil, nil)
 	resp, err := svc.GetDealerMarketingBudget(context.Background(), uuid.New(), "Q1-2026")
 	require.NoError(t, err)
-	require.Equal(t, 200000.0, resp.TotalAmount)
-	require.Equal(t, 60000.0, resp.UsedAmount)
-	require.Equal(t, 140000.0, resp.Remaining)
-	require.Equal(t, 30, resp.UsagePercent)
+	require.Equal(t, 0.0, resp.TotalAmount)
+	require.Equal(t, 0.0, resp.UsedAmount)
+	require.Equal(t, 0.0, resp.Remaining)
+	require.Equal(t, 0, resp.UsagePercent)
 }
 
 func TestKPIService_GetDealerMarketingBudget_ReadsRow(t *testing.T) {
@@ -172,12 +172,10 @@ func TestKPIService_GetDealerMarketingBudget_ReadsRow(t *testing.T) {
 	require.Equal(t, 20, resp.UsagePercent)
 }
 
-func TestKPIService_GetDealerMarketingBudget_MissingTableDefaults(t *testing.T) {
+func TestKPIService_GetDealerMarketingBudget_MissingTableReturnsError(t *testing.T) {
 	db := newTestSQLiteDB(t)
 
 	svc := NewKPIService(db, nil, nil)
-	resp, err := svc.GetDealerMarketingBudget(context.Background(), uuid.New(), "Q1-2026")
-	require.NoError(t, err)
-	require.Equal(t, 200000.0, resp.TotalAmount)
-	require.Equal(t, 60000.0, resp.UsedAmount)
+	_, err := svc.GetDealerMarketingBudget(context.Background(), uuid.New(), "Q1-2026")
+	require.Error(t, err)
 }

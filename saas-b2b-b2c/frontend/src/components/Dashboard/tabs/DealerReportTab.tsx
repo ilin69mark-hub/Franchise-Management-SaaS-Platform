@@ -341,7 +341,7 @@ const DealerReportTab: React.FC<DealerReportTabProps> = ({
                   </Col>
                 </Row>
                 <Progress 
-                  percent={Math.round((reportData.marketingBudget.used / reportData.marketingBudget.total) * 100)} 
+                  percent={reportData.marketingBudget.total > 0 ? Math.round((reportData.marketingBudget.used / reportData.marketingBudget.total) * 100) : 0} 
                   status="normal"
                 />
 
