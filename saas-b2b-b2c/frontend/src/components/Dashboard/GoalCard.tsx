@@ -32,16 +32,14 @@ const GoalCard: React.FC<GoalCardProps> = ({ date }) => {
 
   // ---------- Обработка ошибок ----------
   // Если сервер вернул 404 → план пока не создан
-  if (isError && (error as any)?.status === 404) {
+  if (isError && (error as { status?: number })?.status === 404) {
     return <Alert type="info" message="План не задан" showIcon />;
   }
 
   // Любые другие ошибки (401, 500, сеть и т.д.)
   if (isError) {
-    const errMsg =
-      (error as any)?.data?.error ||
-      (error as any)?.message ||
-      'Не удалось загрузить план';
+    const e = error as { data?: { error?: string }; message?: string };
+    const errMsg = e?.data?.error || e?.message || 'Не удалось загрузить план';
     return <Alert type="error" message={errMsg} showIcon />;
   }
 

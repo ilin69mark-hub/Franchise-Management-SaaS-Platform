@@ -26,13 +26,14 @@ interface SalesDynamicsChartProps {
   view?: 'monthly' | 'quarterly' | 'cumulative';
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type TooltipPayload = { name: string; color: string; value?: number };
+const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: TooltipPayload[]; label?: string }) => {
   if (active && payload && payload.length) {
     return (
       <Card size="small" style={{ background: '#fff' }}>
         <Space direction="vertical" size={0}>
           <strong>{label}</strong>
-          {payload.map((p: any) => (
+          {payload.map((p) => (
             <div key={p.name} style={{ color: p.color }}>
               {p.name}: {p.value?.toLocaleString()} ₽
             </div>

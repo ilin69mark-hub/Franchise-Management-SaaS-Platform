@@ -71,13 +71,14 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
         const res = await apiClient.get(`/territory/planfact?period=${period}`);
         const raw = res.data?.dealers || res.data || [];
         if (Array.isArray(raw) && raw.length > 0) {
-          const mapped = raw.map((d: any) => ({
-            dealerId: d.id || d.dealerId,
-            dealerName: d.dealer_name || d.dealerName,
+          type RawDealer = { id?: string; dealerId?: string; dealer_name?: string; dealerName?: string; plan?: number; sales_plan?: number; fact?: number; sales_fact?: number; forecast?: number };
+          const mapped = (raw as RawDealer[]).map((d) => ({
+            dealerId: d.id || d.dealerId || '',
+            dealerName: d.dealer_name || d.dealerName || '',
             plan: d.plan ?? d.sales_plan ?? 0,
             fact: d.fact ?? d.sales_fact ?? 0,
-            forecast: d.forecast ?? Math.round((d.fact ?? 0) * 1.1),
-          })).filter((d: any) => d.dealerId && d.dealerName);
+            forecast: d.forecast ?? Math.round((d.fact ?? d.sales_fact ?? 0) * 1.1),
+          })).filter((d) => d.dealerId && d.dealerName);
           if (!cancelled && mapped.length > 0) setDealersData(mapped);
         }
       } catch {
@@ -134,12 +135,13 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
         const res = await apiClient.get(`/territory/planfact?period=year`);
         const arr = res.data?.history || res.data?.months;
         if (Array.isArray(arr) && arr.length >= 6 && !cancelled) {
-          setDynamicsData(arr.slice(0, 6).map((r: any, i: number) => ({
+          type HistoryRow = { month?: string; plan?: number; fact?: number | null; forecast?: number | null };
+          setDynamicsData(arr.slice(0, 6).map((r: HistoryRow, i: number) => ({
             month: r.month || STUB_DYNAMICS[i].month,
             plan: r.plan ?? STUB_DYNAMICS[i].plan,
-            fact: r.fact ?? null,
-            forecast: r.forecast ?? STUB_DYNAMICS[i].forecast,
-          })));
+            fact: (r.fact ?? null) as number | null,
+            forecast: (r.forecast ?? STUB_DYNAMICS[i].forecast) as number | null,
+          })) as typeof STUB_DYNAMICS);
         }
       } catch {}
     };
@@ -185,12 +187,12 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
     { title: 'Дилер', dataIndex: 'dealerName', key: 'dealerName', render: (n: string, r: DeviationRow) => <Space><ShopOutlined style={{ color: r.deviation >= 0 ? '#52c41a' : '#ff4d4f' }} />{n}</Space> },
     { title: 'План', dataIndex: 'plan', key: 'plan', render: (v: number) => `${(v / 1000000).toFixed(1)} млн ₽` },
     { title: 'Факт', dataIndex: 'fact', key: 'fact', render: (v: number) => `${(v / 1000000).toFixed(1)} млн ₽` },
-    { title: 'Отклонение', key: 'deviation', render: (_: any, r: DeviationRow) => (
+    { title: 'Отклонение', key: 'deviation', render: (_: unknown, r: DeviationRow) => (
       <Tag color={r.deviation >= 0 ? 'green' : 'red'}>
         {(r.deviation / 1000000).toFixed(1)} млн ({r.deviationPercent.toFixed(0)}%)
       </Tag>
     )},
-    { title: 'Причина', key: 'reason', render: (_: any, r: DeviationRow) => (
+    { title: 'Причина', key: 'reason', render: (_: unknown, r: DeviationRow) => (
       <Select
         value={deviationReasons[r.dealerId]}
         onChange={(v) => handleReasonChange(r.dealerId, v)}
@@ -203,7 +205,7 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
       </Select>
     )},
     { title: 'Прогноз', dataIndex: 'forecast', key: 'forecast', render: (v: number) => `${(v / 1000000).toFixed(1)} млн ₽` },
-    { title: 'Действия', key: 'actions', render: (_: any, r: DeviationRow) => (
+    { title: 'Действия', key: 'actions', render: (_: unknown, r: DeviationRow) => (
       <Input.TextArea
         value={deviationActions[r.dealerId]}
         onChange={(e) => handleActionsChange(r.dealerId, e.target.value)}
@@ -235,8 +237,9 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
       a.download = `отчёт-${period}.pdf`;
       a.click();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      message.error(e?.response?.data?.error || 'Ошибка генерации отчёта');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      message.error(err?.response?.data?.error || 'Ошибка генерации отчёта');
     }
   };
 

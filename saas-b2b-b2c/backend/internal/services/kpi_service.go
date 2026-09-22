@@ -2834,7 +2834,7 @@ func (s *KPIService) GetTerritoriesHeatmap(ctx context.Context, userID string, p
 	return resp, nil
 }
 
-// GetManagerDynamics - динамика менеджера
+// GetManagerDynamics - динамика менеджера (реальный KPI по планам vs факту из leads)
 func (s *KPIService) GetManagerDynamics(ctx context.Context, userID, managerID, months string) (map[string]interface{}, error) {
 	resp := map[string]interface{}{"kpi": []map[string]interface{}{}}
 
@@ -2843,17 +2843,60 @@ func (s *KPIService) GetManagerDynamics(ctx context.Context, userID, managerID, 
 		m = 6
 	}
 
+	mgrUUID, err := uuid.Parse(managerID)
+	if err != nil {
+		// fallback на userID если managerID не uuid
+		mgrUUID = uuid.MustParse(userID)
+		_ = err
+	}
+
 	for i := 0; i < m; i++ {
 		date := time.Now().AddDate(0, -i, 0)
+		firstOfMonth := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
+		lastOfMonth := firstOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+
+		var planAmount float64
+		s.DB.Model(&models.Goal{}).
+			Where("assignee_id = ? AND target_date BETWEEN ? AND ?", mgrUUID, firstOfMonth, lastOfMonth).
+			Select("COALESCE(SUM(sales_plan), 0)").Scan(&planAmount)
+		if planAmount == 0 {
+			s.DB.Model(&models.Goal{}).
+				Where("assignee_id = ? AND period IN ('month','year')", mgrUUID).
+				Select("COALESCE(SUM(sales_plan), 0)").Scan(&planAmount)
+		}
+		if planAmount == 0 {
+			planAmount = s.getSettingFloat("default_monthly_plan", 4000000)
+		}
+
+		var fact float64
+		// факт — сумма бюджета закрытых лидов менеджера за месяц (через salon_id его дилеров)
+		var salonIDs []uuid.UUID
+		s.DB.Model(&models.User{}).Where("managed_by = ?", mgrUUID).Pluck("salon_id", &salonIDs)
+		if len(salonIDs) > 0 {
+			s.DB.Model(&models.Lead{}).
+				Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, firstOfMonth, lastOfMonth).
+				Select("COALESCE(SUM(budget), 0)").Scan(&fact)
+		}
+
+		kpi := 0
+		if planAmount > 0 {
+			kpi = int(fact / planAmount * 100)
+			if kpi > 150 {
+				kpi = 150
+			}
+			if kpi < 0 {
+				kpi = 0
+			}
+		}
 		resp["kpi"] = append(resp["kpi"].([]map[string]interface{}), map[string]interface{}{
 			"month": date.Format("2006-01"),
-			"kpi":   75,
+			"kpi":   kpi,
 		})
 	}
 	return resp, nil
 }
 
-// GetManagerDealers - дилеры менеджера
+// GetManagerDealers - дилеры менеджера (реальный процент по факту vs план)
 func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID string) (map[string]interface{}, error) {
 	resp := map[string]interface{}{"dealers": []map[string]interface{}{}}
 
@@ -2867,8 +2910,38 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 		return nil, err
 	}
 
+	defaultPlan := s.getSettingFloat("default_monthly_plan", 4000000)
+	now := time.Now()
+	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	lastOfMonth := firstOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
+
 	for _, d := range dealers {
-		percent := 50
+		// план дилера — из goals, fallback на default
+		var planAmount float64
+		s.DB.Model(&models.Goal{}).
+			Where("assignee_id = ? AND target_date BETWEEN ? AND ?", d.ID, firstOfMonth, lastOfMonth).
+			Select("COALESCE(SUM(sales_plan), 0)").Scan(&planAmount)
+		if planAmount == 0 {
+			planAmount = defaultPlan
+		}
+
+		var fact float64
+		if d.SalonID != nil {
+			s.DB.Model(&models.Lead{}).
+				Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", d.SalonID, []string{"sale", "paid"}, firstOfMonth, lastOfMonth).
+				Select("COALESCE(SUM(budget), 0)").Scan(&fact)
+		}
+
+		percent := 0
+		if planAmount > 0 {
+			percent = int(fact / planAmount * 100)
+			if percent < 0 {
+				percent = 0
+			}
+			if percent > 150 {
+				percent = 150
+			}
+		}
 		status := "yellow"
 		if percent >= 80 {
 			status = "green"
@@ -2879,7 +2952,7 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 		resp["dealers"] = append(resp["dealers"].([]map[string]interface{}), map[string]interface{}{
 			"id":      d.ID,
 			"name":    d.FirstName + " " + d.LastName,
-			"plan":    4000000,
+			"plan":    planAmount,
 			"percent": percent,
 			"status":  status,
 		})

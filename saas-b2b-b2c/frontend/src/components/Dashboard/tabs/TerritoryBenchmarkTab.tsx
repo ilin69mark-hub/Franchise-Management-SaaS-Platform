@@ -223,7 +223,7 @@ const TerritoryBenchmarkTab: React.FC<TerritoryBenchmarkTabProps> = ({ loading }
             </Select>
           </Col>
           <Col>
-            <Segmented value={activeBlock} onChange={(v) => setActiveBlock(v as any)} options={[
+            <Segmented value={activeBlock} onChange={(v) => setActiveBlock(v as 'margin' | 'structure' | 'risks' | 'index')} options={[
               { label: 'Маржинальность', value: 'margin' },
               { label: 'Структура', value: 'structure' },
               { label: 'Риски', value: 'risks' },

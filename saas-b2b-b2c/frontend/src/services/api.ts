@@ -21,7 +21,7 @@ export const apiSlice = createApi({
     baseUrl: `${(process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? (()=>{throw new Error('NEXT_PUBLIC_API_URL must be set in production')})() : 'http://localhost:8080'))}/api/v1`,
     prepareHeaders: (headers, { getState }) => {
       // Пытаемся взять токен из Redux‑стора
-      let token = (getState() as any).auth?.accessToken;
+      let token = (getState() as { auth?: { accessToken?: string } }).auth?.accessToken;
 
       // Если в сторе ничего, ищем в localStorage (на случай полной перезагрузки)
       if (!token && typeof window !== 'undefined') {

@@ -18,16 +18,16 @@ const RegisterPage: React.FC = () => {
     if (isAuthenticated) router.push('/');
   }, [isAuthenticated, router]);
 
-  const onFinish = async (values: any) => {
+  const onFinish = async (values: { email: string; password: string; firstName: string; lastName: string; companyName: string }) => {
     const payload = {
       email: values.email,
       password: values.password,
       first_name: values.firstName,
       last_name: values.lastName,
       company_name: values.companyName,
-      role: 'franchiser',
+      role: 'franchiser' as const,
     };
-    await dispatch((register as any)(payload));
+    await (dispatch as unknown as (a: unknown) => Promise<unknown>)(register(payload));
     router.push('/login');
   };
 

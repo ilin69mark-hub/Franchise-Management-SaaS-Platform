@@ -191,7 +191,7 @@ const TerritoryCommunicationsTab: React.FC<TerritoryCommunicationsTabProps> = ({
       <Card size="small" style={{ marginBottom: 16 }}>
         <Row gutter={16}>
           <Col>
-            <Segmented value={activeBlock} onChange={(v) => setActiveBlock(v as any)} options={[
+            <Segmented value={activeBlock} onChange={(v) => setActiveBlock(v as 'requests' | 'tasks' | 'history')} options={[
               { label: <Badge offset={[5, 0]}><span>Входящие запросы</span></Badge>, value: 'requests' },
               { label: 'Мои задачи', value: 'tasks' },
               { label: 'История', value: 'history' },
