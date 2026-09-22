@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Typography, Table, Tag, Spin, Progress, Avatar, Button, Segmented, Modal, Tooltip } from 'antd';
 import { UserOutlined, TeamOutlined, ArrowUpOutlined, ArrowDownOutlined, LineChartOutlined } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
+import type { User } from "@/types";
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
 interface SalonTeamTabProps {
-  user: any;
+  user: User;
 }
 
 interface SalesRepMetrics {
@@ -58,8 +59,8 @@ const SalonTeamTab: React.FC<SalonTeamTabProps> = ({ user }) => {
       const res = await apiClient.get(`/dashboard/team?period=${period}&date=${date}`);
       setData(res.data);
       setError(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ошибка загрузки данных');
+    } catch (e: unknown) { const err = e as { response?: { data?: { error?: string } } };
+      setError(err?.response?.data?.error || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
@@ -106,7 +107,7 @@ const SalonTeamTab: React.FC<SalonTeamTabProps> = ({ user }) => {
       title: 'Продавец',
       key: 'name',
       sorter: (a: SalesRepMetrics, b: SalesRepMetrics) => a.first_name.localeCompare(b.first_name),
-      render: (_: any, record: SalesRepMetrics) => (
+      render: (_: unknown, record: SalesRepMetrics) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Avatar icon={<UserOutlined />} style={{ backgroundColor: record.user_id === user.id ? '#52c41a' : '#1890ff' }} />
           <div>
@@ -204,7 +205,7 @@ const SalonTeamTab: React.FC<SalonTeamTabProps> = ({ user }) => {
     {
       title: 'Детали',
       key: 'action',
-      render: (_: any, record: SalesRepMetrics) => (
+      render: (_: unknown, record: SalesRepMetrics) => (
         <Button
           size="small"
           icon={<LineChartOutlined />}

@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Typography, Table, Tag, Spin, Segmented, Progress, Tooltip, Alert } from 'antd';
 import { ShoppingOutlined, WarningOutlined, BarChartOutlined } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
+import type { User } from "@/types";
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
 interface SalonProductsTabProps {
-  user: any;
+  user: User;
 }
 
 interface TopProduct {
@@ -63,8 +64,8 @@ const SalonProductsTab: React.FC<SalonProductsTabProps> = ({ user }) => {
       const res = await apiClient.get(`/dashboard/products?date=${date}`);
       setData(res.data);
       setError(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ошибка загрузки данных');
+    } catch (e: unknown) { const err = e as { response?: { data?: { error?: string } } };
+      setError(err?.response?.data?.error || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,7 @@ const SalonProductsTab: React.FC<SalonProductsTabProps> = ({ user }) => {
       title: '№',
       key: 'index',
       width: 50,
-      render: (_: any, __: any, index: number) => <Text strong>{index + 1}</Text>,
+      render: (_: unknown, __: unknown, index: number) => <Text strong>{index + 1}</Text>,
     },
     {
       title: 'Модель',

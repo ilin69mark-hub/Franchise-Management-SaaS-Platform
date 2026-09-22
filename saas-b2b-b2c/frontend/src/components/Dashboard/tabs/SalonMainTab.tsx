@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Card, Typography, Progress, Table, Tag, Spin, Alert, Tooltip } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined, WarningOutlined, CheckCircleOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
+import type { User } from "@/types";
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 
 interface SalonMainTabProps {
-  user: any;
+  user: User;
 }
 
 interface DashboardMainData {
@@ -45,8 +46,8 @@ const SalonMainTab: React.FC<SalonMainTabProps> = ({ user }) => {
       const res = await apiClient.get(`/dashboard/main?date=${date}`);
       setData(res.data);
       setError(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ошибка загрузки данных');
+    } catch (e: unknown) { const err = e as { response?: { data?: { error?: string } } };
+      setError(err?.response?.data?.error || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
