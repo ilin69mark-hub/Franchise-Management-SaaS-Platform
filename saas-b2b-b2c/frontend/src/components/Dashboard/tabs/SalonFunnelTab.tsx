@@ -3,13 +3,15 @@ import { Row, Col, Card, Typography, Button, Modal, Form, Input, Select, Table, 
 import { PlusOutlined, WarningOutlined, ExclamationCircleOutlined, UserAddOutlined } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useCreateLeadMutation, useGetLeadsQuery, useUpdateLeadStatusMutation } from '@/services/api';
+import type { Lead, User } from '@/types';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 
 interface SalonFunnelTabProps {
-  user: any;
+  user: User;
 }
 
 interface FunnelStage {
@@ -67,7 +69,7 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
   const [error, setError] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [form] = Form.useForm();
 
   const fetchData = useCallback(async () => {
@@ -76,8 +78,9 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
       const res = await apiClient.get(`/dashboard/funnel?date=${date}`);
       setData(res.data);
       setError(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ошибка загрузки данных');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      setError(err?.response?.data?.error || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
@@ -89,19 +92,20 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
 
   const formatMoney = (val: number) => new Intl.NumberFormat('ru-RU').format(val);
 
-  const handleCreateLead = async (values: any) => {
+  const handleCreateLead = async (values: { full_name: string; phone?: string; interest_product?: string; budget?: string }) => {
     try {
       await createLead({
         ...values,
         budget: values.budget ? Number(values.budget) : undefined,
-      }).unwrap();
+      } as Parameters<typeof createLead>[0]).unwrap();
       message.success('Лид добавлен');
       setIsModalOpen(false);
       form.resetFields();
       refetchLeads();
       fetchData();
-    } catch (e: any) {
-      message.error(e?.data?.error || 'Ошибка создания лида');
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      message.error(err?.data?.error || 'Ошибка создания лида');
     }
   };
 
@@ -121,8 +125,9 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
       await apiClient.patch(`/leads/${leadId}/assign`, { manager_id: managerId });
       message.success('Ответственный назначен');
       fetchData();
-    } catch (e: any) {
-      message.error(e?.response?.data?.error || 'Ошибка назначения');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      message.error(err?.response?.data?.error || 'Ошибка назначения');
     }
   };
 
@@ -159,14 +164,14 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
   );
 
   // Таблица горячих сделок
-  const hotDealsColumns = [
+  const hotDealsColumns: ColumnsType<HotDeal> = [
     {
       title: 'Клиент',
       dataIndex: 'client_name',
       key: 'client_name',
       render: (text: string, record: HotDeal) => (
         <a onClick={() => {
-          setSelectedLead(record);
+          setSelectedLead(record as unknown as Lead);
           setIsModalOpen(true);
         }}>{text}</a>
       ),
@@ -201,7 +206,7 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
   ];
 
   // Таблица свежих лидов
-  const freshLeadsColumns = [
+  const freshLeadsColumns: ColumnsType<FreshLead> = [
     {
       title: 'Источник',
       dataIndex: 'source',
@@ -246,7 +251,7 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
     {
       title: 'Действие',
       key: 'action',
-      render: (_: any, record: FreshLead) => (
+      render: (_: unknown, record: FreshLead) => (
         record.status === 'unassigned' ? (
           <Button
             size="small"
@@ -362,9 +367,9 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
               title: 'Клиент',
               dataIndex: 'full_name',
               key: 'full_name',
-              render: (text: string, record: any) => (
+              render: (text: string, record: Lead) => (
                 <a onClick={() => {
-                  setSelectedLead(record);
+                  setSelectedLead(record as unknown as Lead);
                   setIsModalOpen(true);
                 }}>{text}</a>
               ),
@@ -384,7 +389,7 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
               title: 'Статус',
               dataIndex: 'status',
               key: 'status',
-              render: (status: string, record: any) => (
+              render: (status: string, record: Lead) => (
                 <Select
                   value={status}
                   size="small"
@@ -466,7 +471,7 @@ const SalonFunnelTab: React.FC<SalonFunnelTabProps> = ({ user }) => {
                   ]
                 : selectedLead.status
             }</p>
-            <p><strong>Дата создания:</strong> {new Date(selectedLead.created_at).toLocaleString('ru-RU')}</p>
+            <p><strong>Дата создания:</strong> {new Date(selectedLead.created_at || '').toLocaleString('ru-RU')}</p>
           </div>
         )}
       </Modal>

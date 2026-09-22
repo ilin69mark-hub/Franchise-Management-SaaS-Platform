@@ -38,6 +38,8 @@ import {
 } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useTenantsStore } from '@/store/tenantsStore';
+import type { ColumnsType } from 'antd/es/table';
+import type { Tenant } from '@/store/tenantsStore';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -158,7 +160,7 @@ const TenantsSection: React.FC = () => {
     }
   };
 
-  const handleCreateTenant = async (values: any) => {
+  const handleCreateTenant = async (values: { name: string; legalEntity?: string; inn?: string; licenseLimit?: string; contactName?: string; contactEmail?: string }) => {
     try {
       await apiClient.post('/admin/tenants', {
         name: values.name,
@@ -172,8 +174,9 @@ const TenantsSection: React.FC = () => {
       setShowCreateModal(false);
       createForm.resetFields();
       fetchTenants();
-    } catch (err: any) {
-      message.error(err?.response?.data?.error || 'Ошибка создания');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      message.error(e?.response?.data?.error || 'Ошибка создания');
     }
   };
 
@@ -242,12 +245,12 @@ const TenantsSection: React.FC = () => {
     return <Tag color={c.color}>{c.text}</Tag>;
   };
 
-  const columns = [
+  const columns: ColumnsType<Tenant> = [
     {
       title: 'Название',
       dataIndex: 'name',
       key: 'name',
-      sorter: (a: any, b: any) => a.name.localeCompare(b.name),
+      sorter: (a: Tenant, b: Tenant) => a.name.localeCompare(b.name),
     },
     {
       title: 'Юрлицо',
@@ -263,21 +266,21 @@ const TenantsSection: React.FC = () => {
         { text: 'Pro', value: 'Pro' },
         { text: 'Enterprise', value: 'Enterprise' },
       ],
-      onFilter: (value: any, record: any) => record.tariff === value,
+      onFilter: (value, record) => record.tariff === value,
     },
     {
       title: 'Пользователей',
       dataIndex: 'users',
       key: 'users',
-      render: (_: number, record: any) => `${record.users || 0}/${record.licenseLimit || 10}`,
-      sorter: (a: any, b: any) => (a.users || 0) - (b.users || 0),
+      render: (_: number, record: Tenant) => `${record.users || 0}/${record.licenseLimit || 10}`,
+      sorter: (a: Tenant, b: Tenant) => (a.users || 0) - (b.users || 0),
     },
     {
       title: 'MRR',
       dataIndex: 'mrr',
       key: 'mrr',
       render: (v: number) => v ? `${v.toLocaleString()} ₽` : '-',
-      sorter: (a: any, b: any) => (a.mrr || 0) - (b.mrr || 0),
+      sorter: (a: Tenant, b: Tenant) => (a.mrr || 0) - (b.mrr || 0),
     },
     {
       title: 'Статус',
@@ -288,7 +291,7 @@ const TenantsSection: React.FC = () => {
     {
       title: 'Действия',
       key: 'actions',
-      render: (_: any, record: any) => (
+      render: (_: unknown, record: Tenant) => (
         <Space>
           <Button
             size="small"
@@ -521,10 +524,10 @@ const TenantsSection: React.FC = () => {
                           <InputForm
                             type="number"
                             defaultValue={selectedTenant?.licenseLimit || 10}
-                            onPressEnter={(e: any) =>
+                            onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) =>
                               handleChangeLicenses(
                                 selectedTenant!.id,
-                                parseInt(e.target.value) || 10
+                                parseInt((e.target as HTMLInputElement).value) || 10
                               )
                             }
                           />

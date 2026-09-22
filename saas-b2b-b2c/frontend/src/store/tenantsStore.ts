@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import apiClient from '@/api/axiosClient';
 
-interface Tenant {
+export interface Tenant {
   id: string;
   name: string;
   legalEntity?: string;
