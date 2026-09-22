@@ -261,7 +261,8 @@ const NotificationBell: React.FC = () => {
           <Tooltip title="Перейти">
             <Button
               size="small"
-              icon={<LinkOutlined />}
+              aria-label="Перейти по ссылке"
+              icon={<LinkOutlined aria-hidden="true" />}
               onClick={() => window.location.href = item.link}
             />
           </Tooltip>
@@ -270,7 +271,8 @@ const NotificationBell: React.FC = () => {
           <Tooltip title="Закрыть">
             <Button
               size="small"
-              icon={<CloseOutlined />}
+              aria-label="Закрыть уведомление"
+              icon={<CloseOutlined aria-hidden="true" />}
               onClick={() => handleMarkRead(item.id)}
             />
           </Tooltip>
