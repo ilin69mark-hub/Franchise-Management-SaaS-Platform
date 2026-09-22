@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -3338,39 +3340,118 @@ func (s *KPIService) UpdateAlertSettings(ctx context.Context, userID string, set
 	return nil
 }
 
-// GetReportData - данные для отчёта
+// GetReportData - данные для отчёта (агрегат реальных блоков)
 func (s *KPIService) GetReportData(ctx context.Context, userID string, period, date string) (map[string]interface{}, error) {
+	// reuse health/geography/roi для блоков
+	health, _ := s.GetDealersHealth(ctx, userID, period)
+	geo, _ := s.GetDealersGeography(ctx, userID)
+	roi, _ := s.GetMarketingROI(ctx, userID, period)
+	issues, _ := s.GetSystemIssues(ctx, userID, "")
+	// plan_fact
+	start, end := getPeriodBounds(period)
+	var totalPlan, totalFact float64
+	s.DB.Table("goals").Where("period = ? AND start_date = ?", period, start).Select("COALESCE(SUM(sales_plan),0)").Scan(&totalPlan)
+	s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&totalFact)
+	// network growth: tenants count
+	var tenantCount int64
+	s.DB.Table("tenants").Count(&tenantCount)
 	return map[string]interface{}{
-		"executive_summary":  map[string]interface{}{},
-		"plan_fact_dynamics": map[string]interface{}{},
-		"network_growth":     map[string]interface{}{},
-		"sales_structure":    map[string]interface{}{},
-		"territory_rating":   map[string]interface{}{},
-		"risks":              []map[string]interface{}{},
+		"executive_summary": map[string]interface{}{"period": period, "date": date, "total_plan": totalPlan, "total_fact": totalFact, "tenants": tenantCount},
+		"plan_fact_dynamics": map[string]interface{}{"total_plan": totalPlan, "total_fact": totalFact, "percent": func() int { if totalPlan > 0 { return int(totalFact / totalPlan * 100) } else { return 0 } }()},
+		"network_growth":     map[string]interface{}{"tenants": tenantCount, "health": health},
+		"sales_structure":    map[string]interface{}{"geography": geo, "roi": roi},
+		"territory_rating":   geo,
+		"risks":              issues,
 	}, nil
 }
 
-// GeneratePDF - сгенерировать PDF
+// GeneratePDF - сгенерировать PDF (создает запись в reports)
 func (s *KPIService) GeneratePDF(ctx context.Context, userID string, blocks []string, comment string) (map[string]interface{}, error) {
-	return map[string]interface{}{"pdf_url": "/reports/report.pdf"}, nil
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	// сохраняем отчет в reports
+	blocksJSON, _ := json.Marshal(blocks)
+	// recipients пусто на генерации
+	id := uuid.New()
+	pdfURL := fmt.Sprintf("/reports/%s.pdf", id.String())
+	// idempotent insert via Exec
+	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url, blocks, comment) VALUES (?, ?, ?, ?::jsonb, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL, string(blocksJSON), comment)
+	// если таблица создана без blocks/comment колонок (старая схема reports без них) — fallback insert minimal
+	if s.DB.Exec(`SELECT 1 FROM reports WHERE id = ?`, id).Error != nil {
+		// ignore
+	}
+	// ensure fallback for older schema (reports created with only pdf_url/recipients)
+	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL)
+	return map[string]interface{}{"pdf_url": pdfURL, "report_id": id.String()}, nil
 }
 
-// SendReport - отправить отчёт
+// SendReport - отправить отчёт (обновляет recipients)
 func (s *KPIService) SendReport(ctx context.Context, userID string, reportID string, recipients []string) error {
+	rid, err := uuid.Parse(reportID)
+	if err != nil {
+		return err
+	}
+	recJSON, _ := json.Marshal(recipients)
+	s.DB.Exec(`UPDATE reports SET recipients = ?::jsonb, updated_at = NOW() WHERE id = ?`, string(recJSON), rid)
 	return nil
 }
 
-// GetReportHistory - история отчётов
+// GetReportHistory - история отчётов Lim 20
 func (s *KPIService) GetReportHistory(ctx context.Context, userID string) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{}, nil
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	type Row struct {
+		ID        uuid.UUID `gorm:"column:id"`
+		PdfURL    string    `gorm:"column:pdf_url"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+	}
+	var rows []Row
+	s.DB.Table("reports").Where("franchiser_id = ?", uid).Order("created_at DESC").Limit(20).Find(&rows)
+	res := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		res = append(res, map[string]interface{}{"id": r.ID.String(), "pdf_url": r.PdfURL, "created_at": r.CreatedAt})
+	}
+	return res, nil
 }
 
-// SaveDraft - сохранить черновик
+// SaveDraft - сохранить черновик (UPSERT report_drafts)
 func (s *KPIService) SaveDraft(ctx context.Context, userID string, draft map[string]interface{}) error {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return err
+	}
+	dataJSON, _ := json.Marshal(draft)
+	// limit 1MB
+	if len(dataJSON) > 1024*1024 {
+		return errors.New("draft too large")
+	}
+	s.DB.Exec(`INSERT INTO report_drafts (user_id, data) VALUES (?, ?::jsonb) ON CONFLICT (user_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`, uid, string(dataJSON))
 	return nil
 }
 
 // GetDraft - получить черновик
 func (s *KPIService) GetDraft(ctx context.Context, userID string) (map[string]interface{}, error) {
-	return map[string]interface{}{}, nil
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	type Row struct {
+		Data string `gorm:"column:data"`
+	}
+	var row Row
+	if err := s.DB.Table("report_drafts").Where("user_id = ?", uid).Select("data").Scan(&row).Error; err != nil {
+		return nil, err
+	}
+	if row.Data == "" {
+		return map[string]interface{}{}, nil
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(row.Data), &out); err != nil {
+		return map[string]interface{}{"raw": row.Data}, nil
+	}
+	return out, nil
 }
