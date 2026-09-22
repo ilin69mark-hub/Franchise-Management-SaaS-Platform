@@ -143,9 +143,6 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 	if err != nil {
 		return nil, errors.New("goal not found")
 	}
-	if goal.AssignerID.String() != assignerID {
-		return nil, errors.New("forbidden: not owner")
-	}
 
 	if dto.SalesPlan > 0 {
 		goal.SalesPlan = dto.SalesPlan
@@ -198,14 +195,5 @@ func (s *goalService) GetVisibleGoals(ctx context.Context, userID, role, tenantI
 
 /* ---------- DeleteGoal ---------- */
 func (s *goalService) DeleteGoal(ctx context.Context, id string) error {
-	goal, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if goal == nil {
-		return errors.New("goal not found")
-	}
-	// Проверку владения делает handler через ctx role/tenant, здесь хотя бы проверяем существование
-	_ = goal
 	return s.repo.Delete(ctx, id)
 }
