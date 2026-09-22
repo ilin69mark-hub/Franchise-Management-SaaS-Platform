@@ -1,6 +1,6 @@
 // src/components/Dashboard/tabs/TerritoryPlanFactTab.tsx
-import React, { useState, useMemo } from 'react';
-import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Select, Button, Modal, Form, Input, Upload, Empty, Segmented, message } from 'antd';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Select, Button, Modal, Form, Input, Upload, Empty, Segmented, message, Spin } from 'antd';
 import { ShopOutlined, DollarOutlined, PercentageOutlined, RiseOutlined, CheckCircleOutlined, ExclamationCircleOutlined, DownloadOutlined, FilePdfOutlined, WarningOutlined, EditOutlined, MessageOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, BarChart, Bar, ReferenceLine, ComposedChart, Area } from 'recharts';
 import { useTerritoryManagerStore, DealerMetrics } from '@/store/territoryManagerStore';
@@ -46,20 +46,49 @@ const DEVIATION_REASONS = [
   { value: 'other', label: 'Прочее' },
 ];
 
+const STUB_DEALERS = [
+  { dealerId: '1', dealerName: 'Мебель Москва', plan: 15000000, fact: 13800000, forecast: 16500000 },
+  { dealerId: '2', dealerName: 'Диванит Воронеж', plan: 8000000, fact: 6240000, forecast: 8800000 },
+  { dealerId: '3', dealerName: 'МебельЛига', plan: 5000000, fact: 2250000, forecast: 2750000 },
+  { dealerId: '4', dealerName: 'Салон мебели Казань', plan: 12000000, fact: 13200000, forecast: 13200000 },
+  { dealerId: '5', dealerName: 'Евромебель', plan: 7000000, fact: 4690000, forecast: 5250000 },
+];
+
 const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) => {
   const [period, setPeriod] = useState('quarter');
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [deviationReasons, setDeviationReasons] = useState<Record<string, string>>({});
   const [deviationActions, setDeviationActions] = useState<Record<string, string>>({});
   const [reportProposals, setReportProposals] = useState('');
+  const [dealersData, setDealersData] = useState(STUB_DEALERS);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  const dealersData = useMemo(() => [
-    { dealerId: '1', dealerName: 'Мебель Москва', plan: 15000000, fact: 13800000, forecast: 16500000 },
-    { dealerId: '2', dealerName: 'Диванит Воронеж', plan: 8000000, fact: 6240000, forecast: 8800000 },
-    { dealerId: '3', dealerName: 'МебельЛига', plan: 5000000, fact: 2250000, forecast: 2750000 },
-    { dealerId: '4', dealerName: 'Салон мебели Казань', plan: 12000000, fact: 13200000, forecast: 13200000 },
-    { dealerId: '5', dealerName: 'Евромебель', plan: 7000000, fact: 4690000, forecast: 5250000 },
-  ], []);
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      setDataLoading(true);
+      try {
+        const res = await apiClient.get(`/territory/planfact?period=${period}`);
+        const raw = res.data?.dealers || res.data || [];
+        if (Array.isArray(raw) && raw.length > 0) {
+          const mapped = raw.map((d: any) => ({
+            dealerId: d.id || d.dealerId,
+            dealerName: d.dealer_name || d.dealerName,
+            plan: d.plan ?? d.sales_plan ?? 0,
+            fact: d.fact ?? d.sales_fact ?? 0,
+            forecast: d.forecast ?? Math.round((d.fact ?? 0) * 1.1),
+          })).filter((d: any) => d.dealerId && d.dealerName);
+          if (!cancelled && mapped.length > 0) setDealersData(mapped);
+        }
+      } catch {
+        // fallback остаётся STUB — не ломаем UI если бэк недоступен
+      } finally {
+        if (!cancelled) setDataLoading(false);
+      }
+    };
+    fetch();
+    return () => { cancelled = true; };
+  }, [period]);
 
   const totalPlan = useMemo(() => dealersData.reduce((s, d) => s + d.plan, 0), [dealersData]);
   const totalFact = useMemo(() => dealersData.reduce((s, d) => s + d.fact, 0), [dealersData]);
