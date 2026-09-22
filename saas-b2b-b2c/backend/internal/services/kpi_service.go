@@ -1860,32 +1860,66 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 		endDate = targetDate
 	}
 
-	// По каждому дилеру
+	// По каждому дилеру — батчим 3*N → 3 GROUP BY
+	planByDealer := map[uuid.UUID]float64{}
+	factByDealer := map[uuid.UUID]float64{}
+	salonsCountByTenant := map[uuid.UUID]int64{}
+	{
+		type pRow struct {
+			UserID uuid.UUID `gorm:"column:user_id"`
+			Plan   float64   `gorm:"column:plan"`
+		}
+		var pRows []pRow
+		s.DB.Model(&models.DailyGoal{}).Select("user_id, COALESCE(SUM(sales_plan),0) as plan").
+			Where("user_id IN ? AND target_date BETWEEN ? AND ?", dealerIDs, startDate, endDate).Group("user_id").Scan(&pRows)
+		for _, r := range pRows {
+			planByDealer[r.UserID] = r.Plan
+		}
+		type fRow struct {
+			ManagerID uuid.UUID `gorm:"column:manager_id"`
+			Fact      float64   `gorm:"column:fact"`
+		}
+		var fRows []fRow
+		s.DB.Model(&models.Lead{}).Select("manager_id, COALESCE(SUM(budget),0) as fact").
+			Where("manager_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", dealerIDs, []string{"sale", "paid"}, startDate, endDate).Group("manager_id").Scan(&fRows)
+		for _, r := range fRows {
+			factByDealer[r.ManagerID] = r.Fact
+		}
+		var tenantIDs []uuid.UUID
+		for _, d := range dealers {
+			if d.TenantID != nil {
+				tenantIDs = append(tenantIDs, *d.TenantID)
+			}
+		}
+		if len(tenantIDs) > 0 {
+			type scRow struct {
+				DealerID uuid.UUID `gorm:"column:dealer_id"`
+				Cnt      int64     `gorm:"column:cnt"`
+			}
+			var scRows []scRow
+			s.DB.Model(&models.Salon{}).Select("dealer_id, COUNT(*) as cnt").Where("dealer_id IN ?", tenantIDs).Group("dealer_id").Scan(&scRows)
+			for _, r := range scRows {
+				salonsCountByTenant[r.DealerID] = r.Cnt
+			}
+		}
+	}
 	for _, dealer := range dealers {
-		var plan, fact float64
-		s.DB.Model(&models.DailyGoal{}).
-			Where("user_id = ? AND target_date BETWEEN ? AND ?", dealer.ID, startDate, endDate).
-			Select("COALESCE(SUM(sales_plan), 0)").Scan(&plan)
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", dealer.ID, []string{"sale", "paid"}, startDate, endDate).
-			Select("COALESCE(SUM(budget), 0)").Scan(&fact)
-
+		plan := planByDealer[dealer.ID]
+		fact := factByDealer[dealer.ID]
 		percent := 0
 		if plan > 0 {
 			percent = int((fact / plan) * 100)
 		}
-
-		// SALON count
 		var salonsCount int64
-		s.DB.Model(&models.Salon{}).Where("tenant_id = ?", dealer.TenantID).Count(&salonsCount)
-
+		if dealer.TenantID != nil {
+			salonsCount = salonsCountByTenant[*dealer.TenantID]
+		}
 		forecast := "red"
 		if percent >= 80 {
 			forecast = "green"
 		} else if percent >= 50 {
 			forecast = "yellow"
 		}
-
 		resp.NetworkData = append(resp.NetworkData, models.FranchiserDealerData{
 			ID:          dealer.ID,
 			Name:        dealer.FirstName + " " + dealer.LastName,

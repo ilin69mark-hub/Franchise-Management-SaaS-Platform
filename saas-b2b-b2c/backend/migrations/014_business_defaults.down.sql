@@ -1,1 +1,1 @@
-DELETE FROM system_settings WHERE key IN ('avg_margin_percent','network_avg_conversion','network_avg_check','extras_rate','discount_default_percent');
+DELETE FROM system_settings WHERE key IN ('avg_margin_percent','network_avg_conversion','network_avg_check','extras_rate','discount_default_percent','net_profit_rate','gross_margin_rate','cogs_rate','prev_month_factor');
