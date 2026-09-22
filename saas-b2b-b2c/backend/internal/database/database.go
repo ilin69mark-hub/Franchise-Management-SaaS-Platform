@@ -87,6 +87,9 @@ func runMigrations(db *gorm.DB) error {
 		migrateContracts,
 		migrateScheduleEvents,
 		migrateDailyGoals,
+		migrateReports,
+		migrateReportDrafts,
+		migrateSalonsGeo,
 	}
 
 	for _, m := range migrations {
@@ -855,6 +858,51 @@ func migrateDailyGoals(db *gorm.DB) error {
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_salon ON daily_goals(salon_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_user ON daily_goals(user_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_date ON daily_goals(target_date)`)
+	return nil
+}
+
+func migrateReports(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS reports (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			franchiser_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			pdf_url TEXT,
+			recipients JSONB,
+			blocks JSONB,
+			comment TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_reports_franchiser ON reports(franchiser_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(created_at)`)
+	return nil
+}
+
+func migrateReportDrafts(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS report_drafts (
+			user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+			data JSONB NOT NULL DEFAULT '{}',
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateSalonsGeo(db *gorm.DB) error {
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS region VARCHAR(100)`)
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS city VARCHAR(100)`)
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION`)
+	db.Exec(`ALTER TABLE salons ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_salons_region ON salons(region)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_salons_city ON salons(city)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_goals_period_start ON goals(period, start_date)`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('default_monthly_plan', '4000000', 'Дефолтный месячный план дилера, RUB') ON CONFLICT (key) DO NOTHING`)
 	return nil
 }
 

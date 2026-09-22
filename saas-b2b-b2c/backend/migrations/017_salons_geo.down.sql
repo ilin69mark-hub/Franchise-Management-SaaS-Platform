@@ -1,0 +1,7 @@
+DROP INDEX IF EXISTS idx_salons_region;
+DROP INDEX IF EXISTS idx_salons_city;
+DROP INDEX IF EXISTS idx_goals_period_start;
+ALTER TABLE salons DROP COLUMN IF EXISTS region;
+ALTER TABLE salons DROP COLUMN IF EXISTS city;
+ALTER TABLE salons DROP COLUMN IF EXISTS lat;
+ALTER TABLE salons DROP COLUMN IF EXISTS lng;
