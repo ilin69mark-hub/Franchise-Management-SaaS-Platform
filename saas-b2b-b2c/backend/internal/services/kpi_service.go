@@ -624,21 +624,48 @@ func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, per
 	var totalRevenue, totalDeals, totalConversion, totalAvgCheck float64
 	var dealsCount, conversionCount int
 
+	// Батчим N+1: 1 запрос на выручку+сделки и 1 на лиды по всем managers (вместо 2*N)
+	type saleAgg struct {
+		ManagerID uuid.UUID
+		Revenue   float64
+		Deals     int64
+	}
+	type leadAgg struct {
+		ManagerID uuid.UUID
+		Count     int64
+	}
+	var managerIDs []uuid.UUID
+	for _, m := range managers {
+		managerIDs = append(managerIDs, m.ID)
+	}
+	saleMap := map[uuid.UUID]saleAgg{}
+	leadMap := map[uuid.UUID]int64{}
+	if len(managerIDs) > 0 {
+		var sales []saleAgg
+		s.DB.Model(&models.Lead{}).
+			Select("manager_id, COALESCE(SUM(budget),0) as revenue, COUNT(*) as deals").
+			Where("manager_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", managerIDs, []string{"sale", "paid"}, startDate, endDate).
+			Group("manager_id").
+			Scan(&sales)
+		for _, r := range sales {
+			saleMap[r.ManagerID] = r
+		}
+		var leads []leadAgg
+		s.DB.Model(&models.Lead{}).
+			Select("manager_id, COUNT(*) as count").
+			Where("manager_id IN ? AND created_at BETWEEN ? AND ?", managerIDs, startDate, endDate).
+			Group("manager_id").
+			Scan(&leads)
+		for _, r := range leads {
+			leadMap[r.ManagerID] = r.Count
+		}
+	}
+
 	for _, mgr := range managers {
-		var revenue float64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", mgr.ID, []string{"sale", "paid"}, startDate, endDate).
-			Select("COALESCE(SUM(budget), 0)").Scan(&revenue)
-
-		var deals int64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", mgr.ID, []string{"sale", "paid"}, startDate, endDate).
-			Count(&deals)
-
-		var leadsCount int64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND created_at BETWEEN ? AND ?", mgr.ID, startDate, endDate).
-			Count(&leadsCount)
+		agg := saleMap[mgr.ID]
+		revenue := agg.Revenue
+		deals := agg.Deals
+		leadsCount := leadMap[mgr.ID]
 
 		conversion := 0.0
 		if leadsCount > 0 {
