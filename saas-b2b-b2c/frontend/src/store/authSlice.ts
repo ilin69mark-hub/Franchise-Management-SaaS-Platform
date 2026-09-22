@@ -31,8 +31,9 @@ export const login = createAsyncThunk(
     try {
       const response = await apiClient.post<AuthResponse>('/auth/login', credentials);
       return response.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data?.error || 'Ошибка входа');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(e.response?.data?.error || 'Ошибка входа');
     }
   },
 );
@@ -46,8 +47,9 @@ export const register = createAsyncThunk(
     try {
       const response = await apiClient.post<AuthResponse>('/auth/register', userData);
       return response.data;
-    } catch (err: any) {
-      return rejectWithValue(err.response?.data?.error || 'Ошибка регистрации');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      return rejectWithValue(e.response?.data?.error || 'Ошибка регистрации');
     }
   },
 );
@@ -82,8 +84,8 @@ const authSlice = createSlice({
           state.user = JSON.parse(userStr);
           state.isAuthenticated = true;
           // Если id/role есть в хранилище – восстанавливаем их в state
-          if (id) (state.user as any).id = id;
-          if (role) (state.user as any).role = role;
+          if (id && state.user) (state.user as User).id = id;
+          if (role && state.user) (state.user as User).role = role as User['role'];
         }
       }
     },
@@ -99,12 +101,12 @@ const authSlice = createSlice({
       state.loading = false;
       state.isAuthenticated = true;
 
-      // Payload может быть в разных формах – приводим к any
-      const data: any = payload;
+      // Payload может быть в разных формах
+      const data = payload as AuthResponse & Record<string, unknown> & { Token?: string; RefreshToken?: string; token?: string; refresh_token?: string; accessToken?: string; refreshToken?: string };
 
       // Токены могут быть `token` / `accessToken` / `Token`
-      const token = data.Token || data.accessToken || data.token;
-      const refresh = data.RefreshToken || data.refreshToken || data.refresh_token;
+      const token = (data as Record<string, unknown>)['Token'] as string || data.accessToken || (data as Record<string, unknown>)['token'] as string;
+      const refresh = (data as Record<string, unknown>)['RefreshToken'] as string || data.refreshToken || (data as Record<string, unknown>)['refresh_token'] as string;
 
       if (token) {
         state.accessToken = token;
@@ -139,9 +141,9 @@ const authSlice = createSlice({
       state.loading = false;
       state.isAuthenticated = true;
 
-      const data: any = payload;
-      const token = data.Token || data.accessToken || data.token;
-      const refresh = data.RefreshToken || data.refreshToken || data.refresh_token;
+      const data = payload as AuthResponse & Record<string, unknown> & { Token?: string; RefreshToken?: string; token?: string; refresh_token?: string; accessToken?: string; refreshToken?: string };
+      const token = (data as Record<string, unknown>)['Token'] as string || data.accessToken || (data as Record<string, unknown>)['token'] as string;
+      const refresh = (data as Record<string, unknown>)['RefreshToken'] as string || data.refreshToken || (data as Record<string, unknown>)['refresh_token'] as string;
 
       if (token) {
         state.accessToken = token;

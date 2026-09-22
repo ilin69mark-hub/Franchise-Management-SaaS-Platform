@@ -106,13 +106,13 @@ const ChecklistsPage: React.FC = () => {
         await dispatch(updateChecklist({ id: selectedChecklist.id, ...payload })).unwrap();
         message.success('Обновлено');
       } else {
-        const createPayload = { 
-          ...payload, 
-          user_id: currentUser?.id, 
-          tenant_id: currentUser?.tenant_id || null, 
-          status: 'pending' 
+        const createPayload = {
+          ...payload,
+          user_id: currentUser?.id,
+          tenant_id: currentUser?.tenant_id || null,
+          status: 'pending' as const,
         };
-        await dispatch(createChecklist(createPayload as any)).unwrap();
+        await dispatch(createChecklist(createPayload as unknown as Parameters<typeof createChecklist>[0])).unwrap();
         message.success('Создано');
       }
       setModalVisible(false); resetForm();
@@ -133,7 +133,7 @@ const ChecklistsPage: React.FC = () => {
   
   const dateFormat = 'DD.MM.YYYY HH:mm';
 
-  const columns: any = [
+  const columns = [
     { title: 'Название', dataIndex: 'title', key: 'title', render: (text: string) => <strong>{text}</strong> },
     { title: 'Исполнитель', dataIndex: 'assigned_to', key: 'assigned_to',
       render: (id: string) => {
@@ -143,18 +143,18 @@ const ChecklistsPage: React.FC = () => {
         return fullName || id || '—';
       },
     },
-    { title: 'Сроки', key: 'dates', render: (_: any, record: Checklist) => (
+    { title: 'Сроки', key: 'dates', render: (_: unknown, record: Checklist) => (
         <div style={{ fontSize: '12px' }}>
           {record.start_date && <div>С: {dayjs(record.start_date).format(dateFormat)}</div>}
           {record.end_date && <div>До: {dayjs(record.end_date).format(dateFormat)}</div>}
         </div>
       ),
     },
-    { title: 'Статус', key: 'status', render: (_: any, record: Checklist) => (
+    { title: 'Статус', key: 'status', render: (_: unknown, record: Checklist) => (
         <Tag color={getStatusColor(record.status)}>{getStatusText(record.status)}</Tag>
       ),
     },
-    { title: 'Действия', key: 'actions', render: (_: any, record: Checklist) => (
+    { title: 'Действия', key: 'actions', render: (_: unknown, record: Checklist) => (
         <Space size="middle">
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>Изменить</Button>
           <Popconfirm title="Удалить?" onConfirm={() => handleDelete(record.id)} okText="Да" cancelText="Нет">

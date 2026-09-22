@@ -57,15 +57,21 @@ const GoalList: React.FC<GoalListProps> = ({
       await deleteGoal(id).unwrap();
       message.success('Цель удалена');
       refetch();
-    } catch (e: any) {
-      message.error(e?.data?.error || 'Ошибка при удалении');
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      message.error(err?.data?.error || 'Ошибка при удалении');
     }
   };
 
-  const handleOk = async (values: any) => {
-    let period = values.period || 'day';
-    let startDate = values.start_date?.format ? values.start_date.format('YYYY-MM-DD') : (values.start_date || null);
-    let endDate = values.end_date?.format ? values.end_date.format('YYYY-MM-DD') : (values.end_date || null);
+  const handleOk = async (values: Record<string, unknown>) => {
+    const v = values as { period?: string; start_date?: unknown; end_date?: unknown; target_date?: unknown };
+    const fmt = (val: unknown): string | null => {
+      if (val && typeof val === 'object' && 'format' in (val as object)) return (val as { format: (f: string) => string }).format('YYYY-MM-DD');
+      return (val as string | null) || null;
+    };
+    let period = (v.period as string) || 'day';
+    let startDate: string | null = fmt(v.start_date);
+    let endDate: string | null = fmt(v.end_date);
     
     // Для period = week/month/year - вычисляем конечную дату автоматически
     if (period === 'week' && startDate) {
@@ -87,11 +93,11 @@ const GoalList: React.FC<GoalListProps> = ({
 
     const payload = {
       ...values,
-      target_date: values.target_date?.format ? values.target_date.format('YYYY-MM-DD') : values.target_date,
+      target_date: fmt(v.target_date),
       start_date: startDate,
       end_date: endDate,
       period: period,
-    };
+    } as unknown as Parameters<typeof setGoal>[0];
     try {
       if (editingGoal) {
         await updateGoal({ id: editingGoal.id, data: payload }).unwrap();
@@ -102,8 +108,9 @@ const GoalList: React.FC<GoalListProps> = ({
       }
       setModalVisible(false);
       refetch();
-    } catch (e: any) {
-      message.error(e?.data?.error || 'Ошибка при сохранении');
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      message.error(err?.data?.error || 'Ошибка при сохранении');
     }
   };
 
@@ -128,7 +135,7 @@ const GoalList: React.FC<GoalListProps> = ({
     {
       title: 'Даты',
       key: 'dates',
-      render: (_: any, rec: Goal) => {
+      render: (_: unknown, rec: Goal) => {
         const start = rec.start_date ? dayjs(rec.start_date).format('DD.MM.YYYY') : '';
         const end = rec.end_date ? dayjs(rec.end_date).format('DD.MM.YYYY') : '';
         if (start && end) return `${start} - ${end}`;
@@ -138,7 +145,7 @@ const GoalList: React.FC<GoalListProps> = ({
     {
       title: 'Действия',
       key: 'actions',
-      render: (_: any, rec: Goal) => (
+      render: (_: unknown, rec: Goal) => (
         <Space>
           <Button size="small" onClick={() => openEdit(rec)}>
             Изменить
