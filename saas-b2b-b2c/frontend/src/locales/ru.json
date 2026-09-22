@@ -1,0 +1,21 @@
+{
+  "common": {
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "success": "Успешно"
+  },
+  "dashboard": {
+    "territoryCommunications": "Коммуникации территории",
+    "requests": "Входящие запросы",
+    "tasks": "Мои задачи",
+    "history": "История"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "close": "Закрыть уведомление",
+    "go": "Перейти по ссылке"
+  }
+}
