@@ -20,6 +20,7 @@ import {
 } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useActivityStore } from '@/store/activityStore';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -236,31 +237,32 @@ const ActivitySection: React.FC = () => {
     );
   }
 
-  const tenantColumns = [
-    { title: 'Тенант', dataIndex: 'name', key: 'name', sorter: (a: any, b: any) => a.name.localeCompare(b.name) },
+  type TenantActivityRow = { id: string; name: string; dau: number; wau: number; mau: number; stickiness: number; activeLicensePercent: number };
+  const tenantColumns: ColumnsType<TenantActivityRow> = [
+    { title: 'Тенант', dataIndex: 'name', key: 'name', sorter: (a: TenantActivityRow, b: TenantActivityRow) => a.name.localeCompare(b.name) },
     {
       title: 'DAU',
       dataIndex: 'dau',
       key: 'dau',
-      sorter: (a: any, b: any) => a.dau - b.dau,
+      sorter: (a: TenantActivityRow, b: TenantActivityRow) => a.dau - b.dau,
     },
     {
       title: 'WAU',
       dataIndex: 'wau',
       key: 'wau',
-      sorter: (a: any, b: any) => a.wau - b.wau,
+      sorter: (a: TenantActivityRow, b: TenantActivityRow) => a.wau - b.wau,
     },
     {
       title: 'MAU',
       dataIndex: 'mau',
       key: 'mau',
-      sorter: (a: any, b: any) => a.mau - b.mau,
+      sorter: (a: TenantActivityRow, b: TenantActivityRow) => a.mau - b.mau,
     },
     {
       title: 'Stickiness',
       dataIndex: 'stickiness',
       key: 'stickiness',
-      sorter: (a: any, b: any) => a.stickiness - b.stickiness,
+      sorter: (a: TenantActivityRow, b: TenantActivityRow) => a.stickiness - b.stickiness,
       render: (v: number) => (
         <span style={{ color: v < 20 ? '#ff4d4f' : v >= 40 ? '#52c41a' : undefined }}>
           {v.toFixed(1)}%
@@ -307,7 +309,8 @@ const ActivitySection: React.FC = () => {
     },
   ];
 
-const ttvColumns = [
+  type TtvRow = { id: string; name: string; createdAt: string; firstSaleAt: string; ttvDays: number };
+  const ttvColumns: ColumnsType<TtvRow> = [
     { title: 'Тенант', dataIndex: 'name', key: 'name' },
     { title: 'Создан', dataIndex: 'createdAt', key: 'createdAt', render: (d: string) => d ? dayjs(d).format('DD.MM.YYYY') : '-' },
     { title: 'Первая продажа', dataIndex: 'firstSaleAt', key: 'firstSaleAt', render: (d: string) => d ? dayjs(d).format('DD.MM.YYYY') : '-' },
@@ -315,7 +318,7 @@ const ttvColumns = [
       title: 'TTV (дней)',
       dataIndex: 'ttvDays',
       key: 'ttvDays',
-      render: (v: number, record: any) => (
+      render: (v: number, _record: TtvRow) => (
         <span style={{ color: v === 0 ? '#faad14' : v <= 7 ? '#52c41a' : v <= 14 ? '#1890ff' : '#ff4d4f' }}>
           {v === 0 ? 'Нет продажи' : `${v} дн.`}
         </span>
