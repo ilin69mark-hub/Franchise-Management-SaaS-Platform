@@ -128,6 +128,81 @@ func (s *KPIService) GetTeamAnalytics(ctx context.Context, dealerID uuid.UUID, p
 		return nil, err
 	}
 
+	// Батчим N+1: 11*N → 4 запроса (daily_goals, leads sales+count, activities, funnel)
+	type goalAgg struct {
+		UserID         uuid.UUID `gorm:"column:user_id"`
+		TotalSalesPlan float64   `gorm:"column:total_sales"`
+		TotalLeadsPlan int       `gorm:"column:total_leads"`
+		TotalCallsPlan int       `gorm:"column:total_calls"`
+		TotalMeetPlan  int       `gorm:"column:total_meet"`
+	}
+	type leadAgg struct {
+		ManagerID uuid.UUID `gorm:"column:manager_id"`
+		SalesFact float64   `gorm:"column:sales_fact"`
+		SalesCnt  int64     `gorm:"column:sales_cnt"`
+		LeadsFact int64     `gorm:"column:leads_fact"`
+	}
+	type actAgg struct {
+		UserID uuid.UUID `gorm:"column:user_id"`
+		Type   string    `gorm:"column:type"`
+		Cnt    int64     `gorm:"column:cnt"`
+	}
+	type funnelAgg struct {
+		ManagerID uuid.UUID `gorm:"column:manager_id"`
+		Status    string    `gorm:"column:status"`
+		Cnt       int64     `gorm:"column:cnt"`
+	}
+	var managerIDs []uuid.UUID
+	for _, m := range managers {
+		if m.SalonID != nil {
+			managerIDs = append(managerIDs, m.ID)
+		}
+	}
+	goalMap := map[uuid.UUID]goalAgg{}
+	leadMap := map[uuid.UUID]leadAgg{}
+	actMap := map[uuid.UUID]map[string]int64{}
+	funnelMap := map[uuid.UUID]map[string]int64{}
+	if len(managerIDs) > 0 {
+		var goals []goalAgg
+		s.DB.Model(&models.DailyGoal{}).
+			Select("user_id, COALESCE(SUM(sales_plan),0) as total_sales, COALESCE(SUM(leads_plan),0) as total_leads, COALESCE(SUM(calls_plan),0) as total_calls, COALESCE(SUM(meetings_plan),0) as total_meet").
+			Where("user_id IN ? AND target_date BETWEEN ? AND ?", managerIDs, start, end).
+			Group("user_id").Scan(&goals)
+		for _, g := range goals {
+			goalMap[g.UserID] = g
+		}
+		var leads []leadAgg
+		s.DB.Model(&models.Lead{}).
+			Select("manager_id, COALESCE(SUM(CASE WHEN status='sale' THEN budget ELSE 0 END),0) as sales_fact, SUM(CASE WHEN status='sale' THEN 1 ELSE 0 END) as sales_cnt, COUNT(*) as leads_fact").
+			Where("manager_id IN ? AND created_at BETWEEN ? AND ?", managerIDs, start, end).
+			Group("manager_id").Scan(&leads)
+		for _, l := range leads {
+			leadMap[l.ManagerID] = l
+		}
+		var acts []actAgg
+		s.DB.Model(&models.LeadActivity{}).
+			Select("user_id, type, COUNT(*) as cnt").
+			Where("user_id IN ? AND created_at BETWEEN ? AND ? AND type IN ?", managerIDs, start, end, []string{"call", "meeting"}).
+			Group("user_id, type").Scan(&acts)
+		for _, a := range acts {
+			if _, ok := actMap[a.UserID]; !ok {
+				actMap[a.UserID] = map[string]int64{}
+			}
+			actMap[a.UserID][a.Type] = a.Cnt
+		}
+		var funnels []funnelAgg
+		s.DB.Model(&models.Lead{}).
+			Select("manager_id, status, COUNT(*) as cnt").
+			Where("manager_id IN ?", managerIDs).
+			Group("manager_id, status").Scan(&funnels)
+		for _, f := range funnels {
+			if _, ok := funnelMap[f.ManagerID]; !ok {
+				funnelMap[f.ManagerID] = map[string]int64{}
+			}
+			funnelMap[f.ManagerID][f.Status] = f.Cnt
+		}
+	}
+
 	var results []map[string]interface{}
 
 	for _, mgr := range managers {
@@ -135,48 +210,25 @@ func (s *KPIService) GetTeamAnalytics(ctx context.Context, dealerID uuid.UUID, p
 			continue
 		}
 
-		// --- KPI ---
-		var totalSalesPlan float64
-		var totalLeadsPlan, totalCallsPlan, totalMeetingsPlan int
+		// --- KPI (из батч-мап) ---
+		ga := goalMap[mgr.ID]
+		totalSalesPlan := ga.TotalSalesPlan
+		totalLeadsPlan := ga.TotalLeadsPlan
+		totalCallsPlan := ga.TotalCallsPlan
+		totalMeetingsPlan := ga.TotalMeetPlan
 
-		s.DB.Model(&models.DailyGoal{}).
-			Where("user_id = ? AND target_date BETWEEN ? AND ?", mgr.ID, start, end).
-			Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalSalesPlan)
-		s.DB.Model(&models.DailyGoal{}).
-			Where("user_id = ? AND target_date BETWEEN ? AND ?", mgr.ID, start, end).
-			Select("COALESCE(SUM(leads_plan), 0)").Scan(&totalLeadsPlan)
-		s.DB.Model(&models.DailyGoal{}).
-			Where("user_id = ? AND target_date BETWEEN ? AND ?", mgr.ID, start, end).
-			Select("COALESCE(SUM(calls_plan), 0)").Scan(&totalCallsPlan)
-		s.DB.Model(&models.DailyGoal{}).
-			Where("user_id = ? AND target_date BETWEEN ? AND ?", mgr.ID, start, end).
-			Select("COALESCE(SUM(meetings_plan), 0)").Scan(&totalMeetingsPlan)
+		la := leadMap[mgr.ID]
+		salesFact := la.SalesFact
+		leadsFact := la.LeadsFact
 
-		// Факты
-		var salesFact float64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND status = ? AND created_at BETWEEN ? AND ?", mgr.ID, "sale", start, end).
-			Select("COALESCE(SUM(budget), 0)").Scan(&salesFact)
+		callsFact := actMap[mgr.ID]["call"]
+		meetingsFact := actMap[mgr.ID]["meeting"]
 
-		var leadsFact int64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND created_at BETWEEN ? AND ?", mgr.ID, start, end).
-			Count(&leadsFact)
-
-		var callsFact, meetingsFact int64
-		s.DB.Model(&models.LeadActivity{}).
-			Where("user_id = ? AND created_at BETWEEN ? AND ?", mgr.ID, start, end).
-			Where("type = ?", "call").Count(&callsFact)
-		s.DB.Model(&models.LeadActivity{}).
-			Where("user_id = ? AND created_at BETWEEN ? AND ?", mgr.ID, start, end).
-			Where("type = ?", "meeting").Count(&meetingsFact)
-
-		// --- Воронка ---
-		var lNew, lWork, lWait, lSale int64
-		s.DB.Model(&models.Lead{}).Where("manager_id = ? AND status = ?", mgr.ID, "new").Count(&lNew)
-		s.DB.Model(&models.Lead{}).Where("manager_id = ? AND status IN ?", mgr.ID, []string{"contact", "meeting"}).Count(&lWork)
-		s.DB.Model(&models.Lead{}).Where("manager_id = ? AND status = ?", mgr.ID, "wait").Count(&lWait)
-		s.DB.Model(&models.Lead{}).Where("manager_id = ? AND status = ?", mgr.ID, "sale").Count(&lSale)
+		// --- Воронка (из батч-мап) ---
+		fm := funnelMap[mgr.ID]
+		lWait := fm["wait"]
+		lSale := fm["sale"]
+		lWork := fm["contact"] + fm["meeting"]
 
 		results = append(results, map[string]interface{}{
 			"id":   mgr.ID,
