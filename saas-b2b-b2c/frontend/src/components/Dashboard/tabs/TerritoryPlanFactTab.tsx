@@ -117,14 +117,35 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
       .map(d => ({ dealerName: d.dealerName, plan: d.plan, fact: d.fact }));
   }, [dealersData]);
 
-  const dynamicsData = useMemo(() => [
-    { month: 'Янв', plan: 12000000, fact: 10800000, forecast: null },
+  const STUB_DYNAMICS = [
+    { month: 'Янв', plan: 12000000, fact: 10800000, forecast: null as number | null },
     { month: 'Фев', plan: 13000000, fact: 11700000, forecast: null },
     { month: 'Мар', plan: 14000000, fact: 12600000, forecast: null },
     { month: 'Апр', plan: 15000000, fact: 13800000, forecast: null },
     { month: 'Май', plan: 15000000, fact: null, forecast: 14500000 },
     { month: 'Июн', plan: 15000000, fact: null, forecast: 15000000 },
-  ], []);
+  ];
+  const [dynamicsData, setDynamicsData] = useState(STUB_DYNAMICS);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        // Пытаемся взять историю из бэка (если появится /territory/history), пока fallback на STUB
+        const res = await apiClient.get(`/territory/planfact?period=year`);
+        const arr = res.data?.history || res.data?.months;
+        if (Array.isArray(arr) && arr.length >= 6 && !cancelled) {
+          setDynamicsData(arr.slice(0, 6).map((r: any, i: number) => ({
+            month: r.month || STUB_DYNAMICS[i].month,
+            plan: r.plan ?? STUB_DYNAMICS[i].plan,
+            fact: r.fact ?? null,
+            forecast: r.forecast ?? STUB_DYNAMICS[i].forecast,
+          })));
+        }
+      } catch {}
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   const top3Dealers = useMemo(() => {
     const sorted = [...dealersData].sort((a, b) => b.fact - a.fact);
