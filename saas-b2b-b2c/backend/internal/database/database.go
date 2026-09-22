@@ -13,13 +13,18 @@ import (
 var DB *gorm.DB
 
 func ConnectDB() (*gorm.DB, error) {
+	sslmode := viper.GetString("db_sslmode")
+	if sslmode == "" {
+		sslmode = "disable"
+	}
 	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",
 		viper.GetString("db_host"),
 		viper.GetString("db_user"),
 		viper.GetString("db_password"),
 		viper.GetString("db_name"),
 		viper.GetString("db_port"),
+		sslmode,
 	)
 
 	var err error
@@ -835,26 +840,17 @@ func migrateDailyGoals(db *gorm.DB) error {
 			calls_plan INTEGER DEFAULT 0,
 			meetings_plan INTEGER DEFAULT 0,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(salon_id, target_date),
-			UNIQUE(user_id, target_date)
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`).Error; err != nil {
-		// UNIQUE может конфликтовать с существующими данными — пробуем без constraint
-		return db.Exec(`
-			CREATE TABLE IF NOT EXISTS daily_goals (
-				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-				salon_id UUID,
-				user_id UUID,
-				target_date DATE NOT NULL,
-				sales_plan DECIMAL(12,2) DEFAULT 0,
-				leads_plan INTEGER DEFAULT 0,
-				calls_plan INTEGER DEFAULT 0,
-				meetings_plan INTEGER DEFAULT 0,
-				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-			)
-		`).Error
+		return err
+	}
+	// PG15+: NULLS NOT DISTINCT чтобы (NULL, date) считалось дублем, иначе UNIQUE не работает для менеджеров без салона
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_salon_date ON daily_goals (salon_id, target_date) NULLS NOT DISTINCT`).Error; err != nil {
+		db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_salon_date ON daily_goals (salon_id, target_date)`)
+	}
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_user_date ON daily_goals (user_id, target_date) NULLS NOT DISTINCT`).Error; err != nil {
+		db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_user_date ON daily_goals (user_id, target_date)`)
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_salon ON daily_goals(salon_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_user ON daily_goals(user_id)`)

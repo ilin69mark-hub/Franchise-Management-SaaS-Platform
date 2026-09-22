@@ -224,7 +224,7 @@ func SeedProductsAnalytics(db *gorm.DB) error {
 			db.Table("tenants").Order("created_at").Limit(1).Select("id").Scan(&tenantID)
 		}
 		if tenantID != "" {
-			db.Exec(`INSERT INTO salons (id, tenant_id, name, address, created_at) VALUES (gen_random_uuid(), $1, $2, $3, NOW()) ON CONFLICT DO NOTHING`, tenantID, "Демо-салон", "Москва")
+			db.Exec(`INSERT INTO salons (id, tenant_id, dealer_id, name, address, created_at) VALUES (gen_random_uuid(), $1, $1, $2, $3, NOW()) ON CONFLICT DO NOTHING`, tenantID, "Демо-салон", "Москва")
 			db.Table("salons").Order("created_at").Limit(1).Select("id").Scan(&salonID)
 		}
 		if salonID == "" {

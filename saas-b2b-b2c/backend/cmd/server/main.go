@@ -77,7 +77,7 @@ func main() {
 	goalService := services.NewGoalService(goalRepo)
 	alertService := services.NewAlertService(nil, notifRepo, db)
 
-	c := cron.New()
+	c := cron.New(cron.WithSeconds())
 	paymentJob := jobs.NewPaymentJob(adminService, notifService)
 	_, _ = c.AddFunc("0 0 9 * * *", paymentJob.Run)
 	c.Start()
