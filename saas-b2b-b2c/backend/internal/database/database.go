@@ -76,6 +76,12 @@ func runMigrations(db *gorm.DB) error {
 		migrateLostSales,
 		migratePromotions,
 		migrateCategoryTurnover,
+		migrateGoals,
+		migrateSystemSettings,
+		migrateUserLogs,
+		migrateContracts,
+		migrateScheduleEvents,
+		migrateDailyGoals,
 	}
 
 	for _, m := range migrations {
@@ -160,6 +166,8 @@ func migrateTenants(db *gorm.DB) error {
 			paid_until TIMESTAMP,
 			grace_period_days INTEGER DEFAULT 7,
 			deleted_at TIMESTAMP,
+			trial_ends_at TIMESTAMP,
+			converted_at TIMESTAMP,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
@@ -173,6 +181,8 @@ func migrateTenants(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS paid_until TIMESTAMP`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS grace_period_days INTEGER DEFAULT 7`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP`)
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS converted_at TIMESTAMP`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
 	// Сделать plan_id nullable без constraint
@@ -200,34 +210,58 @@ func migrateSalons(db *gorm.DB) error {
 }
 
 func migrateOrders(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS orders (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			user_id UUID NOT NULL,
-			tenant_id UUID,
-			salon_id UUID,
+			salon_id UUID NOT NULL REFERENCES salons(id),
+			created_by UUID NOT NULL REFERENCES users(id),
+			status VARCHAR(50) DEFAULT 'new',
+			total_price DECIMAL(10,2),
+			description TEXT,
 			total DECIMAL(10,2) DEFAULT 0,
-			status VARCHAR(50) DEFAULT 'pending',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	// Совместимость со старым GORM-скелетом (user_id/tenant_id) и 009 (total)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS salon_id UUID`)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_by UUID`)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_price DECIMAL(10,2)`)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS description TEXT`)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS total DECIMAL(10,2) DEFAULT 0`)
+	db.Exec(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	// Индексы как в 001
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_salon ON orders(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`)
+	return nil
 }
 
 func migrateTasks(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS tasks (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			user_id UUID,
-			tenant_id UUID,
 			title VARCHAR(255) NOT NULL,
 			description TEXT,
+			assigned_to UUID NOT NULL REFERENCES users(id),
+			created_by UUID NOT NULL REFERENCES users(id),
+			salon_id UUID REFERENCES salons(id),
 			status VARCHAR(50) DEFAULT 'pending',
 			due_date TIMESTAMP,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	// Обратная совместимость со старым GORM-скелетом
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_to UUID`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS created_by UUID`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS salon_id UUID`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS user_id UUID`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tenant_id UUID`)
+	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	return nil
 }
 
 func migrateChecklists(db *gorm.DB) error {
@@ -250,18 +284,24 @@ func migrateChecklists(db *gorm.DB) error {
 }
 
 func migratePlans(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS plans (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			owner_id UUID,
-			name VARCHAR(255) NOT NULL,
-			price DECIMAL(10,2) DEFAULT 0,
-			max_salons INT DEFAULT 1,
-			max_users INT DEFAULT 5,
+			name VARCHAR(100) NOT NULL,
+			price DECIMAL(10,2) DEFAULT 0.0,
+			max_salons INT DEFAULT 10,
+			max_users INT DEFAULT 50,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			deleted_at TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	db.Exec(`ALTER TABLE plans ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`)
+	// Убрать legacy owner_id если остался с древних GORM-миграций — не дропаем, но игнорируем
+	return nil
 }
 
 func migrateNotifications(db *gorm.DB) error {
@@ -333,55 +373,93 @@ func migrateLeadActivities(db *gorm.DB) error {
 }
 
 func migrateChecklistTemplates(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS checklist_templates (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			tenant_id UUID,
+			tenant_id UUID REFERENCES tenants(id),
+			created_by UUID NOT NULL REFERENCES users(id),
 			title VARCHAR(255) NOT NULL,
 			description TEXT,
+			type VARCHAR(50) DEFAULT 'daily',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS created_by UUID`)
+	db.Exec(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'daily'`)
+	return nil
 }
 
 func migrateChecklistTemplateItems(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS checklist_template_items (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			template_id UUID NOT NULL,
-			title VARCHAR(255) NOT NULL,
-			description TEXT,
-			order_num INT DEFAULT 0
+			template_id UUID NOT NULL REFERENCES checklist_templates(id) ON DELETE CASCADE,
+			text VARCHAR(500) NOT NULL,
+			order_index INT DEFAULT 0,
+			validation_type VARCHAR(50) DEFAULT 'checkbox',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS text VARCHAR(500)`)
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS order_index INT DEFAULT 0`)
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS validation_type VARCHAR(50) DEFAULT 'checkbox'`)
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	// Legacy GORM колонки — оставим для обратной совместимости
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS title VARCHAR(255)`)
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS description TEXT`)
+	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS order_num INT DEFAULT 0`)
+	return nil
 }
 
 func migrateAssignedChecklists(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS assigned_checklists (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			user_id UUID NOT NULL,
-			template_id UUID,
-			status VARCHAR(50) DEFAULT 'pending',
-			start_date TIMESTAMP,
-			end_date TIMESTAMP,
+			template_id UUID NOT NULL REFERENCES checklist_templates(id),
+			salon_id UUID NOT NULL REFERENCES salons(id),
+			assigned_to UUID NOT NULL REFERENCES users(id),
+			due_date DATE,
+			status VARCHAR(50) DEFAULT 'active',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS salon_id UUID`)
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS assigned_to UUID`)
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS due_date DATE`)
+	// Legacy
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS user_id UUID`)
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS start_date TIMESTAMP`)
+	db.Exec(`ALTER TABLE assigned_checklists ADD COLUMN IF NOT EXISTS end_date TIMESTAMP`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_assigned_checklists_user ON assigned_checklists(assigned_to)`)
+	return nil
 }
 
 func migrateChecklistResponses(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS checklist_responses (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			assigned_checklist_id UUID NOT NULL,
-			item_id UUID NOT NULL,
-			user_id UUID,
-			is_completed BOOLEAN DEFAULT FALSE,
-			response_text TEXT,
+			assigned_checklist_id UUID NOT NULL REFERENCES assigned_checklists(id),
+			item_id UUID NOT NULL REFERENCES checklist_template_items(id),
+			value TEXT,
+			completed BOOLEAN DEFAULT FALSE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE checklist_responses ADD COLUMN IF NOT EXISTS value TEXT`)
+	db.Exec(`ALTER TABLE checklist_responses ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE`)
+	// Legacy
+	db.Exec(`ALTER TABLE checklist_responses ADD COLUMN IF NOT EXISTS user_id UUID`)
+	db.Exec(`ALTER TABLE checklist_responses ADD COLUMN IF NOT EXISTS is_completed BOOLEAN DEFAULT FALSE`)
+	db.Exec(`ALTER TABLE checklist_responses ADD COLUMN IF NOT EXISTS response_text TEXT`)
+	return nil
 }
 
 func migrateAlerts(db *gorm.DB) error {
@@ -544,6 +622,176 @@ func migrateCategoryTurnover(db *gorm.DB) error {
 		return err
 	}
 	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_category_turnover_salon_period ON category_turnover(salon_id, period)`).Error
+}
+
+func migrateGoals(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS goals (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			assigner_id UUID REFERENCES users(id),
+			assignee_id UUID REFERENCES users(id),
+			role VARCHAR(50) NOT NULL,
+			sales_plan NUMERIC(15,2) DEFAULT 0,
+			leads_plan INT DEFAULT 0,
+			calls_plan INT DEFAULT 0,
+			meetings_plan INT DEFAULT 0,
+			target_date DATE NOT NULL,
+			tenant_id UUID REFERENCES tenants(id),
+			period VARCHAR(20) DEFAULT 'day',
+			start_date DATE,
+			end_date DATE,
+			sales_fact NUMERIC,
+			status VARCHAR(50) DEFAULT 'active',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS period VARCHAR(20) DEFAULT 'day'`)
+	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS start_date DATE`)
+	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS end_date DATE`)
+	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS sales_fact NUMERIC`)
+	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'`)
+	db.Exec(`ALTER TABLE goals ALTER COLUMN assigner_id DROP NOT NULL`)
+	db.Exec(`ALTER TABLE goals ALTER COLUMN assignee_id DROP NOT NULL`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_goals_assignee_date ON goals(assignee_id, target_date)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_goals_assigner ON goals(assigner_id)`)
+	return nil
+}
+
+func migrateSystemSettings(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS system_settings (
+			key VARCHAR(255) PRIMARY KEY,
+			value TEXT,
+			description TEXT,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	// Дефолты из 010 (идемпотентно)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('target_conversion', '30', 'Целевая конверсия в продажу, %') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('target_extras_percent', '15', 'Целевая доля допов в выручке, %') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('max_bonus', '50000', 'Максимальная премия менеджера, RUB') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('marketing_spend_current_month', '0', 'Расходы на маркетинг за текущий месяц (RUB)') ON CONFLICT (key) DO NOTHING`)
+	return nil
+}
+
+func migrateUserLogs(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_logs (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID REFERENCES users(id),
+			tenant_id UUID REFERENCES tenants(id),
+			action VARCHAR(50) DEFAULT 'api_request',
+			ip_address VARCHAR(45),
+			user_agent TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_user_logs_created_at ON user_logs(created_at)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_user_logs_user_id ON user_logs(user_id)`)
+	return nil
+}
+
+func migrateContracts(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS contracts (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID NOT NULL,
+			lead_id UUID,
+			manager_id UUID NOT NULL,
+			client_name VARCHAR(255) NOT NULL,
+			client_phone VARCHAR(50),
+			client_email VARCHAR(255),
+			total_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+			prepaid_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+			paid_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+			remain_amount NUMERIC(15,2) NOT NULL DEFAULT 0,
+			margin_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+			status VARCHAR(50) NOT NULL DEFAULT 'pending',
+			payment_status VARCHAR(50) NOT NULL DEFAULT 'awaiting_payment',
+			payment_date TIMESTAMP,
+			deadline_date TIMESTAMP,
+			products TEXT,
+			description TEXT,
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+		)
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_contracts_salon_id ON contracts(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_contracts_manager_id ON contracts(manager_id)`)
+	return nil
+}
+
+func migrateScheduleEvents(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schedule_events (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID NOT NULL,
+			user_id UUID NOT NULL,
+			title VARCHAR(255) NOT NULL,
+			description TEXT,
+			type VARCHAR(50) DEFAULT 'task',
+			start_time TIMESTAMP NOT NULL,
+			end_time TIMESTAMP,
+			priority VARCHAR(50) DEFAULT 'normal',
+			status VARCHAR(50) DEFAULT 'planned',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_schedule_events_salon ON schedule_events(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_schedule_events_user ON schedule_events(user_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_schedule_events_start ON schedule_events(start_time)`)
+	return nil
+}
+
+func migrateDailyGoals(db *gorm.DB) error {
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS daily_goals (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			salon_id UUID,
+			user_id UUID,
+			target_date DATE NOT NULL,
+			sales_plan DECIMAL(12,2) DEFAULT 0,
+			leads_plan INTEGER DEFAULT 0,
+			calls_plan INTEGER DEFAULT 0,
+			meetings_plan INTEGER DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(salon_id, target_date),
+			UNIQUE(user_id, target_date)
+		)
+	`).Error; err != nil {
+		// UNIQUE может конфликтовать с существующими данными — пробуем без constraint
+		return db.Exec(`
+			CREATE TABLE IF NOT EXISTS daily_goals (
+				id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+				salon_id UUID,
+				user_id UUID,
+				target_date DATE NOT NULL,
+				sales_plan DECIMAL(12,2) DEFAULT 0,
+				leads_plan INTEGER DEFAULT 0,
+				calls_plan INTEGER DEFAULT 0,
+				meetings_plan INTEGER DEFAULT 0,
+				created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+			)
+		`).Error
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_salon ON daily_goals(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_user ON daily_goals(user_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_date ON daily_goals(target_date)`)
+	return nil
 }
 
 func GetDB() *gorm.DB {
