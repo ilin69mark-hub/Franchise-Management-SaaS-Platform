@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"time"
+
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
@@ -22,11 +24,17 @@ func (r *ScheduleRepository) CreateEvent(ctx context.Context, event *models.Sche
 
 func (r *ScheduleRepository) GetUserEventsByDate(ctx context.Context, userID uuid.UUID, dateStr string) ([]models.ScheduleEvent, error) {
 	var events []models.ScheduleEvent
-	err := r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
-		Where("DATE(start_time) = ?", dateStr).
-		Order("start_time asc").
-		Find(&events).Error
+	q := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if dateStr != "" {
+		if d, err := time.Parse("2006-01-02", dateStr); err == nil {
+			ds := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location())
+			de := ds.AddDate(0, 0, 1)
+			q = q.Where("start_time >= ? AND start_time < ?", ds, de)
+		} else {
+			q = q.Where("DATE(start_time) = ?", dateStr)
+		}
+	}
+	err := q.Order("start_time asc").Find(&events).Error
 	return events, err
 }
 
@@ -40,11 +48,17 @@ func (r *ScheduleRepository) UpdateEventStatus(ctx context.Context, eventID uuid
 // GetEventsByUsers - получение событий списка пользователей
 func (r *ScheduleRepository) GetEventsByUsers(ctx context.Context, userIDs []uuid.UUID, dateStr string) ([]models.ScheduleEvent, error) {
 	var events []models.ScheduleEvent
-	err := r.db.WithContext(ctx).
-		Where("user_id IN ?", userIDs).
-		Where("DATE(start_time) = ?", dateStr).
-		Order("start_time asc").
-		Find(&events).Error
+	q := r.db.WithContext(ctx).Where("user_id IN ?", userIDs)
+	if dateStr != "" {
+		if d, err := time.Parse("2006-01-02", dateStr); err == nil {
+			ds := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location())
+			de := ds.AddDate(0, 0, 1)
+			q = q.Where("start_time >= ? AND start_time < ?", ds, de)
+		} else {
+			q = q.Where("DATE(start_time) = ?", dateStr)
+		}
+	}
+	err := q.Order("start_time asc").Find(&events).Error
 	return events, err
 }
 

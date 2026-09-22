@@ -220,8 +220,10 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		Count(&avgLeads)
 
 	yesterday := now.AddDate(0, 0, -1)
+	yesterdayStart := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
+	yesterdayEnd := yesterdayStart.AddDate(0, 0, 1)
 	s.db.Model(&models.Lead{}).
-		Where("salon_id = ? AND DATE(created_at) = ?", salonID, yesterday.Format("2006-01-02")).
+		Where("salon_id = ? AND created_at >= ? AND created_at < ?", salonID, yesterdayStart, yesterdayEnd).
 		Count(&todayLeads)
 
 	if avgLeads > 0 {

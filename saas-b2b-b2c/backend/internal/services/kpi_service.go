@@ -41,6 +41,8 @@ func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, sa
 
 	today := time.Now()
 	todayStr := today.Format("2006-01-02")
+	dayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+	dayEnd := dayStart.AddDate(0, 0, 1)
 
 	resp := &models.DashboardStatsResponse{Date: todayStr}
 
@@ -69,7 +71,7 @@ func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, sa
 	} else {
 		qSales = qSales.Where("salon_id = ?", salonID)
 	}
-	qSales.Where("DATE(created_at) = ?", todayStr).Select("COALESCE(SUM(budget), 0)").Scan(&salesFact)
+	qSales.Where("created_at >= ? AND created_at < ?", dayStart, dayEnd).Select("COALESCE(SUM(budget), 0)").Scan(&salesFact)
 
 	// 3. ФАКТ Лидов
 	var leadsFact int64
@@ -79,14 +81,14 @@ func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, sa
 	} else {
 		qLeads = qLeads.Where("salon_id = ?", salonID)
 	}
-	qLeads.Where("DATE(created_at) = ?", todayStr).Count(&leadsFact)
+	qLeads.Where("created_at >= ? AND created_at < ?", dayStart, dayEnd).Count(&leadsFact)
 
 	// 4. Звонки и Встречи
 	var callsFact, meetingsFact int64
 	countActivity := func(activityType string, dest *int64) {
 		q := s.DB.Model(&models.LeadActivity{}).
 			Where("type = ?", activityType).
-			Where("DATE(created_at) = ?", todayStr)
+			Where("created_at >= ? AND created_at < ?", dayStart, dayEnd)
 		if isManager {
 			q = q.Where("user_id = ?", userID)
 		} else {
@@ -354,16 +356,20 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// ====================
 	// Вчера
 	yesterday := targetDate.AddDate(0, 0, -1)
+	yesterdayStart := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
+	yesterdayEnd := yesterdayStart.AddDate(0, 0, 1)
 	var yesterdaySales float64
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id = ? AND status = ? AND DATE(created_at) = ?", salonID, "sale", yesterday.Format("2006-01-02")).
+		Where("salon_id = ? AND status = ? AND created_at >= ? AND created_at < ?", salonID, "sale", yesterdayStart, yesterdayEnd).
 		Select("COALESCE(SUM(budget), 0)").Scan(&yesterdaySales)
 
 	// Прошлая неделя (7 дней назад)
 	weekAgo := targetDate.AddDate(0, 0, -7)
+	weekAgoStart := time.Date(weekAgo.Year(), weekAgo.Month(), weekAgo.Day(), 0, 0, 0, 0, weekAgo.Location())
+	weekAgoEnd := weekAgoStart.AddDate(0, 0, 1)
 	var weekAgoSales float64
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id = ? AND status = ? AND DATE(created_at) = ?", salonID, "sale", weekAgo.Format("2006-01-02")).
+		Where("salon_id = ? AND status = ? AND created_at >= ? AND created_at < ?", salonID, "sale", weekAgoStart, weekAgoEnd).
 		Select("COALESCE(SUM(budget), 0)").Scan(&weekAgoSales)
 
 	if yesterdaySales > 0 {
@@ -422,9 +428,11 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// ====================
 	// Трафик (количество лидов за сегодня vs норма)
 	today := targetDate.Format("2006-01-02")
+	todayStart := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location())
+	todayEnd := todayStart.AddDate(0, 0, 1)
 	var todayLeads int64
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id = ? AND DATE(created_at) = ?", salonID, today).
+		Where("salon_id = ? AND created_at >= ? AND created_at < ?", salonID, todayStart, todayEnd).
 		Count(&todayLeads)
 
 	// Норма - 10 лидов в день (можно сделать настраиваемой)
@@ -482,7 +490,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// 8. ОЖИДАЕМЫЕ ОПЛАТЫ НА СЕГОДНЯ
 	// ====================
 	var contracts []models.Contract
-	s.DB.Where("salon_id = ? AND payment_status IN ? AND DATE(payment_date) = ?", salonID, []string{"awaiting_payment", "payment_due"}, today).
+	s.DB.Where("salon_id = ? AND payment_status IN ? AND payment_date >= ? AND payment_date < ?", salonID, []string{"awaiting_payment", "payment_due"}, todayStart, todayEnd).
 		Find(&contracts)
 
 	for _, c := range contracts {
@@ -599,9 +607,10 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 	}
 
 	// ===== СВЕЖИЕ ЛИДЫ (за сегодня) =====
-	today := targetDate.Format("2006-01-02")
+	todayStart2 := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location())
+	todayEnd2 := todayStart2.AddDate(0, 0, 1)
 	var todayLeads []models.Lead
-	s.DB.Where("salon_id = ? AND DATE(created_at) = ?", salonID, today).
+	s.DB.Where("salon_id = ? AND created_at >= ? AND created_at < ?", salonID, todayStart2, todayEnd2).
 		Order("created_at DESC").
 		Find(&todayLeads)
 

@@ -39,6 +39,8 @@ func calcPercent(plan, fact float64) models.KPIItem {
 func (r *AnalyticsRepository) CalculateDashboardStats(ctx context.Context, userID *uuid.UUID, salonID *uuid.UUID, isManager bool) (*models.DashboardStatsResponse, error) {
 	today := time.Now()
 	todayStr := today.Format("2006-01-02")
+	dayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
+	dayEnd := dayStart.AddDate(0, 0, 1)
 
 	resp := &models.DashboardStatsResponse{Date: todayStr}
 
@@ -63,7 +65,7 @@ func (r *AnalyticsRepository) CalculateDashboardStats(ctx context.Context, userI
 	} else if salonID != nil {
 		qSales = qSales.Where("salon_id = ?", *salonID)
 	}
-	qSales.Where("DATE(created_at) = ?", todayStr).Select("COALESCE(SUM(budget), 0)").Scan(&salesFact)
+	qSales.Where("created_at >= ? AND created_at < ?", dayStart, dayEnd).Select("COALESCE(SUM(budget), 0)").Scan(&salesFact)
 
 	resp.Sales = calcPercent(goal.SalesPlan, salesFact)
 	resp.Leads = models.KPIItem{Plan: float64(goal.LeadsPlan)}
@@ -77,7 +79,7 @@ func (r *AnalyticsRepository) CalculateDashboardMain(ctx context.Context, userID
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
