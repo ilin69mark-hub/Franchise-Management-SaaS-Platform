@@ -119,9 +119,18 @@ func main() {
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{"status": "ok", "timestamp": time.Now().Format(time.RFC3339)})
 		})
-		api.POST("/auth/register", authHandler.Register)
-		api.POST("/auth/login", authHandler.Login)
 		api.POST("/auth/refresh", authHandler.RefreshToken)
+	}
+	// Строгий лимит на auth: защита от брутфорса (P3-5)
+	authLimited := api.Group("/auth")
+	authLimited.Use(middleware.RateLimit(10, time.Minute))
+	{
+		authLimited.POST("/register", authHandler.Register)
+	}
+	authLoginLimited := api.Group("/auth")
+	authLoginLimited.Use(middleware.RateLimit(5, time.Minute))
+	{
+		authLoginLimited.POST("/login", authHandler.Login)
 	}
 
 	protected := api.Group("/")
