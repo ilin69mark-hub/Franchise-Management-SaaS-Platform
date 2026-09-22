@@ -31,19 +31,20 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
 COPY backend/ .
-COPY config.yaml .
-
-RUN CGO_ENABLED=0 GOOS=linux go build -o main cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o main cmd/server/main.go
 
 
 # === СТАДИЯ 3: PRODUCTION (финальный образ) ===
-FROM alpine:latest AS production
+FROM alpine:3.19 AS production
 
-WORKDIR /root/
+RUN apk add --no-cache ca-certificates wget && adduser -D -g '' appuser
 
-COPY --from=builder /app/main /root/main
-COPY --from=builder /app/config.yaml /root/config.yaml
+WORKDIR /home/appuser/
+
+COPY --from=builder /app/main ./main
 
 EXPOSE 8080
+
+USER appuser
 
 CMD ["./main"]

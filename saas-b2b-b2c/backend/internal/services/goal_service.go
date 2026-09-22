@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -85,19 +84,27 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 	}
 
 	period := models.PeriodDay
-	if dto.Period == "week" || dto.Period == "month" || dto.Period == "year" {
+	if dto.Period == "week" || dto.Period == "month" || dto.Period == "year" || dto.Period == "custom" {
 		period = models.GoalPeriod(dto.Period)
-	} else if dto.Period == "custom" || strings.Contains(dto.Period, " дн.") {
-		period = models.GoalPeriod(dto.Period) // Сохраняем как есть (например "14 дн.")
+	} else if dto.Period != "" {
+		return nil, errors.New("invalid period")
 	}
 
 	var startDate, endDate, targetDate time.Time
 
 	if dto.StartDate != "" {
-		startDate, _ = time.Parse("2006-01-02", dto.StartDate)
+		var err error
+		startDate, err = time.Parse("2006-01-02", dto.StartDate)
+		if err != nil {
+			return nil, errors.New("invalid start_date")
+		}
 	}
 	if dto.EndDate != "" {
-		endDate, _ = time.Parse("2006-01-02", dto.EndDate)
+		var err error
+		endDate, err = time.Parse("2006-01-02", dto.EndDate)
+		if err != nil {
+			return nil, errors.New("invalid end_date")
+		}
 	}
 	if startDate.IsZero() && !endDate.IsZero() {
 		startDate = endDate
@@ -136,6 +143,9 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 	if err != nil {
 		return nil, errors.New("goal not found")
 	}
+	if goal.AssignerID.String() != assignerID {
+		return nil, errors.New("forbidden: not owner")
+	}
 
 	if dto.SalesPlan > 0 {
 		goal.SalesPlan = dto.SalesPlan
@@ -150,13 +160,24 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 		goal.MeetingsPlan = dto.MeetingsPlan
 	}
 	if dto.Period != "" {
+		if dto.Period != "day" && dto.Period != "week" && dto.Period != "month" && dto.Period != "year" && dto.Period != "custom" {
+			return nil, errors.New("invalid period")
+		}
 		goal.Period = models.GoalPeriod(dto.Period)
 	}
 	if dto.StartDate != "" {
-		goal.StartDate, _ = time.Parse("2006-01-02", dto.StartDate)
+		var err error
+		goal.StartDate, err = time.Parse("2006-01-02", dto.StartDate)
+		if err != nil {
+			return nil, errors.New("invalid start_date")
+		}
 	}
 	if dto.EndDate != "" {
-		goal.EndDate, _ = time.Parse("2006-01-02", dto.EndDate)
+		var err error
+		goal.EndDate, err = time.Parse("2006-01-02", dto.EndDate)
+		if err != nil {
+			return nil, errors.New("invalid end_date")
+		}
 	}
 
 	if err := s.repo.Update(ctx, goal); err != nil {
@@ -177,5 +198,14 @@ func (s *goalService) GetVisibleGoals(ctx context.Context, userID, role, tenantI
 
 /* ---------- DeleteGoal ---------- */
 func (s *goalService) DeleteGoal(ctx context.Context, id string) error {
+	goal, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if goal == nil {
+		return errors.New("goal not found")
+	}
+	// Проверку владения делает handler через ctx role/tenant, здесь хотя бы проверяем существование
+	_ = goal
 	return s.repo.Delete(ctx, id)
 }

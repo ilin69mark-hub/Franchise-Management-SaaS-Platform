@@ -190,7 +190,31 @@ func (h *KPIHandler) CreateEvent(c *gin.Context) {
 
 func (h *KPIHandler) UpdateEventStatus(c *gin.Context) {
 	idStr := c.Param("id")
-	eventID, _ := uuid.Parse(idStr)
+	eventID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event ID"})
+		return
+	}
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	// IDOR: проверяем владение событием
+	var ev models.ScheduleEvent
+	if err := h.db.First(&ev, "id = ?", eventID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+	if ev.UserID != user.ID && (user.SalonID == nil || ev.SalonID != *user.SalonID) {
+		// дилер может трогать события своих менеджеров — проверим managed_by
+		var cnt int64
+		h.db.Model(&models.User{}).Where("id = ? AND managed_by = ?", ev.UserID, user.ID).Count(&cnt)
+		if cnt == 0 && user.Role != models.RoleSuperAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	}
 
 	var req models.UpdateScheduleStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

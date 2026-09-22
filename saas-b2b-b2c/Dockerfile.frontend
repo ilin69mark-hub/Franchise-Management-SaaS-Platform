@@ -24,8 +24,6 @@ WORKDIR /app
 
 COPY frontend/package*.json ./
 
-RUN npm install -g next@14
-
 RUN npm ci
 
 EXPOSE 3000
@@ -44,10 +42,16 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+RUN chown -R nextjs:nodejs /app
+
 EXPOSE 3000
+
+USER nextjs
 
 CMD ["node", "server.js"]
