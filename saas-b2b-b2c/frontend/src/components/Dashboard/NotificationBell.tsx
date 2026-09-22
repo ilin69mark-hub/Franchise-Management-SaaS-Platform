@@ -69,14 +69,27 @@ const NotificationBell: React.FC = () => {
     }
   }, [saveUnread]);
 
-  // Инициализация WebSocket
-  const initWebSocket = useCallback(() => {
-    const userId = localStorage.getItem('id') || localStorage.getItem('userId') || localStorage.getItem('user_id');
-    if (!userId) return;
+  // Инициализация WebSocket — fail-safe: без хардкода localhost, с wss на https и JWT в query
+  const buildWsUrl = useCallback(() => {
+    if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+    const api = process.env.NEXT_PUBLIC_API_URL;
+    if (api) {
+      const base = api.replace(/\/+$/, '');
+      const proto = base.startsWith('https') ? 'wss' : 'ws';
+      return `${proto}://${base.replace(/^https?:\/\//, '')}/ws/alerts`;
+    }
+    const proto = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${window.location.host}/ws/alerts`;
+  }, []);
 
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || `http://${window.location.host}`).replace(/\/+$/, '');
-    const wsProtocol = apiBase.startsWith('https') ? 'wss' : 'ws';
-    const wsUrl = `${wsProtocol}${apiBase.replace(/^https?:\/\//, '')}/ws/alerts?user_id=${userId}`;
+  const initWebSocket = useCallback(() => {
+    const token = localStorage.getItem('accessToken');
+    const userId = localStorage.getItem('id') || localStorage.getItem('userId') || localStorage.getItem('user_id');
+    if (!token && !userId) return;
+
+    const baseWs = buildWsUrl();
+    const qs = token ? `token=${encodeURIComponent(token)}` : `user_id=${encodeURIComponent(userId || '')}`;
+    const wsUrl = `${baseWs}?${qs}`;
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -127,7 +140,7 @@ const NotificationBell: React.FC = () => {
       console.error('WebSocket init error', e);
       startPolling();
     }
-  }, [saveUnread]);
+  }, [saveUnread, buildWsUrl]);
 
   // Polling fallback
   const startPolling = useCallback(() => {

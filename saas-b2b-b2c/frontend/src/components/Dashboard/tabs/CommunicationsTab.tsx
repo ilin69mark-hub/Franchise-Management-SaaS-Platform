@@ -109,7 +109,10 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
 
   useEffect(() => {
     const connectWebSocket = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080/ws';
+      const api = process.env.NEXT_PUBLIC_API_URL;
+      const baseWs = process.env.NEXT_PUBLIC_WS_URL || (api ? `${api.startsWith('https') ? 'wss' : 'ws'}://${api.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/ws` : `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws'}://${typeof window !== 'undefined' ? window.location.host : 'localhost:8080'}/ws`);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+      const wsUrl = token ? `${baseWs}?token=${encodeURIComponent(token)}` : baseWs;
       try {
         wsRef.current = new WebSocket(wsUrl);
         

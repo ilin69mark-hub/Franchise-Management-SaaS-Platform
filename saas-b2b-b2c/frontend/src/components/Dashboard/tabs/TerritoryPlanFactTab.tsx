@@ -1,9 +1,10 @@
 // src/components/Dashboard/tabs/TerritoryPlanFactTab.tsx
 import React, { useState, useMemo } from 'react';
-import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Select, Button, Modal, Form, Input, Upload, Empty, Segmented } from 'antd';
+import { Card, Row, Col, Typography, Table, Tag, Space, Statistic, Select, Button, Modal, Form, Input, Upload, Empty, Segmented, message } from 'antd';
 import { ShopOutlined, DollarOutlined, PercentageOutlined, RiseOutlined, CheckCircleOutlined, ExclamationCircleOutlined, DownloadOutlined, FilePdfOutlined, WarningOutlined, EditOutlined, MessageOutlined } from '@ant-design/icons';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, BarChart, Bar, ReferenceLine, ComposedChart, Area } from 'recharts';
 import { useTerritoryManagerStore, DealerMetrics } from '@/store/territoryManagerStore';
+import apiClient from '@/api/axiosClient';
 
 const { Text } = Typography;
 
@@ -163,28 +164,29 @@ const TerritoryPlanFactTab: React.FC<TerritoryPlanFactTabProps> = ({ loading }) 
   ];
 
   const generatePDF = async () => {
-    const token = localStorage.getItem('accessToken');
     try {
-      const res = await fetch('/api/franchiser/reports/generate', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          period,
-          proposals: reportProposals,
-          deviations: deviationReasons,
-          actions: deviationActions,
-        }),
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `отчёт-${period}.pdf`;
-        a.click();
+      const res = await apiClient.post('/franchiser/report/generate-pdf', {
+        blocks: [period],
+        comment: reportProposals,
+      }, { responseType: 'blob' });
+      const blob: Blob = res.data instanceof Blob ? res.data : new Blob([res.data]);
+      // Если бэк вернул JSON с ошибкой вместо PDF — blob будет application/json
+      if (blob.type.includes('json')) {
+        const text = await blob.text();
+        try {
+          const j = JSON.parse(text);
+          message.error(j.error || 'Ошибка генерации отчёта');
+        } catch {}
+        return;
       }
-    } catch (e) {
-      setReportModalOpen(true);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `отчёт-${period}.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      message.error(e?.response?.data?.error || 'Ошибка генерации отчёта');
     }
   };
 
