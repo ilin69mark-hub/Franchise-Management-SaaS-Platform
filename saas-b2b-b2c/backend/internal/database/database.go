@@ -729,11 +729,20 @@ func migrateSystemSettings(db *gorm.DB) error {
 	`).Error; err != nil {
 		return err
 	}
-	// Дефолты из 010 (идемпотентно)
+	// Дефолты из 010/014 (идемпотентно)
 	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('target_conversion', '30', 'Целевая конверсия в продажу, %') ON CONFLICT (key) DO NOTHING`)
 	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('target_extras_percent', '15', 'Целевая доля допов в выручке, %') ON CONFLICT (key) DO NOTHING`)
 	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('max_bonus', '50000', 'Максимальная премия менеджера, RUB') ON CONFLICT (key) DO NOTHING`)
 	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('marketing_spend_current_month', '0', 'Расходы на маркетинг за текущий месяц (RUB)') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('avg_margin_percent', '32', 'Средняя маржа сети, %') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('network_avg_conversion', '15', 'Средняя конверсия сети, %') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('network_avg_check', '80000', 'Средний чек сети, RUB') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('extras_rate', '0.1', 'Доля допов от выручки') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('discount_default_percent', '5', 'Скидка по умолчанию, %') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('net_profit_rate', '0.2', 'Доля чистой прибыли') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('gross_margin_rate', '0.35', 'Доля маржинальной прибыли') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('cogs_rate', '0.65', 'Доля себестоимости') ON CONFLICT (key) DO NOTHING`)
+	db.Exec(`INSERT INTO system_settings (key, value, description) VALUES ('prev_month_factor', '0.9', 'Коэффициент прошлого месяца') ON CONFLICT (key) DO NOTHING`)
 	return nil
 }
 

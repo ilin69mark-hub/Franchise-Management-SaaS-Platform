@@ -29,6 +29,16 @@ func NewKPIServiceWithAnalytics(db *gorm.DB, kpiRepo repository.KPIRepositoryInt
 	return &KPIService{DB: db, kpiRepo: kpiRepo, schedRep: schedRep, analyticsRepo: analyticsRepo}
 }
 
+func (s *KPIService) getSettingFloat(key string, def float64) float64 {
+	var v string
+	if err := s.DB.Table("system_settings").Where("key = ?", key).Select("value").Scan(&v).Error; err == nil && v != "" {
+		if parsed, perr := strconv.ParseFloat(v, 64); perr == nil {
+			return parsed
+		}
+	}
+	return def
+}
+
 // SetGoal - обертка для репозитория
 func (s *KPIService) SetGoal(ctx context.Context, goal *models.DailyGoal) error {
 	return s.kpiRepo.UpsertGoal(ctx, goal)
@@ -738,8 +748,8 @@ func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, per
 			avgCheck = revenue / float64(deals)
 		}
 
-		extrasSum := revenue * 0.1
-		discountPercent := 5.0
+		extrasSum := revenue * s.getSettingFloat("extras_rate", 0.1)
+		discountPercent := s.getSettingFloat("discount_default_percent", 5.0)
 
 		totalRevenue += revenue
 		totalDeals += float64(deals)
@@ -1285,9 +1295,9 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 		}
 	}
 
-	// Чистая прибыль (20% от выручки - упрощенно)
-	netProfit := totalRevenue * 0.2
-	marginProfit := totalRevenue * 0.35
+	// Чистая прибыль — из настроек (fallback 20% для совместимости, теперь конфигурируется)
+	netProfit := totalRevenue * s.getSettingFloat("net_profit_rate", 0.2)
+	marginProfit := totalRevenue * s.getSettingFloat("gross_margin_rate", 0.35)
 
 	// Алёрты - считаем через notifications для дилера
 	var alertsCount int64
@@ -1336,8 +1346,8 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&resp.Revenue)
 
-	// COGS (себестоимость - 65% от выручки)
-	resp.COGS = resp.Revenue * 0.65
+	// COGS — из настроек (fallback 65%)
+	resp.COGS = resp.Revenue * s.getSettingFloat("cogs_rate", 0.65)
 
 	// Расходы из таблицы dealer_expenses
 	type Expense struct {
@@ -1385,11 +1395,16 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 	// Чистая прибыль
 	resp.NetProfit = resp.Revenue - resp.COGS - resp.Rent - resp.Utilities - resp.Payroll - resp.Taxes - resp.Logistics - resp.Marketing - resp.Defects - resp.OtherExpenses - resp.Bonus
 
-	// Прогноз
+	// Прогноз — динамически по длине месяца, с защитой от отрицательной экстраполяции
 	daysInMonth := targetDate.Day()
-	daysLeft := 30 - daysInMonth + 1
-	dailyAvg := resp.NetProfit / float64(daysInMonth)
-	resp.NetProfitForecast = resp.NetProfit + (dailyAvg * float64(daysLeft))
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	daysLeft := lastOfMonth.Day() - daysInMonth + 1
+	if resp.NetProfit <= 0 {
+		resp.NetProfitForecast = resp.NetProfit
+	} else {
+		dailyAvg := resp.NetProfit / float64(daysInMonth)
+		resp.NetProfitForecast = resp.NetProfit + (dailyAvg * float64(daysLeft))
+	}
 
 	// Прошлый месяц: выручка и расходы из БД, а не жёсткий коэффициент
 	prevFirstOfMonth := firstOfMonth.AddDate(0, -1, 0)
@@ -1406,7 +1421,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		WHERE dealer_id = ? AND period = ?
 	`, userID, prevPeriod).Scan(&prevExpensesTotal)
 
-	resp.PrevMonthNetProfit = prevRevenue - (prevRevenue * 0.65) - prevExpensesTotal
+	resp.PrevMonthNetProfit = prevRevenue - (prevRevenue * s.getSettingFloat("cogs_rate", 0.65)) - prevExpensesTotal
 
 	// Заполняем expense_breakdown
 	expenseItems := []struct {
@@ -1432,7 +1447,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 			Category:         item.Category,
 			Amount:           item.Amount,
 			PercentOfRevenue: percent,
-			PrevMonthAmount:  item.Amount * 0.9, // Assume 10% less in prev month
+			PrevMonthAmount:  item.Amount * s.getSettingFloat("prev_month_factor", 0.9),
 		})
 	}
 
@@ -1784,7 +1799,7 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 	resp.ForecastPercent = forecastPercent
 	resp.ActiveDealers = len(salons)
 	resp.AvgConversion = avgConversion
-	resp.AvgMargin = 32.0
+	resp.AvgMargin = s.getSettingFloat("avg_margin_percent", 32.0)
 
 	return resp, nil
 }
@@ -1926,11 +1941,15 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 		planPercent = (totalFact / totalPlan) * 100
 	}
 
-	// Прогноз на квартал (простая экстраполяция)
+	// Прогноз на квартал — динамически по длине квартала
 	forecastAmount := 0.0
 	daysPassed := targetDate.Sub(startDate).Hours() / 24
 	if daysPassed > 0 {
-		daysInQuarter := 90.0
+		m := int(targetDate.Month())
+		qm := time.Month(((m - 1) / 3) * 3 + 1)
+		qStart := time.Date(targetDate.Year(), qm, 1, 0, 0, 0, 0, targetDate.Location())
+		qEnd := qStart.AddDate(0, 3, 0)
+		daysInQuarter := qEnd.Sub(qStart).Hours() / 24
 		forecastAmount = (totalFact / daysPassed) * daysInQuarter
 	}
 	forecastPercent := 0.0
@@ -2351,9 +2370,9 @@ func (s *KPIService) GetTerritoryBenchmarks(ctx context.Context, userID uuid.UUI
 		Select("COALESCE(AVG(budget), 0)").Scan(&avgCheck)
 	resp.TerritoryAvgCheck = avgCheck
 
-	// Эталон (сеть)
-	resp.NetworkAvgConversion = 15.0 // 15% - эталон
-	resp.NetworkAvgCheck = 80000     // 80k - эталон
+	// Эталон (сеть) — из настроек
+	resp.NetworkAvgConversion = s.getSettingFloat("network_avg_conversion", 15.0)
+	resp.NetworkAvgCheck = s.getSettingFloat("network_avg_check", 80000)
 
 	return resp, nil
 }
