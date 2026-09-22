@@ -49,8 +49,8 @@ interface FranchiserState {
   setLoading: (loading: boolean) => void;
   fetchSummary: () => Promise<void>;
   fetchNetwork: () => Promise<void>;
-  fetchHealth: () => Promise<any>;
-  fetchTeam: () => Promise<any>;
+  fetchHealth: () => Promise<Record<string, unknown> | null>;
+  fetchTeam: () => Promise<Record<string, unknown> | null>;
 }
 
 const defaultSummary: FranchiserSummary = {
@@ -104,12 +104,13 @@ export const useFranchiserStore = create<FranchiserState>()(
           const res = await apiClient.get('/franchiser/network?period=month');
           const data = res.data;
           
-          const dealers: DealerMetrics[] = (data.network_data || []).map((d: any) => ({
+          type NetworkDealerRaw = { id: string; name?: string; salon_count?: number; plan_percent?: number; conversion?: number; margin?: number; forecast?: DealerMetrics['status']; plan?: number; fact?: number };
+          const dealers: DealerMetrics[] = (data.network_data as NetworkDealerRaw[] || []).map((d) => ({
             dealerId: d.id,
             dealerName: d.name || '',
             salonCount: d.salon_count || 0,
             planPercent: d.plan_percent || 0,
-            forecastPercent: d.plan_percent >= 80 ? 100 : d.plan_percent >= 50 ? 70 : 30,
+            forecastPercent: (d.plan_percent ?? 0) >= 80 ? 100 : (d.plan_percent ?? 0) >= 50 ? 70 : 30,
             conversion: d.conversion || 0,
             margin: d.margin || 0,
             status: d.forecast || 'green',
