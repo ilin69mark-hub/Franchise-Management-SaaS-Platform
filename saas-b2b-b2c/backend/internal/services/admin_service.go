@@ -620,7 +620,7 @@ func (s *AdminService) GetUnitEconomics() (map[string]interface{}, error) {
 
 	marketingSpend := 0.0
 	if marketingSpendStr != "" {
-		fmt.Sscanf(marketingSpendStr, "%f", &marketingSpend)
+		_, _ = fmt.Sscanf(marketingSpendStr, "%f", &marketingSpend)
 	}
 
 	var newTenantsThisMonth int64

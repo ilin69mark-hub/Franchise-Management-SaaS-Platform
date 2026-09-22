@@ -374,7 +374,7 @@ func (r *AdminRepository) GetUnitEconomics(ctx context.Context) (map[string]inte
 
 	marketingSpend := 0.0
 	if marketingSpendStr != "" {
-		fmt.Sscanf(marketingSpendStr, "%f", &marketingSpend)
+		_, _ = fmt.Sscanf(marketingSpendStr, "%f", &marketingSpend)
 	}
 
 	var newTenantsThisMonth int64

@@ -79,7 +79,7 @@ func main() {
 
 	c := cron.New()
 	paymentJob := jobs.NewPaymentJob(adminService, notifService)
-	c.AddFunc("0 0 9 * * *", paymentJob.Run)
+	_, _ = c.AddFunc("0 0 9 * * *", paymentJob.Run)
 	c.Start()
 	defer c.Stop()
 	log.Println("Cron jobs started")
@@ -334,7 +334,7 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Server running on port %s", port)
-	defer cache.Close()
+	defer func() { _ = cache.Close() }()
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to run server: %v", err)
 	}

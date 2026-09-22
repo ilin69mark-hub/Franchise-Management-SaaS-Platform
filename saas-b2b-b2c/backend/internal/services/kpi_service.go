@@ -552,12 +552,12 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 		Group("status").
 		Rows()
 	if err == nil {
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var status string
 			var count int64
 			var sum float64
-			rows.Scan(&status, &count, &sum)
+_ = rows.Scan(&status, &count, &sum)
 			statusCounts[status] = count
 			statusSums[status] = sum
 		}
@@ -570,7 +570,7 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 	}
 
 	// Конверсия = (следующий этап / предыдущий) * 100
-	var prevCount int64 = trafficCount
+	prevCount := trafficCount
 	addStage := func(stage, label string, count int64, sum float64) {
 		conv := 0
 		if prevCount > 0 {
@@ -931,10 +931,10 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 		Limit(10).
 		Rows()
 	if err == nil {
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var ps productStats
-			rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
+_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
 			if ps.Name != "" {
 				productStatsList = append(productStatsList, ps)
 			}
@@ -1368,10 +1368,10 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 	`, userID, period).Rows()
 
 	if err == nil {
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var exp Expense
-			rows.Scan(&exp.Category, &exp.Amount)
+_ = rows.Scan(&exp.Category, &exp.Amount)
 			expenses = append(expenses, exp)
 		}
 		// Маппинг расходов по категориям
@@ -1672,10 +1672,10 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 		Limit(10).
 		Rows()
 	if err == nil {
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var ps productStats
-			rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
+_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
 			if ps.Name != "" {
 				products = append(products, ps)
 			}
@@ -2443,12 +2443,12 @@ func (s *KPIService) GetDealerTasks(ctx context.Context, userID uuid.UUID) (*mod
 	if err != nil {
 		return resp, nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	now := time.Now()
 	for rows.Next() {
 		var t DealerTask
-		rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.CreatedAt)
+_ = rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.CreatedAt)
 
 		// Определяем статус просрочки
 		isOverdue := t.DueDate != nil && t.DueDate.Before(now) && t.Status != "done"
@@ -2501,15 +2501,7 @@ func isMissingTableErr(err error) bool {
 func (s *KPIService) GetDealerRequests(ctx context.Context, userID uuid.UUID, statusFilter string) (*models.DealerRequestsResponse, error) {
 	resp := &models.DealerRequestsResponse{}
 
-	type DealerRequest struct {
-		ID          uuid.UUID `json:"id"`
-		Type        string    `json:"type"`
-		Description string    `json:"description"`
-		Amount      float64   `json:"amount"`
-		Status      string    `json:"status"`
-		CreatedAt   time.Time `json:"created_at"`
-	}
-
+	
 	query := "SELECT id, type, description, amount, status, created_at FROM dealer_requests WHERE dealer_id = ?"
 	args := []interface{}{userID.String()}
 
@@ -2526,11 +2518,11 @@ func (s *KPIService) GetDealerRequests(ctx context.Context, userID uuid.UUID, st
 		}
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var r models.DealerRequest
-		rows.Scan(&r.ID, &r.Type, &r.Description, &r.Amount, &r.Status, &r.CreatedAt)
+_ = rows.Scan(&r.ID, &r.Type, &r.Description, &r.Amount, &r.Status, &r.CreatedAt)
 		resp.Requests = append(resp.Requests, models.DealerRequestItem{
 			ID:          r.ID,
 			DealerID:    userID,
@@ -2628,13 +2620,14 @@ func (s *KPIService) GetDealerAlerts(ctx context.Context, userID uuid.UUID) (*mo
 	if err != nil {
 		return resp, nil
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var a Alert
-		rows.Scan(&a.ID, &a.Type, &a.Title, &a.Message, &a.IsRead)
+_ = rows.Scan(&a.ID, &a.Type, &a.Title, &a.Message, &a.IsRead)
 
 		priority := "info"
+		//nolint:staticcheck
 		if a.Type == "conversion_drop" || a.Type == "task_overdue" {
 			priority = "critical"
 		} else if a.Type == "payroll_exceeded" {

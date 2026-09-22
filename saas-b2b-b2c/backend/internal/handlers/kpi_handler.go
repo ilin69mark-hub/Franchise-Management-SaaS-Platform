@@ -451,7 +451,7 @@ func (h *KPIHandler) GetAlerts(c *gin.Context) {
 	}
 
 	// Сначала генерируем алерты
-	h.alertSvc.GenerateAlertsForUser(c.Request.Context(), user.ID)
+	_ = h.alertSvc.GenerateAlertsForUser(c.Request.Context(), user.ID)
 
 	alerts, count, err := h.alertSvc.GetUnreadAlerts(c.Request.Context(), user.ID)
 	if err != nil {

@@ -1,0 +1,17 @@
+version: "2"
+run:
+  tests: false
+  timeout: 2m
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - unused
+
+issues:
+  exclude-rules:
+    - path: "_test\\.go"
+      linters:
+        - errcheck
+        - staticcheck

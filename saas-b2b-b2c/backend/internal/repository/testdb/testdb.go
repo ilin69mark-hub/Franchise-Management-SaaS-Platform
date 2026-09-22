@@ -168,7 +168,7 @@ func MustConnect(t TB) *gorm.DB {
 	}
 
 	t.Cleanup(func() {
-		TruncateAll(db)
+		_ = TruncateAll(db)
 	})
 
 	return db

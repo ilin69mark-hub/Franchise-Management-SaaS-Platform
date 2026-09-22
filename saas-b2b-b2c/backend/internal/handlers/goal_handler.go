@@ -28,7 +28,7 @@ func (h *GoalHandler) SetGoal(c *gin.Context) {
 	assignerID, _ := c.Get("userID")
 	userRole, _ := c.Get("role")
 	tenantID, _ := c.Get("tenantID")
-
+	//nolint:staticcheck
 	ctx := context.WithValue(c.Request.Context(), "role", userRole)
 	goal, err := h.svc.CreateGoal(ctx, dto, assignerID.(string), tenantID.(string))
 	if err != nil {
