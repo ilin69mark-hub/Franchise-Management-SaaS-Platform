@@ -3078,19 +3078,147 @@ func (s *KPIService) GetManagerPlans(ctx context.Context, userID string, quarter
 	return res, nil
 }
 
-// GetDealersHealth - сегментация дилеров
-func (s *KPIService) GetDealersHealth(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
-	return map[string]interface{}{"segments": map[string]interface{}{
-		"a": []map[string]interface{}{},
-		"b": []map[string]interface{}{},
-		"c": []map[string]interface{}{},
-		"d": []map[string]interface{}{},
-	}}, nil
+func getPeriodBounds(period string) (time.Time, time.Time) {
+	now := time.Now().UTC()
+	switch period {
+	case "month":
+		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+		end := start.AddDate(0, 1, 0).Add(-time.Nanosecond)
+		return start, end
+	case "year":
+		start := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Date(now.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC)
+		return start, end
+	default: // quarter
+		q := (int(now.Month())-1)/3 + 1
+		month := (q-1)*3 + 1
+		start := time.Date(now.Year(), time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+		end := start.AddDate(0, 3, 0).Add(-time.Nanosecond)
+		return start, end
+	}
 }
 
-// GetDealersMigration - миграция дилеров
+// GetDealersHealth - сегментация дилеров ABCD A≥100 B80-99 C50-79 D<50
+func (s *KPIService) GetDealersHealth(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
+	start, end := getPeriodBounds(period)
+	// франчайзер -> все дилеры (role dealer) limit 100
+	var dealers []models.User
+	if err := s.DB.Where("role = ?", models.RoleDealer).Limit(100).Find(&dealers).Error; err != nil {
+		return nil, err
+	}
+	segA := []map[string]interface{}{}
+	segB := []map[string]interface{}{}
+	segC := []map[string]interface{}{}
+	segD := []map[string]interface{}{}
+	defaultPlan := s.getSettingFloat("default_monthly_plan", 4000000)
+	for _, d := range dealers {
+		var plan float64
+		s.DB.Model(&models.Goal{}).Where("assignee_id = ? AND period = ? AND start_date = ?", d.ID, period, start).Select("COALESCE(SUM(sales_plan),0)").Scan(&plan)
+		if plan == 0 {
+			// fallback: любой план за период или дефолт
+			s.DB.Model(&models.Goal{}).Where("assignee_id = ? AND period IN ('quarter','month','year')", d.ID).Select("COALESCE(SUM(sales_plan),0)").Scan(&plan)
+			if plan == 0 {
+				plan = defaultPlan
+			}
+		}
+		var fact float64
+		if d.SalonID != nil {
+			s.DB.Model(&models.Lead{}).Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", d.SalonID, []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&fact)
+		}
+		percent := 0
+		if plan > 0 {
+			percent = int(fact / plan * 100)
+		}
+		entry := map[string]interface{}{"id": d.ID.String(), "name": strings.TrimSpace(d.FirstName + " " + d.LastName), "plan": plan, "fact": fact, "percent": percent}
+		switch {
+		case percent >= 100:
+			segA = append(segA, entry)
+		case percent >= 80:
+			segB = append(segB, entry)
+		case percent >= 50:
+			segC = append(segC, entry)
+		default:
+			segD = append(segD, entry)
+		}
+	}
+	return map[string]interface{}{"segments": map[string]interface{}{"a": segA, "b": segB, "c": segC, "d": segD}}, nil
+}
+
+// GetDealersMigration - миграция дилеров между сегментами за 2 периода
 func (s *KPIService) GetDealersMigration(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
-	return map[string]interface{}{"migrations": []map[string]interface{}{}}, nil
+	// текущая сегментация
+	curr, err := s.GetDealersHealth(ctx, userID, period)
+	if err != nil {
+		return nil, err
+	}
+	// предыдущий период
+	prevPeriodStart, _ := getPeriodBounds(period)
+	prevPeriod := period
+	// для простоты сдвигаем на 1 квартал/месяц назад через Health с ручным start
+	var prevStart, prevEnd time.Time
+	switch period {
+	case "month":
+		prevStart = prevPeriodStart.AddDate(0, -1, 0)
+		prevEnd = prevStart.AddDate(0, 1, 0).Add(-time.Nanosecond)
+	default:
+		prevStart = prevPeriodStart.AddDate(0, -3, 0)
+		prevEnd = prevStart.AddDate(0, 3, 0).Add(-time.Nanosecond)
+	}
+	_ = prevPeriod
+	_ = prevEnd
+	// построить мапу dealer->prev segment
+	// упрощенно: повторно вычисляем через ту же логику but с prevStart
+	migrations := []map[string]interface{}{}
+	// получаем дилеров
+	var dealers []models.User
+	s.DB.Where("role = ?", models.RoleDealer).Limit(100).Find(&dealers)
+	defaultPlan := s.getSettingFloat("default_monthly_plan", 4000000)
+	segFor := func(d models.User, start, end time.Time) string {
+		var plan float64
+		s.DB.Model(&models.Goal{}).Where("assignee_id = ? AND period = ? AND start_date = ?", d.ID, period, start).Select("COALESCE(SUM(sales_plan),0)").Scan(&plan)
+		if plan == 0 {
+			s.DB.Model(&models.Goal{}).Where("assignee_id = ?", d.ID).Select("COALESCE(SUM(sales_plan),0)").Scan(&plan)
+			if plan == 0 {
+				plan = defaultPlan
+			}
+		}
+		var fact float64
+		if d.SalonID != nil {
+			s.DB.Model(&models.Lead{}).Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", d.SalonID, []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&fact)
+		}
+		p := 0
+		if plan > 0 {
+			p = int(fact / plan * 100)
+		}
+		switch {
+		case p >= 100:
+			return "a"
+		case p >= 80:
+			return "b"
+		case p >= 50:
+			return "c"
+		default:
+			return "d"
+		}
+	}
+	currSegs := curr["segments"].(map[string]interface{})
+	// build prev map
+	prevMap := map[string]string{}
+	for _, d := range dealers {
+		prevMap[d.ID.String()] = segFor(d, prevStart, prevEnd)
+	}
+	// find migrations where segment changed
+	for segKey, list := range currSegs {
+		for _, e := range list.([]map[string]interface{}) {
+			id := e["id"].(string)
+			currSeg := segKey
+			prevSeg := prevMap[id]
+			if prevSeg != "" && prevSeg != currSeg {
+				migrations = append(migrations, map[string]interface{}{"dealer_id": id, "dealer_name": e["name"], "from": prevSeg, "to": currSeg})
+			}
+		}
+	}
+	return map[string]interface{}{"migrations": migrations}, nil
 }
 
 // GetSystemIssues - системные проблемы
