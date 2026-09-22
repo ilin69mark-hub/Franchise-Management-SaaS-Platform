@@ -148,7 +148,7 @@ const FunnelPlanTab: React.FC<FunnelPlanTabProps> = ({
       title: 'Прогноз',
       dataIndex: 'forecast',
       key: 'forecast',
-      render: (_: any, record: SalonPlanData) => (
+      render: (_: unknown, record: SalonPlanData) => (
         <span>
           {getForecastIcon(record.forecast)}{' '}
           {record.forecast === 'green' ? 'выполнит' : record.forecast === 'yellow' ? 'под вопросом' : 'не выполнит'}

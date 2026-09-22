@@ -127,7 +127,7 @@ const ProfitTab: React.FC<ProfitTabProps> = ({ data, loading, error, onRetry, on
     {
       title: 'К прошлому месяцу',
       key: 'change',
-      render: (_: any, record: ExpenseBreakdown) => {
+      render: (_: unknown, record: ExpenseBreakdown) => {
         const change = record.prev_month_amount > 0 
           ? ((record.amount - record.prev_month_amount) / record.prev_month_amount) * 100 
           : 0;

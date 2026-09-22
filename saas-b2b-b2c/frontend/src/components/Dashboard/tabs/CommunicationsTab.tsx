@@ -266,7 +266,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
       title: 'Действия',
       key: 'actions',
       width: 150,
-      render: (_: any, record: Task) => (
+      render: (_: unknown, record: Task) => (
         <Space>
           {record.status === 'new' && (
             <Button size="small" type="primary" onClick={() => handleTaskStatusChange(record.id, 'in_progress')}>
