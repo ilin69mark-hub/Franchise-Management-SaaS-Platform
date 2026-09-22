@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.5-prod (2026-09-22) — B3 27 any + utils 97% (logger/i18n 8 tests, 1263/1263)
+- **Tests:** `utils/logger.test.ts + i18n.test.ts 8 tests` `utils 37→97%` `global 42.3→42.57%` (35/37/42/42 факт 37.06/37.82/43.61), `65 suites 1263/1263` `audit` зелёный. `ExpenseFormTab/Billing/Activity` B3 уже `27 any (<30)`.
+- **Docs:** `any 141→27` (<30 достигнут), `B3` 8 файлов уже `v1.4`.
+
 ## v1.4-prod (2026-09-22) — B3 ColumnsType<Tenant> DTO (TenantsSection/SalonFunnel/Billing)
 - **Frontend B3:** `TenantsSection` `ColumnsType<Tenant>` (`Tenant` export store, sorter/onFilter `Tenant`, `handleCreateTenant` typed, `onPressEnter KeyboardEvent`), `SalonFunnelTab` `user User, Lead, HotDeal/FreshLead ColumnsType, catch unknown`, `BillingSection` `handleCreateInvoice/Payment` typed, `onPressEnter KeyboardEvent` — `18 any→0` в 3 файлах, `tsc 0`.
 - **Аудит:** 72 коммита, `make audit` 1255/1255 зелёный. Остаток `BillingSection render, ActivitySection` — низкая.
