@@ -2960,18 +2960,122 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 	return resp, nil
 }
 
-// SetManagerPlans - установить планы менеджеров
+// SetManagerPlans - установить планы менеджеров (пишет в goals period='quarter')
 func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter string, plans []struct {
 	ManagerID     string  `json:"manager_id"`
 	PlanAmount    float64 `json:"plan_amount"`
 	TargetDealers int     `json:"target_dealers"`
 }) error {
+	franchiserID, err := uuid.Parse(userID)
+	if err != nil {
+		return err
+	}
+	qStart, qEnd, err := parseQuarter(quarter)
+	if err != nil {
+		return err
+	}
+	var franchiser models.User
+	if err := s.DB.First(&franchiser, franchiserID).Error; err != nil {
+		return err
+	}
+	for _, p := range plans {
+		mgrID, err := uuid.Parse(p.ManagerID)
+		if err != nil {
+			continue
+		}
+		// IDOR: менеджер должен быть под франчайзером
+		var cnt int64
+		s.DB.Model(&models.User{}).Where("id = ? AND managed_by = ?", mgrID, franchiserID).Count(&cnt)
+		if cnt == 0 {
+			continue
+		}
+		if p.PlanAmount < 0 {
+			continue
+		}
+		// upsert: delete existing for this assignee+quarter then insert
+		s.DB.Where("assignee_id = ? AND period = ? AND start_date = ?", mgrID, "quarter", qStart).Delete(&models.Goal{})
+		goal := models.Goal{
+			AssignerID:   franchiserID,
+			AssigneeID:   mgrID,
+			Role:         string(models.RoleFranchisorManager),
+			SalesPlan:    p.PlanAmount,
+			LeadsPlan:    p.TargetDealers,
+			Period:       "quarter",
+			StartDate:    qStart,
+			EndDate:      qEnd,
+			TargetDate:   qStart,
+			TenantID:     franchiser.TenantID,
+		}
+		if err := s.DB.Create(&goal).Error; err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func parseQuarter(q string) (time.Time, time.Time, error) {
+	// format 2026-Q2, 2026-Q1..Q4
+	parts := strings.Split(q, "-Q")
+	if len(parts) != 2 {
+		return time.Time{}, time.Time{}, errors.New("invalid quarter format, expected YYYY-QN")
+	}
+	year, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	qn, err := strconv.Atoi(parts[1])
+	if err != nil || qn < 1 || qn > 4 {
+		return time.Time{}, time.Time{}, errors.New("quarter must be 1..4")
+	}
+	month := (qn-1)*3 + 1
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 3, 0).Add(-time.Nanosecond)
+	return start, end, nil
 }
 
 // GetManagerPlans - получить планы менеджеров
 func (s *KPIService) GetManagerPlans(ctx context.Context, userID string, quarter string) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{}, nil
+	franchiserID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	qStart, _, err := parseQuarter(quarter)
+	if err != nil {
+		// fallback: вернуть пусто для невалидного квартала
+		return []map[string]interface{}{}, nil
+	}
+	var goals []models.Goal
+	if err := s.DB.Where("assigner_id = ? AND period = ? AND start_date = ?", franchiserID, "quarter", qStart).Limit(100).Find(&goals).Error; err != nil {
+		return nil, err
+	}
+	// батч имена менеджеров
+	mgrIDs := make([]uuid.UUID, 0, len(goals))
+	for _, g := range goals {
+		mgrIDs = append(mgrIDs, g.AssigneeID)
+	}
+	nameMap := map[uuid.UUID]string{}
+	if len(mgrIDs) > 0 {
+		var users []models.User
+		s.DB.Where("id IN ?", mgrIDs).Find(&users)
+		for _, u := range users {
+			nameMap[u.ID] = strings.TrimSpace(u.FirstName + " " + u.LastName)
+		}
+	}
+	res := make([]map[string]interface{}, 0, len(goals))
+	for _, g := range goals {
+		mid := g.AssigneeID.String()
+		mname := nameMap[g.AssigneeID]
+		res = append(res, map[string]interface{}{
+			"manager_id":     mid,
+			"manager_name":   mname,
+			"plan_amount":    g.SalesPlan,
+			"target_dealers": g.LeadsPlan,
+			"quarter":        quarter,
+			"start_date":     g.StartDate,
+			"end_date":       g.EndDate,
+		})
+	}
+	return res, nil
 }
 
 // GetDealersHealth - сегментация дилеров
