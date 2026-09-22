@@ -1,4 +1,5 @@
 // src/components/Dashboard/tabs/ExpenseFormTab.tsx
+import logger from '@/utils/logger';
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Card, Form, InputNumber, Button, Row, Col, DatePicker, Space, 
@@ -78,7 +79,7 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
         }
       }
     } catch (e) {
-      console.error('Error fetching expenses', e);
+      logger.error('Error fetching expenses', e);
     } finally {
       setLoading(false);
     }

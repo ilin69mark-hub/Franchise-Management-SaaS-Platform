@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import {
   User,
@@ -31,7 +32,7 @@ export const apiSlice = createApi({
             const parsed = JSON.parse(storedState);
             token = parsed?.auth?.accessToken;
           } catch (e) {
-            console.error('Error parsing reduxState from localStorage', e);
+            logger.error('Error parsing reduxState from localStorage', e);
           }
         }
       }
@@ -98,10 +99,10 @@ export const apiSlice = createApi({
     }),
 
     // === УВЕДОМЛЕНИЯ ===
-    getNotifications: builder.query<any[], void>({
+    getNotifications: builder.query<Record<string, unknown>[], void>({
       query: () => '/notifications',
       providesTags: (result) =>
-        result ? [...result.map(({ id }) => ({ type: 'Notification' as const, id })), 'Notification'] : ['Notification'],
+        result ? [...(result as {id: string}[]).map(({ id }) => ({ type: 'Notification' as const, id })), 'Notification'] : ['Notification'],
     }),
     readNotification: builder.mutation<void, string>({
       query: (id) => ({
@@ -270,53 +271,53 @@ export const apiSlice = createApi({
     }),
 
     // === ПЛАН-ФАКТ ДИЛЕРА ===
-    getDealerPlanFact: builder.query<any, { period: string; date: string }>({
+    getDealerPlanFact: builder.query<Record<string, unknown>, { period: string; date: string }>({
       query: ({ period, date }) => `/dealer/plan-fact?period=${period}&date=${date}`,
       providesTags: ['DealerPlanFact'],
     }),
 
     // === ВОРОНКА СЕТИ ===
-    getDealerFunnel: builder.query<any, string>({
+    getDealerFunnel: builder.query<Record<string, unknown>, string>({
       query: (date) => `/dealer/funnel?date=${date}`,
       providesTags: ['DealerFunnel'],
     }),
 
     // === БЕНЧМАРКИ ОТ ФРАНЧАЙЗЕРА ===
-    getDealerBenchmark: builder.query<any, string>({
+    getDealerBenchmark: builder.query<Record<string, unknown>, string>({
       query: (metric) => `/dealer/benchmark?metric=${metric}`,
       providesTags: ['DealerBenchmark'],
     }),
 
     // === ТОП-МЕНЕДЖЕРЫ ===
-    getTopManagers: builder.query<any, { period: string; limit: number }>({
+    getTopManagers: builder.query<Record<string, unknown>, { period: string; limit: number }>({
       query: ({ period, limit }) => `/dealer/top-managers?period=${period}&limit=${limit}`,
       providesTags: ['TopManagers'],
     }),
 
     // === СКЛАД И ИНВЕНТАРИ ===
-    getInventory: builder.query<any, { period: string; store: string }>({
+    getInventory: builder.query<Record<string, unknown>, { period: string; store: string }>({
       query: ({ period, store }) => `/dealer/inventory?period=${period}&store=${store}`,
       providesTags: ['Inventory'],
     }),
 
     // === УПУЩЕННЫЕ ПРОДАЖИ ===
-    getLostSales: builder.query<any, string>({
+    getLostSales: builder.query<Record<string, unknown>, string>({
       query: (period) => `/dealer/lost-sales?period=${period}`,
       providesTags: ['LostSales'],
     }),
 
     // === ВОЗВРАТЫ ===
-    getReturns: builder.query<any, string>({
+    getReturns: builder.query<Record<string, unknown>, string>({
       query: (period) => `/dealer/returns?period=${period}`,
       providesTags: ['Returns'],
     }),
 
     // === ЗАДАЧИ ОТ ФРАНЧАЙЗЕРА ===
-    getTasks: builder.query<any, void>({
+    getTasks: builder.query<Record<string, unknown>, void>({
       query: () => '/dealer/tasks',
       providesTags: ['Tasks'],
     }),
-    updateTaskStatus: builder.mutation<any, { id: string; status: string }>({
+    updateTaskStatus: builder.mutation<Record<string, unknown>, { id: string; status: string }>({
       query: ({ id, status }) => ({
         url: `/dealer/tasks/${id}`,
         method: 'PATCH',
@@ -324,7 +325,7 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Tasks'],
     }),
-    addTaskComment: builder.mutation<any, { id: string; comment: string }>({
+    addTaskComment: builder.mutation<Record<string, unknown>, { id: string; comment: string }>({
       query: ({ id, comment }) => ({
         url: `/dealer/tasks/${id}/comments`,
         method: 'POST',
@@ -334,11 +335,11 @@ export const apiSlice = createApi({
     }),
 
     // === ЗАПРОСЫ К БРЕНДУ ===
-    getRequests: builder.query<any, void>({
+    getRequests: builder.query<Record<string, unknown>, void>({
       query: () => '/dealer/requests',
       providesTags: ['Requests'],
     }),
-    createRequest: builder.mutation<any, any>({
+    createRequest: builder.mutation<Record<string, unknown>, Record<string, unknown>>({
       query: (body) => ({
         url: '/dealer/requests',
         method: 'POST',
@@ -348,23 +349,23 @@ export const apiSlice = createApi({
     }),
 
     // === МАРКЕТИНГОВЫЙ БЮДЖЕТ ===
-    getMarketingBudget: builder.query<any, string>({
+    getMarketingBudget: builder.query<Record<string, unknown>, string>({
       query: (quarter) => `/dealer/marketing-budget?quarter=${quarter}`,
       providesTags: ['MarketingBudget'],
     }),
 
     // === ИСТОРИЯ ВЗАИМОДЕЙСТВИЙ ===
-    getInteractions: builder.query<any, string>({
+    getInteractions: builder.query<Record<string, unknown>, string>({
       query: (managerId) => `/dealer/interactions?manager_id=${managerId}`,
       providesTags: ['Interactions'],
     }),
 
     // === ОТЧЁТЫ ДЛЯ БРЕНДА ===
-    getReportData: builder.query<any, { period: string; date: string }>({
+    getReportData: builder.query<Record<string, unknown>, { period: string; date: string }>({
       query: ({ period, date }) => `/dealer/report-data?period=${period}&date=${date}`,
       providesTags: ['ReportData'],
     }),
-    createReport: builder.mutation<any, any>({
+    createReport: builder.mutation<Record<string, unknown>, Record<string, unknown>>({
       query: (body) => ({
         url: '/dealer/reports',
         method: 'POST',
@@ -372,32 +373,32 @@ export const apiSlice = createApi({
       }),
       invalidatesTags: ['Reports'],
     }),
-    getReportHistory: builder.query<any, number>({
+    getReportHistory: builder.query<Record<string, unknown>, number>({
       query: (limit) => `/dealer/reports?limit=${limit}`,
       providesTags: ['Reports'],
     }),
 
     // === АЛЕРТЫ ===
-    getAlerts: builder.query<any, void>({
+    getAlerts: builder.query<Record<string, unknown>, void>({
       query: () => '/dealer/alerts',
       providesTags: ['Alerts'],
     }),
-    getUnreadAlerts: builder.query<any, void>({
+    getUnreadAlerts: builder.query<Record<string, unknown>, void>({
       query: () => '/dealer/alerts/unread',
       providesTags: ['Alerts'],
     }),
-    markAlertRead: builder.mutation<any, string>({
+    markAlertRead: builder.mutation<Record<string, unknown>, string>({
       query: (id) => ({
         url: `/dealer/alerts/${id}/read`,
         method: 'PATCH',
       }),
       invalidatesTags: ['Alerts'],
     }),
-    getAlertSettings: builder.query<any, void>({
+    getAlertSettings: builder.query<Record<string, unknown>, void>({
       query: () => '/dealer/alert-settings',
       providesTags: ['AlertSettings'],
     }),
-    updateAlertSettings: builder.mutation<any, any>({
+    updateAlertSettings: builder.mutation<Record<string, unknown>, Record<string, unknown>>({
       query: (body) => ({
         url: '/dealer/alert-settings',
         method: 'PUT',

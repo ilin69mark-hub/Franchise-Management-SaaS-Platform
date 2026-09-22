@@ -1,4 +1,5 @@
 // src/components/Dashboard/Alerts/DealerAlerts.tsx
+import logger from '@/utils/logger';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Badge, Popover, List, Button, Space, Typography, Switch, InputNumber, Card, Empty, Spin, Divider, message, notification, Modal } from 'antd';
 import { 
@@ -118,7 +119,7 @@ const DealerAlerts: React.FC<DealerAlertsProps> = ({
           setTimeout(connectWebSocket, 5000);
         };
       } catch (e) {
-        console.error('WebSocket error', e);
+        logger.error('WebSocket error', e);
       }
     };
 

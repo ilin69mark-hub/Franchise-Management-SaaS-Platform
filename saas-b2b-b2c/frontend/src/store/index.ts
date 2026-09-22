@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
 import checklistReducer from './checklistSlice';
@@ -19,7 +20,7 @@ const safeLocalStorage = {
     try {
       return localStorage.getItem(key);
     } catch (error) {
-      console.error('Error reading from localStorage', error);
+      logger.error('Error reading from localStorage', error);
       return null;
     }
   },
@@ -28,7 +29,7 @@ const safeLocalStorage = {
     try {
       localStorage.setItem(key, value);
     } catch (error) {
-      console.error('Error writing to localStorage', error);
+      logger.error('Error writing to localStorage', error);
     }
   },
   removeItem: (key: string) => {
@@ -36,7 +37,7 @@ const safeLocalStorage = {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.error('Error removing from localStorage', error);
+      logger.error('Error removing from localStorage', error);
     }
   },
 };
@@ -52,7 +53,7 @@ const loadState = () => {
     }
     return parsed;
   } catch (err) {
-    console.error('Error loading state:', err);
+    logger.error('Error loading state:', err);
     safeLocalStorage.removeItem('reduxState');
     return undefined;
   }
@@ -101,7 +102,7 @@ if (typeof window !== 'undefined') {
         safeLocalStorage.setItem('reduxState', serializedState);
       }
     } catch (err) {
-      console.error('Could not save state', err);
+      logger.error('Could not save state', err);
     }
   });
 }

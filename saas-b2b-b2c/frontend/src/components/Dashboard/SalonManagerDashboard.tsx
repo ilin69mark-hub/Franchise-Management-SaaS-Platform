@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Layout, Row, Col, Card, Typography, Badge, Tabs, Spin, Statistic } from 'antd';
 import { ShopOutlined, DollarOutlined, PercentageOutlined, GiftOutlined, BellOutlined } from '@ant-design/icons';
@@ -40,7 +41,7 @@ const SalonManagerDashboard: React.FC<SalonManagerDashboardProps> = ({ user, tit
       const res = await apiClient.get('/salon-manager/top-bar');
       setTopBarData(res.data);
     } catch (e) {
-      console.error('Error fetching top bar data', e);
+      logger.error('Error fetching top bar data', e);
       setTopBarData({
         salon_name: user.salon_name || 'Мой салон',
         plan_percent: 0,

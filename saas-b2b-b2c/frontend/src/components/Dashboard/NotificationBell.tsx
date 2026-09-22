@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Badge, Dropdown, List, Button, Spin, Empty, Tag, Tooltip, message, Typography } from 'antd';
 import { BellOutlined, WarningOutlined, ExclamationCircleOutlined, InfoCircleOutlined, CloseOutlined, LinkOutlined } from '@ant-design/icons';
@@ -38,7 +39,7 @@ const NotificationBell: React.FC = () => {
         }
       }
     } catch (e) {
-      console.error('Error loading saved alerts', e);
+      logger.error('Error loading saved alerts', e);
     }
   }, []);
 
@@ -47,7 +48,7 @@ const NotificationBell: React.FC = () => {
     try {
       localStorage.setItem(STORAGE_KEY, count.toString());
     } catch (e) {
-      console.error('Error saving alerts', e);
+      logger.error('Error saving alerts', e);
     }
   }, []);
 
@@ -63,7 +64,7 @@ const NotificationBell: React.FC = () => {
       setUnreadCount(count);
       saveUnread(count);
     } catch (e) {
-      console.error('Error fetching alerts', e);
+      logger.error('Error fetching alerts', e);
     } finally {
       setLoading(false);
     }
@@ -122,12 +123,12 @@ const NotificationBell: React.FC = () => {
             message.info(newAlert.title);
           }
         } catch (e) {
-          console.error('Error parsing WS message', e);
+          logger.error('Error parsing WS message', e);
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error', error);
+        logger.error('WebSocket error', error);
       };
 
       ws.onclose = () => {
@@ -137,7 +138,7 @@ const NotificationBell: React.FC = () => {
 
       wsRef.current = ws;
     } catch (e) {
-      console.error('WebSocket init error', e);
+      logger.error('WebSocket init error', e);
       startPolling();
     }
   }, [saveUnread, buildWsUrl]);
@@ -185,7 +186,7 @@ const NotificationBell: React.FC = () => {
         return newCount;
       });
     } catch (e) {
-      console.error('Error marking alert as read', e);
+      logger.error('Error marking alert as read', e);
     }
   };
 

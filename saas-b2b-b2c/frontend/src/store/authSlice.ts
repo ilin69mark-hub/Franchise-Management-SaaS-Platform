@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { User, AuthResponse } from '@/types';
 import apiClient from '@/api/axiosClient';
@@ -119,7 +120,7 @@ const authSlice = createSlice({
           if (data.user?.role) localStorage.setItem('role', data.user.role);
         }
       } else {
-        console.error('Token not found in login response', payload);
+        logger.error('Token not found in login response', payload);
         state.error = 'Ошибка авторизации: токен не получен';
         state.isAuthenticated = false;
       }
@@ -156,7 +157,7 @@ const authSlice = createSlice({
           if (data.user?.role) localStorage.setItem('role', data.user.role);
         }
       } else {
-        console.error('Token not found in register response', payload);
+        logger.error('Token not found in register response', payload);
         state.error = 'Ошибка регистрации: токен не получен';
         state.isAuthenticated = false;
       }

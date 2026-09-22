@@ -1,4 +1,5 @@
 // src/components/Dashboard/DealerDashboardNew.tsx
+import logger from '@/utils/logger';
 import React, { useEffect, Suspense, lazy, useState } from 'react';
 import { Layout, Row, Col, Card, Typography, Tabs, Badge, Avatar, Dropdown, Space, Spin, Statistic } from 'antd';
 import { 
@@ -84,7 +85,7 @@ const DealerDashboardNew: React.FC<DealerDashboardNewProps> = ({ user, title }) 
         });
         setAlerts(data.activeAlerts || 0);
       } catch (e) {
-        console.error('Summary fetch error', e);
+        logger.error('Summary fetch error', e);
 setSummary({
             netProfit: 1250000,
             grossRevenue: 4500000,

@@ -1,4 +1,5 @@
 // src/pages/login.tsx
+import logger from '@/utils/logger';
 import React, { useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useRouter } from 'next/router';
@@ -70,7 +71,7 @@ const LoginPage: React.FC = () => {
       }
     } catch (e) {
       // Ошибки уже записаны в slice → покажутся в <Alert>
-      console.error('Login failed', e);
+      logger.error('Login failed', e);
     }
   };
 

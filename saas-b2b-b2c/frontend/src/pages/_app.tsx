@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import React from 'react';
 import '../styles/globals.css';
 import type { AppProps } from 'next/app';
@@ -27,7 +28,7 @@ function MyApp({ Component, pageProps }: AppProps) {
           store.dispatch({ type: 'auth/setAuthFromStorage' });
         }
       } catch (e) {
-        console.error('Failed to parse user', e);
+        logger.error('Failed to parse user', e);
       }
     }
     setShowChild(true);

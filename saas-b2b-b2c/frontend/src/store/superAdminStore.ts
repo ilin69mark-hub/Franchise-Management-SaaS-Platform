@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { create } from 'zustand';
 import apiClient from '@/api/axiosClient';
 
@@ -117,7 +118,7 @@ export const useSuperAdminStore = create<SuperAdminState>((set, get) => ({
       setTenants(data.tenants || []);
       setPagination(page, limit, data.total || 0);
     } catch (e) {
-      console.error('Error fetching tenants:', e);
+      logger.error('Error fetching tenants:', e);
       setTenants([]);
     } finally {
       setLoading(false);
@@ -130,7 +131,7 @@ export const useSuperAdminStore = create<SuperAdminState>((set, get) => ({
       await apiClient.patch(`/admin/tenants/${tenantId}/suspend`);
       setTenants(tenants.map(t => t.id === tenantId ? { ...t, status: 'suspended' as const } : t));
     } catch (e) {
-      console.error('Error suspending tenant:', e);
+      logger.error('Error suspending tenant:', e);
       throw e;
     }
   },
@@ -141,7 +142,7 @@ export const useSuperAdminStore = create<SuperAdminState>((set, get) => ({
       await apiClient.delete(`/admin/tenants/${tenantId}`);
       setTenants(tenants.filter(t => t.id !== tenantId));
     } catch (e) {
-      console.error('Error deleting tenant:', e);
+      logger.error('Error deleting tenant:', e);
       throw e;
     }
   },
@@ -154,7 +155,7 @@ export const useSuperAdminStore = create<SuperAdminState>((set, get) => ({
       const res = await apiClient.get('/admin/audit-log', { params });
       setAuditLog(res.data as AuditLogEntry[]);
     } catch (e) {
-      console.error('Error fetching audit log:', e);
+      logger.error('Error fetching audit log:', e);
       setAuditLog([]);
     } finally {
       setLoading(false);

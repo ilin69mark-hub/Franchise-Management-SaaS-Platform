@@ -1,4 +1,5 @@
 // src/store/territoryManagerStore.ts
+import logger from '@/utils/logger';
 import { create } from 'zustand';
 import apiClient from '@/api/axiosClient';
 
@@ -86,7 +87,7 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
         },
       });
     } catch (e) {
-      console.error('Error fetching territory summary:', e);
+      logger.error('Error fetching territory summary:', e);
       set({
         summary: {
           planCompletionPercent: 82,
@@ -120,7 +121,7 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
       
       set({ dealers });
     } catch (e) {
-      console.error('Error fetching dealers:', e);
+      logger.error('Error fetching dealers:', e);
     }
   },
 
@@ -129,7 +130,7 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
       const res = await apiClient.get(`/territory/funnel?period=${period}`);
       return res.data;
     } catch (e) {
-      console.error('Error fetching funnel:', e);
+      logger.error('Error fetching funnel:', e);
       return null;
     }
   },
@@ -139,7 +140,7 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
       const res = await apiClient.get(`/territory/planfact?period=${period}`);
       return res.data;
     } catch (e) {
-      console.error('Error fetching planfact:', e);
+      logger.error('Error fetching planfact:', e);
       return null;
     }
   },
@@ -149,7 +150,7 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
       const res = await apiClient.get('/territory/benchmarks');
       return res.data;
     } catch (e) {
-      console.error('Error fetching benchmarks:', e);
+      logger.error('Error fetching benchmarks:', e);
       return null;
     }
   },

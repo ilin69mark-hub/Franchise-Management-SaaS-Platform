@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useRouter } from 'next/router';
@@ -115,7 +116,7 @@ const ChecklistsPage: React.FC = () => {
         message.success('Создано');
       }
       setModalVisible(false); resetForm();
-    } catch (err) { console.error('Submit error:', err); message.error('Ошибка сохранения'); }
+    } catch (err) { logger.error('Submit error:', err); message.error('Ошибка сохранения'); }
   };
 
   const getStatusColor = (status: string) => {

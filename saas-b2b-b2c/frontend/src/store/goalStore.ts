@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { create } from 'zustand';
 import apiClient from '@/api/axiosClient';
 
@@ -62,7 +63,7 @@ export const useGoalStore = create<GoalState>((set, get) => ({
       const res = await apiClient.get('/goals');
       set({ goals: res.data });
     } catch (error) {
-      console.error('Failed to fetch goals:', error);
+      logger.error('Failed to fetch goals:', error);
     } finally {
       set({ isLoading: false });
     }

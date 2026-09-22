@@ -1,3 +1,4 @@
+import logger from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiClient from '@/api/axiosClient';
@@ -93,7 +94,7 @@ export const useFranchiserStore = create<FranchiserState>()(
             isLoading: false,
           });
         } catch (e) {
-          console.error('Error fetching franchiser summary:', e);
+          logger.error('Error fetching franchiser summary:', e);
           set({ isLoading: false });
         }
       },
@@ -118,7 +119,7 @@ export const useFranchiserStore = create<FranchiserState>()(
           
           set({ dealers });
         } catch (e) {
-          console.error('Error fetching network:', e);
+          logger.error('Error fetching network:', e);
         }
       },
 
@@ -127,7 +128,7 @@ export const useFranchiserStore = create<FranchiserState>()(
           const res = await apiClient.get('/franchiser/health');
           return res.data;
         } catch (e) {
-          console.error('Error fetching health:', e);
+          logger.error('Error fetching health:', e);
           return null;
         }
       },
@@ -137,7 +138,7 @@ export const useFranchiserStore = create<FranchiserState>()(
           const res = await apiClient.get('/franchiser/team');
           return res.data;
         } catch (e) {
-          console.error('Error fetching team:', e);
+          logger.error('Error fetching team:', e);
           return null;
         }
       },

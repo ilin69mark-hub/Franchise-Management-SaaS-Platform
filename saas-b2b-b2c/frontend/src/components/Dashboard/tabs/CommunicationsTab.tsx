@@ -1,4 +1,5 @@
 // src/components/Dashboard/tabs/CommunicationsTab.tsx
+import logger from '@/utils/logger';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Card, Row, Col, Table, Tag, Button, Space, Modal, Form, Input, Select, InputNumber, Progress, Timeline, Typography, Empty, Spin, DatePicker, message, Statistic, notification, Badge } from 'antd';
 import { 
@@ -126,7 +127,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
             const data = JSON.parse(event.data);
             handleWebSocketMessage(data);
           } catch (e) {
-            console.error('WebSocket message parse error', e);
+            logger.error('WebSocket message parse error', e);
           }
         };
         
@@ -136,10 +137,10 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
         };
         
         wsRef.current.onerror = (error) => {
-          console.error('WebSocket error', error);
+          logger.error('WebSocket error', error);
         };
       } catch (e) {
-        console.error('WebSocket connection error', e);
+        logger.error('WebSocket connection error', e);
       }
     };
 
