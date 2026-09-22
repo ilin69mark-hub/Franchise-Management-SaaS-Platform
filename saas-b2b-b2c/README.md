@@ -417,6 +417,17 @@ make logs   # или: docker compose -f saas-b2b-b2c/docker-compose.yml logs -f
 docker stats
 ```
 
+### Бэкап (прод)
+
+```bash
+# БД (pg_dump, без даунтайма)
+docker compose -f saas-b2b-b2c/docker-compose.prod.yml exec postgres pg_dump -U postgres franchise_db | gzip > backup_$(date +%F).sql.gz
+# Восстановление
+gunzip < backup_*.sql.gz | docker compose -f saas-b2b-b2c/docker-compose.prod.yml exec -T postgres psql -U postgres franchise_db
+# Volume (на хосте)
+docker run --rm -v saas-b2b-b2c_postgres_data:/volume -v $(pwd):/backup alpine tar czf /backup/pgdata_$(date +%F).tar.gz -C / volume
+```
+
 ---
 
 ## Устранение неполадок
