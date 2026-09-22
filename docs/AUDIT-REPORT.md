@@ -1,18 +1,18 @@
-# Аудит-отчёт: Franchise-Management-SaaS (Wave 1–9 + v1.2 100% строгий)
+# Аудит-отчёт: Franchise-Management-SaaS (Wave 1–9 + v1.3 quality)
 
-**Дата**: 2026-09-22 · **Статус**: все P1/P2/P3 + Wave6-9 + A1-A5 (13 заглушек) + ABCD A≥100 B80-99 C50-79 D<50 + reports/drafts/geo closed · **Регресс**: зелёный (64 коммита, gitleaks 0, vet/build/test/tsc/jest/build 0)
+**Дата**: 2026-09-22 · **Статус**: все P1/P2/P3 + Wave6-9 + A1-A5 (13 заглушек) + ABCD + B2 api 0 any + C2 logger + E 35/37/42/42 + D i18n ru · **Регресс**: зелёный (69 коммитов, gitleaks 0, vet/build/test/tsc/jest/build 0)
 
 ---
 
-## 1. Регресс-зелёность (после v1.2: 7f79b2b → 5261aea 13 заглушек + geo/reports, 64 коммита)
+## 1. Регресс-зелёность (после v1.3: 7f79b2b → f62f083 api 0 any + logger + i18n, 69 коммитов)
 
 | Слой | Команда | Результат |
 |---|---|---|
 | Backend Go | `go build ./... && go vet ./... && go test -short ./... && gofmt -l` | ✅ 0 ошибок, 0 FAIL, gofmt чист (vet 0, build 0, test ok 5/5 pkgs) |
-| Frontend TS | `npx tsc --noEmit` | ✅ 0 ошибок (Segmented union, GoalCard/SalesDynamics any→типы, NotificationBell aria, logger.ts) |
-| Frontend тесты | `npx jest` | ✅ **1255/1255** (63 suites, 18s) |
+| Frontend TS | `npx tsc --noEmit` | ✅ 0 ошибок (api 23 any→Record, GoalCard/SalesDynamics any→типы, NotificationBell aria, logger/i18n) |
+| Frontend тесты | `npx jest` | ✅ **1255/1255** (63 suites, 15s, threshold 35/37/42/42 факт 36.5/37.5/43.3/42.3) |
 | Прод-сборка | `NEXT_PUBLIC_API_URL=http://localhost:8080 npm run build` (standalone) | ✅ собралась (fail-closed: без env throws в prod) |
-| Секреты | `gitleaks detect --all --config .gitleaks.toml` | ✅ 0 реальных утечек (64 коммита, allowlist узко docs/test) |
+| Секреты | `gitleaks detect --all --config .gitleaks.toml` | ✅ 0 реальных утечек (69 коммитов, allowlist узко docs/test) |
 | Compose | `docker compose -f saas-b2b-b2c/docker-compose.yml config` + `prod` | ✅ dev+prod ok, оба fail-closed, healthcheck, 127.0.0.1, GIN_MODE=release |
 | Lint строгий | `golangci-lint run` | ✅ 0 (35 pre-existing почищены в a253bd0) |
 
