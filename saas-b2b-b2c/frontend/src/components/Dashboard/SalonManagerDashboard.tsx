@@ -7,6 +7,7 @@ import 'dayjs/locale/ru';
 import apiClient from '@/api/axiosClient';
 import NotificationBell from './NotificationBell';
 import DealerDirectives from './DealerDirectives';
+import type { User } from '@/types';
 
 dayjs.locale('ru');
 
@@ -22,7 +23,7 @@ interface TopBarData {
 }
 
 interface SalonManagerDashboardProps {
-  user: any;
+  user: User & { salon_name?: string };
   title?: string;
 }
 
