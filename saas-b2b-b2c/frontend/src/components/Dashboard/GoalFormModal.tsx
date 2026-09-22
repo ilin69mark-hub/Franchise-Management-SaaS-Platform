@@ -16,7 +16,7 @@ dayjs.locale('ru');
 interface GoalFormModalProps {
   visible: boolean;
   onCancel: () => void;
-  onOk: (values: any) => void;
+  onOk: (values: Record<string, unknown>) => void;
   initialValues?: Partial<Goal>;
   employees?: Employee[];
   assignableRoles: string[];

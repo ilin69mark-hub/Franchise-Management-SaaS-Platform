@@ -8,10 +8,10 @@ export const kpiApi = {
   getSalonStats: (salonId: string) => axiosClient.get(`/stats/salon?salon_id=${salonId}`),
 
   // Задать план (Дилер)
-  setGoal: (data: any) => axiosClient.post('/goals', data),
+  setGoal: (data: Record<string, unknown>) => axiosClient.post('/goals', data),
 
   // Расписание
   getSchedule: (date: string) => axiosClient.get(`/schedule?date=${date}`),
-  createEvent: (data: any) => axiosClient.post('/schedule', data),
+  createEvent: (data: Record<string, unknown>) => axiosClient.post('/schedule', data),
   updateEventStatus: (id: string, status: string) => axiosClient.put(`/schedule/${id}/status`, { status }),
 };
