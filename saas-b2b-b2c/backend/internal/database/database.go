@@ -469,7 +469,7 @@ func migrateDealerExpenses(db *gorm.DB) error {
 }
 
 func migrateProducts(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS products (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
@@ -484,11 +484,14 @@ func migrateProducts(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_products_salon ON products(salon_id)`).Error
 }
 
 func migrateLostSales(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS lost_sales (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
@@ -499,11 +502,14 @@ func migrateLostSales(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_lost_sales_salon_period ON lost_sales(salon_id, period)`).Error
 }
 
 func migratePromotions(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS promotions (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
@@ -517,11 +523,14 @@ func migratePromotions(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_promotions_salon ON promotions(salon_id)`).Error
 }
 
 func migrateCategoryTurnover(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS category_turnover (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
@@ -531,7 +540,10 @@ func migrateCategoryTurnover(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	return db.Exec(`CREATE INDEX IF NOT EXISTS idx_category_turnover_salon_period ON category_turnover(salon_id, period)`).Error
 }
 
 func GetDB() *gorm.DB {

@@ -231,7 +231,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -451,7 +451,7 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -578,7 +578,7 @@ func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, per
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -760,7 +760,7 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -955,12 +955,18 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	salonID := *user.SalonID
 
 	// === План продаж ===
-	firstOfMonth := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.Now().Location())
+	targetDate := time.Now()
+	if dateStr != "" {
+		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
+		}
+	}
+	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
 
 	// План на месяц - ищем по assignee_id в таблице goals
 	var planAmount float64
 	s.DB.Model(&models.Goal{}).
-		Where("assignee_id = ? AND target_date BETWEEN ? AND ?", userID, firstOfMonth, time.Now()).
+		Where("assignee_id = ? AND target_date BETWEEN ? AND ?", userID, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&planAmount)
 	// Также учитываем периоды month/week/year
 	if planAmount == 0 {
@@ -983,7 +989,7 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	var currentUser models.User
 	if err := s.DB.First(&currentUser, userID).Error; err == nil && currentUser.SalonID != nil {
 		s.DB.Model(&models.Lead{}).
-			Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", currentUser.SalonID, []string{"sale", "paid"}, firstOfMonth, time.Now()).
+			Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", currentUser.SalonID, []string{"sale", "paid"}, firstOfMonth, targetDate).
 			Select("COALESCE(SUM(budget), 0)").Scan(&currentAmount)
 	}
 
@@ -1007,7 +1013,7 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 		var catSales []saleCategory
 		s.DB.Table("leads").
 			Joins("LEFT JOIN products ON products.salon_id = leads.salon_id AND products.name = leads.interest_product").
-			Where("leads.salon_id = ? AND leads.status IN ? AND leads.created_at BETWEEN ? AND ?", currentUser.SalonID, []string{"sale", "paid"}, firstOfMonth, time.Now()).
+			Where("leads.salon_id = ? AND leads.status IN ? AND leads.created_at BETWEEN ? AND ?", currentUser.SalonID, []string{"sale", "paid"}, firstOfMonth, targetDate).
 			Select("COALESCE(NULLIF(products.category, ''), 'Прочее') AS category, COALESCE(SUM(leads.budget), 0) AS revenue").
 			Group("COALESCE(NULLIF(products.category, ''), 'Прочее')").
 			Scan(&catSales)
@@ -1039,10 +1045,10 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	// Текущая конверсия
 	var totalLeads, saleLeads int64
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id = ? AND created_at BETWEEN ? AND ?", salonID, firstOfMonth, time.Now()).
+		Where("salon_id = ? AND created_at BETWEEN ? AND ?", salonID, firstOfMonth, targetDate).
 		Count(&totalLeads)
 	s.DB.Model(&models.Lead{}).
-		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"sale", "paid"}, firstOfMonth, time.Now()).
+		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"sale", "paid"}, firstOfMonth, targetDate).
 		Count(&saleLeads)
 
 	if totalLeads > 0 {
@@ -1153,7 +1159,7 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
@@ -1232,7 +1238,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
@@ -1367,7 +1373,7 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -1489,7 +1495,7 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
@@ -1596,7 +1602,7 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
@@ -1684,7 +1690,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
@@ -1962,7 +1968,7 @@ func (s *KPIService) GetTerritorySummary(ctx context.Context, userID uuid.UUID, 
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
@@ -2039,7 +2045,7 @@ func (s *KPIService) GetTerritoryFunnel(ctx context.Context, userID uuid.UUID, p
 	targetDate := time.Now()
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = parsed
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
 		}
 	}
 
