@@ -114,6 +114,7 @@ func (s *AlertService) GetUnreadAlerts(ctx context.Context, userID uuid.UUID) ([
 	s.db.Model(&models.Notification{}).
 		Where("user_id = ? AND is_read = ?", userID, false).
 		Order("created_at DESC").
+		Limit(50).
 		Find(&alerts)
 	s.db.Model(&models.Notification{}).
 		Where("user_id = ? AND is_read = ?", userID, false).
@@ -144,6 +145,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 	threeDaysAgo := now.AddDate(0, 0, -3)
 	var overdueMeasurements []models.Lead
 	s.db.Where("salon_id = ? AND status = ? AND updated_at < ?", salonID, "meeting", threeDaysAgo).
+		Limit(50).
 		Find(&overdueMeasurements)
 
 	for _, lead := range overdueMeasurements {
@@ -164,6 +166,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 	fiveDaysAgo := now.AddDate(0, 0, -5)
 	var abandonedKP []models.Lead
 	s.db.Where("salon_id = ? AND status = ? AND updated_at < ?", salonID, "wait", fiveDaysAgo).
+		Limit(50).
 		Find(&abandonedKP)
 
 	for _, lead := range abandonedKP {

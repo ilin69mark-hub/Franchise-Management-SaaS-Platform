@@ -21,12 +21,13 @@ func (r *LeadRepository) CreateLead(ctx context.Context, lead *models.Lead) erro
 	return r.db.WithContext(ctx).Create(lead).Error
 }
 
-// GetLeadsByManager получает всех лидов конкретного менеджера
+// GetLeadsByManager получает лидов менеджера (limit 200 — защита от seq scan на больших базах)
 func (r *LeadRepository) GetLeadsByManager(ctx context.Context, managerID uuid.UUID) ([]models.Lead, error) {
 	var leads []models.Lead
 	err := r.db.WithContext(ctx).
 		Where("manager_id = ?", managerID).
 		Order("created_at desc").
+		Limit(200).
 		Find(&leads).Error
 	return leads, err
 }
@@ -56,12 +57,13 @@ func (r *LeadRepository) AddActivity(ctx context.Context, activity *models.LeadA
 	return r.db.WithContext(ctx).Create(activity).Error
 }
 
-// GetLeadActivities получает историю по лиду
+// GetLeadActivities получает историю по лиду (limit 200)
 func (r *LeadRepository) GetLeadActivities(ctx context.Context, leadID uuid.UUID) ([]models.LeadActivity, error) {
 	var activities []models.LeadActivity
 	err := r.db.WithContext(ctx).
 		Where("lead_id = ?", leadID).
 		Order("created_at desc").
+		Limit(200).
 		Find(&activities).Error
 	return activities, err
 }

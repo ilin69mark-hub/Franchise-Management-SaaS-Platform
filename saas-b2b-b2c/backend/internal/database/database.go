@@ -235,6 +235,7 @@ func migrateOrders(db *gorm.DB) error {
 	// Индексы как в 001
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_salon ON orders(salon_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_orders_created_by ON orders(created_by)`)
 	return nil
 }
 
@@ -261,11 +262,15 @@ func migrateTasks(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS user_id UUID`)
 	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tenant_id UUID`)
 	db.Exec(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_salon ON tasks(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`)
 	return nil
 }
 
 func migrateChecklists(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS checklists (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			user_id UUID,
@@ -280,7 +285,13 @@ func migrateChecklists(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklists_tenant ON checklists(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklists_assigned ON checklists(assigned_to)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklists_user ON checklists(user_id)`)
+	return nil
 }
 
 func migratePlans(db *gorm.DB) error {
@@ -305,7 +316,7 @@ func migratePlans(db *gorm.DB) error {
 }
 
 func migrateNotifications(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS notifications (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id UUID,
@@ -318,11 +329,17 @@ func migrateNotifications(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_tenant ON notifications(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read)`)
+	return nil
 }
 
 func migrateInvoices(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS invoices (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id UUID NOT NULL,
@@ -333,11 +350,16 @@ func migrateInvoices(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status)`)
+	return nil
 }
 
 func migrateLeads(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS leads (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
@@ -351,7 +373,14 @@ func migrateLeads(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_leads_salon ON leads(salon_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_leads_manager ON leads(manager_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)`)
+	return nil
 }
 
 func migrateLeadActivities(db *gorm.DB) error {
@@ -388,6 +417,7 @@ func migrateChecklistTemplates(db *gorm.DB) error {
 	}
 	db.Exec(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS created_by UUID`)
 	db.Exec(`ALTER TABLE checklist_templates ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'daily'`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklist_templates_tenant ON checklist_templates(tenant_id)`)
 	return nil
 }
 
@@ -412,6 +442,7 @@ func migrateChecklistTemplateItems(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS title VARCHAR(255)`)
 	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS description TEXT`)
 	db.Exec(`ALTER TABLE checklist_template_items ADD COLUMN IF NOT EXISTS order_num INT DEFAULT 0`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklist_template_items_template ON checklist_template_items(template_id)`)
 	return nil
 }
 
@@ -463,7 +494,7 @@ func migrateChecklistResponses(db *gorm.DB) error {
 }
 
 func migrateAlerts(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS alerts (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			user_id UUID,
@@ -483,11 +514,17 @@ func migrateAlerts(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_alerts_user ON alerts(user_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_alerts_tenant ON alerts(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_alerts_status ON alerts(status)`)
+	return nil
 }
 
 func migrateDealerTasks(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS dealer_tasks (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			dealer_id UUID,
@@ -500,11 +537,17 @@ func migrateDealerTasks(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_tasks_dealer ON dealer_tasks(dealer_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_tasks_tenant ON dealer_tasks(tenant_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_tasks_status ON dealer_tasks(status)`)
+	return nil
 }
 
 func migrateDealerRequests(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS dealer_requests (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			dealer_id UUID,
@@ -515,11 +558,16 @@ func migrateDealerRequests(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_requests_dealer ON dealer_requests(dealer_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_requests_status ON dealer_requests(status)`)
+	return nil
 }
 
 func migrateMarketingBudgets(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS marketing_budgets (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			dealer_id UUID,
@@ -529,11 +577,16 @@ func migrateMarketingBudgets(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_marketing_budgets_dealer ON marketing_budgets(dealer_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_marketing_budgets_quarter ON marketing_budgets(quarter)`)
+	return nil
 }
 
 func migrateDealerExpenses(db *gorm.DB) error {
-	return db.Exec(`
+	if err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS dealer_expenses (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			dealer_id UUID,
@@ -543,7 +596,12 @@ func migrateDealerExpenses(db *gorm.DB) error {
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
-	`).Error
+	`).Error; err != nil {
+		return err
+	}
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_expenses_dealer ON dealer_expenses(dealer_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_dealer_expenses_period ON dealer_expenses(period)`)
+	return nil
 }
 
 func migrateProducts(db *gorm.DB) error {
@@ -727,6 +785,7 @@ func migrateContracts(db *gorm.DB) error {
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_contracts_salon_id ON contracts(salon_id)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_contracts_manager_id ON contracts(manager_id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_contracts_lead ON contracts(lead_id)`)
 	return nil
 }
 

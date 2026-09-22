@@ -124,7 +124,7 @@ func (s *KPIService) GetTeamAnalytics(ctx context.Context, dealerID uuid.UUID, p
 	}
 
 	var managers []models.User
-	if err := s.DB.Where("managed_by = ?", dealerID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("managed_by = ?", dealerID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -619,7 +619,7 @@ func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, per
 
 	var managers []models.User
 	// Ищем продавцов (sales_rep) которые управляются текущим пользователем или в том же салоне
-	s.DB.Where("managed_by = ? OR (salon_id = ? AND role = 'sales_rep')", userID, salonID).Find(&managers)
+	s.DB.Where("managed_by = ? OR (salon_id = ? AND role = 'sales_rep')", userID, salonID).Limit(100).Find(&managers)
 
 	var totalRevenue, totalDeals, totalConversion, totalAvgCheck float64
 	var dealsCount, conversionCount int
@@ -1141,7 +1141,7 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 
 	var salons []models.Salon
 	if dealerTenantID != nil {
-		if err := s.DB.Where("dealer_id = ?", *dealerTenantID).Find(&salons).Error; err != nil {
+		if err := s.DB.Where("dealer_id = ?", *dealerTenantID).Limit(100).Find(&salons).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -1222,7 +1222,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 
 	// Находим все салоны дилера через таблицу salons по dealer_id
 	var salons []models.Salon
-	if err := s.DB.Where("dealer_id = ?", userID).Find(&salons).Error; err != nil {
+	if err := s.DB.Where("dealer_id = ?", userID).Limit(100).Find(&salons).Error; err != nil {
 		return nil, err
 	}
 
@@ -1357,7 +1357,7 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 
 	// Находим все салоны дилера через таблицу salons по dealer_id
 	var salons []models.Salon
-	if err := s.DB.Where("dealer_id = ?", userID).Find(&salons).Error; err != nil {
+	if err := s.DB.Where("dealer_id = ?", userID).Limit(100).Find(&salons).Error; err != nil {
 		return nil, err
 	}
 
@@ -1477,7 +1477,7 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 	resp := &models.DealerProductsResponse{}
 
 	var managers []models.User
-	if err := s.DB.Where("managed_by = ?", userID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("managed_by = ?", userID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1586,7 +1586,7 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 
 	// Ищем салоны через tenant_id
 	var salons []models.Salon
-	if err := s.DB.Where("dealer_id = ?", user.TenantID).Find(&salons).Error; err != nil {
+	if err := s.DB.Where("dealer_id = ?", user.TenantID).Limit(100).Find(&salons).Error; err != nil {
 		return nil, err
 	}
 
@@ -1659,7 +1659,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 
 	// Шаг 1: Найти всех менеджеров под этим франчайзером
 	var managers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1674,7 +1674,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 	}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1764,7 +1764,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 		if dealer.TenantID != nil {
 			// Salon.dealer_id = User.tenant_id (это связь!)
 			var salons []models.Salon
-			s.DB.Where("dealer_id = ?", *dealer.TenantID).Find(&salons)
+			s.DB.Where("dealer_id = ?", *dealer.TenantID).Limit(100).Find(&salons)
 			for _, salon := range salons {
 				salonIDs = append(salonIDs, salon.ID)
 			}
@@ -1809,7 +1809,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 		var dealerSalonIDs []uuid.UUID
 		if dealer.TenantID != nil {
 			var salons []models.Salon
-			s.DB.Where("dealer_id = ?", *dealer.TenantID).Find(&salons)
+			s.DB.Where("dealer_id = ?", *dealer.TenantID).Limit(100).Find(&salons)
 			for _, salon := range salons {
 				dealerSalonIDs = append(dealerSalonIDs, salon.ID)
 			}
@@ -1857,7 +1857,7 @@ func (s *KPIService) GetFranchiserHealth(ctx context.Context, userID uuid.UUID) 
 
 	// Используем правильную иерархию: franchiser → managers → dealers
 	var managers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1871,7 +1871,7 @@ func (s *KPIService) GetFranchiserHealth(ctx context.Context, userID uuid.UUID) 
 	}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1926,7 +1926,7 @@ func (s *KPIService) GetFranchiserTeam(ctx context.Context, userID uuid.UUID) (*
 
 	// franchiser_manager - менеджеры франчайзера
 	var managers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -1952,7 +1952,7 @@ func (s *KPIService) GetTerritorySummary(ctx context.Context, userID uuid.UUID, 
 
 	// Находим всех дилеров, которыми управляет территориальный менеджер
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2029,7 +2029,7 @@ func (s *KPIService) GetTerritoryFunnel(ctx context.Context, userID uuid.UUID, p
 	resp := &models.TerritoryFunnelResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2071,7 +2071,7 @@ func (s *KPIService) GetTerritoryPlanFact(ctx context.Context, userID uuid.UUID,
 	resp := &models.TerritoryPlanFactResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2145,7 +2145,7 @@ func (s *KPIService) GetTerritoryCommunications(ctx context.Context, userID uuid
 
 	// Задачи (от franchiser_manager к дилерам)
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2185,7 +2185,7 @@ func (s *KPIService) GetTerritoryBenchmarks(ctx context.Context, userID uuid.UUI
 	resp := &models.TerritoryBenchmarksResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2495,7 +2495,7 @@ func (s *KPIService) GetFranchiserDealers(ctx context.Context, userID uuid.UUID,
 	}
 
 	var dealers []models.User
-	if err := query.Find(&dealers).Error; err != nil {
+	if err := query.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2582,7 +2582,7 @@ func (s *KPIService) GetTerritoriesHeatmap(ctx context.Context, userID string, p
 
 	userUUID, _ := uuid.Parse(userID)
 	var managers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userUUID).Find(&managers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleFranchisorManager, userUUID).Limit(100).Find(&managers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2592,7 +2592,7 @@ func (s *KPIService) GetTerritoriesHeatmap(ctx context.Context, userID string, p
 		managerIDs = append(managerIDs, m.ID)
 
 		var dealers []models.User
-		s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Find(&dealers)
+		s.DB.Where("role = ? AND managed_by IN ?", models.RoleDealer, managerIDs).Limit(100).Find(&dealers)
 
 		var dealerIDs []uuid.UUID
 		for _, d := range dealers {
@@ -2645,7 +2645,7 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 	}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, mgrUUID).Find(&dealers).Error; err != nil {
+	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, mgrUUID).Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
