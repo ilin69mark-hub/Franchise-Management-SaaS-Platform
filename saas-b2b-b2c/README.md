@@ -1,8 +1,7 @@
 # Franchise Management SaaS Platform
 
-[![Backend Tests](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/anomalyco/saas-b2b-b2c/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/anomalyco/saas-b2b-b2c)
-[![Frontend Tests](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/anomalyco/saas-b2b-b2c/actions/workflows/ci.yml)
+[![CI](https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform/actions/workflows/ci.yml)
+[![Secrets scan](https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform/actions/workflows/secrets-scan.yml/badge.svg?branch=main)](https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform/actions/workflows/secrets-scan.yml)
 
 Полнофункциональная SaaS-платформа для управления франчайзинговой сетью. Позволяет франчайзеру управлять дилерами, товарами, заказами и аналитикой через современный веб-интерфейс.
 
@@ -43,7 +42,7 @@
 - Кэширование (Redis)
 
 ### Infrastructure
-**Файлы:** `docker-compose.yml`, `Dockerfile.*`, `nginx.conf`
+**Файлы:** `saas-b2b-b2c/docker-compose.yml`, `saas-b2b-b2c/Dockerfile.*`, `nginx.conf` (корень — Makefile-агрегатор `make dev/test/audit`)
 
 - Контейнеризация (Docker)
 - PostgreSQL 15 + Redis 7
@@ -138,10 +137,10 @@ make logs
 make down
 ```
 
-Ручной эквивалент (без make):
+Ручной эквивалент (без make, из корня репо):
 ```bash
-docker-compose up -d --build
-docker-compose ps
+docker compose -f saas-b2b-b2c/docker-compose.yml up -d --build
+docker compose -f saas-b2b-b2c/docker-compose.yml ps
 ```
 
 ### Адреса сервисов
@@ -195,13 +194,20 @@ franchiser (Владелец)
 
 ### Структура таблиц
 
-Основные миграции:
-- `001_full_schema` - основная схема (пользователи, продукты, заказы)
-- `002_add_analytics` - аналитика
-- `005_franchise_manager_foundations` - иерархия менеджеров
-- `006_contracts` - контракты
-- `007_add_schedule_events` - события расписания
-- `008_add_daily_goals` - дневные цели
+Основные миграции (saas-b2b-b2c/backend/migrations/):
+- `001_full_schema` — пользователи/планы/салоны/заказы/задачи/goals + индексы
+- `002_add_analytics` — user_logs, tenants trial
+- `003_add_stage4_fields` — trials
+- `004_add_settings` — system_settings
+- `005_franchise_manager_foundations` — leads/checklist_templates
+- `006_contracts` — contracts
+- `007_add_schedule_events` — schedule_events
+- `008_add_daily_goals` — daily_goals
+- `009_swarm_fixes` — dealer_*/notifications/alerts/users-дополнения
+- `010_products_analytics` — products/lost_sales/promotions/category_turnover
+- `011_add_analytics_fk_indexes` — FK-индексы аналитики (products/salon)
+- `012_gorm_alignment` — выравнивание GORM ↔ SQL (invoices/checklists)
+- `013_add_missing_fk_indexes` — остальные FK-индексы (P2-1)
 
 ### Row-Level Security (RLS)
 
@@ -322,7 +328,7 @@ npm run dev
 
 ```bash
 # С hot-reload (dev-стек из корня; это тот же стек, что поднимает make dev)
-docker-compose -f docker-compose.yml up -d
+docker compose -f saas-b2b-b2c/docker-compose.yml up -d
 ```
 
 ### Тестирование
@@ -394,16 +400,16 @@ git push origin feature/new-feature
 ### Сборка и запуск
 
 ```bash
-git clone <repo-url>
-cd saas-b2b-b2c
-nano .env
-docker-compose up -d --build
+git clone https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform.git
+cd Franchise-Management-SaaS-Platform
+cp saas-b2b-b2c/.env.example saas-b2b-b2c/.env && nano saas-b2b-b2c/.env
+make dev   # или: docker compose -f saas-b2b-b2c/docker-compose.yml up -d --build
 ```
 
 ### Мониторинг
 
 ```bash
-docker-compose logs -f
+make logs   # или: docker compose -f saas-b2b-b2c/docker-compose.yml logs -f
 docker stats
 ```
 
@@ -419,8 +425,8 @@ lsof -i :8080
 
 **Пересоздание БД (удаляет все данные):**
 ```bash
-docker-compose down -v
-docker-compose up --build
+docker compose -f saas-b2b-b2c/docker-compose.yml down -v
+docker compose -f saas-b2b-b2c/docker-compose.yml up --build
 ```
 
 **Очистка зависимостей:**

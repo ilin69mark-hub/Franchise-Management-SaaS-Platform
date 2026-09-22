@@ -27,15 +27,11 @@ func (h *UserHandler) GetEmployees(c *gin.Context) {
 		return
 	}
 
-	log.Printf("DEBUG GetUsers: User %s (Role: %s)", currentUser.Email, currentUser.Role)
-
 	var users []models.User
 
 	if string(currentUser.Role) == string(models.RoleSuperAdmin) {
-		log.Println("DEBUG GetUsers: Path -> SUPER ADMIN (Global)")
 		users, err = h.service.GetAllUsersGlobal()
 	} else {
-		log.Println("DEBUG GetUsers: Path -> STANDARD USER (Tenant)")
 		if currentUser.TenantID != nil {
 			users, err = h.service.GetEmployees(*currentUser.TenantID)
 		} else {
@@ -48,8 +44,6 @@ func (h *UserHandler) GetEmployees(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	log.Printf("DEBUG GetUsers: Returning %d users", len(users))
 	c.JSON(http.StatusOK, users)
 }
 
@@ -256,8 +250,6 @@ func (h *UserHandler) AssignManager(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	log.Printf("DEBUG AssignManager: Attempting to assign User %s to Salon %s", req.UserID, req.SalonID)
 
 	if err := h.service.AssignManagerToSalon(c.Request.Context(), req.UserID, req.SalonID); err != nil {
 		log.Printf("ERROR AssignManager: Failed to assign. Error: %v", err)

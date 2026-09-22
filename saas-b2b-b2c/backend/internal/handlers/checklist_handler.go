@@ -51,15 +51,11 @@ func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
 	status := c.Query("status")
 	priority := c.Query("priority")
 
-	log.Printf("DEBUG GetChecklists: User %s (Role: %s)", currentUser.Email, currentUser.Role)
-
 	var items []models.Checklist
 
 	if currentUser.Role == models.RoleSuperAdmin {
-		log.Println("DEBUG GetChecklists: Path -> SUPER ADMIN (Global)")
 		items, err = h.service.GetAllGlobal(c.Request.Context(), status, priority)
 	} else {
-		log.Println("DEBUG GetChecklists: Path -> STANDARD USER")
 		items, err = h.service.GetAllChecklists(c.Request.Context(), status, priority)
 	}
 
@@ -68,8 +64,6 @@ func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	log.Printf("DEBUG GetChecklists: Returning %d tasks", len(items))
 	c.JSON(http.StatusOK, items)
 }
 

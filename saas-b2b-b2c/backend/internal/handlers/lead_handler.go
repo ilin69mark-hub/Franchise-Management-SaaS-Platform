@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"franchise-saas-backend/internal/models"
@@ -45,19 +44,14 @@ func (h *LeadHandler) CreateLead(c *gin.Context) {
 		return
 	}
 
-	// ОТЛАДКА: Выводим, что пришло в заголовке
-	log.Printf("DEBUG CreateLead: User ID: %s, Role: %s, SalonID: %v", currentUser.ID, currentUser.Role, currentUser.SalonID)
-
 	var req models.CreateLeadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Передаем currentUser целиком
 	lead, err := h.service.CreateLead(c.Request.Context(), currentUser, req)
 	if err != nil {
-		log.Printf("ERROR CreateLead: %v", err) // Логируем ошибку
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -1,7 +1,16 @@
 import axios from 'axios';
 
+function getApiBase(): string {
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('NEXT_PUBLIC_API_URL must be set in production (fail-closed)');
+  }
+  return 'http://localhost:8080';
+}
+
 const apiClient = axios.create({
-  baseURL: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/v1`,
+  baseURL: `${getApiBase()}/api/v1`,
   headers: {
     'Content-Type': 'application/json',
   },
