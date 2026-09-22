@@ -200,8 +200,8 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
     { name: 'other_expenses', label: 'Прочие расходы', prefix: '₽', prevKey: 'other_expenses', hasName: true },
   ];
 
-  const prevMonthFields = ['rent', 'utilities', 'payroll', 'logistics', 'marketing', 'defects', 'other_expenses'];
-  const hasPrevMonthData = prevMonthData && prevMonthFields.some(f => (prevMonthData as any)[f] > 0);
+  const prevMonthFields: (keyof ExpenseRecord)[] = ['rent', 'utilities', 'payroll', 'logistics', 'marketing', 'defects', 'other_expenses'];
+  const hasPrevMonthData = prevMonthData && prevMonthFields.some(f => (prevMonthData[f] as number) > 0);
 
   if (loading) {
     return (
