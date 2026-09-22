@@ -211,12 +211,30 @@ func SeedProductsAnalytics(db *gorm.DB) error {
 		return nil
 	}
 
-	// Первый салон в базе (создаётся GORM-миграцией/сидом салонов).
+	// Первый салон в базе — если нет, создаём демо-салон для честных дашбордов
 	var salonID string
 	db.Table("salons").Order("created_at").Limit(1).Select("id").Scan(&salonID)
 	if salonID == "" {
-		log.Printf("Warning: no salons found, skipping SeedProductsAnalytics")
-		return nil
+		log.Printf("No salons found — creating demo salon for SeedProductsAnalytics")
+		tenantID := "00000000-0000-0000-0000-000000000001"
+		var tid string
+		db.Table("tenants").Where("id = ?", tenantID).Select("id").Scan(&tid)
+		if tid == "" {
+			tenantID = ""
+			db.Table("tenants").Order("created_at").Limit(1).Select("id").Scan(&tenantID)
+		}
+		if tenantID != "" {
+			db.Exec(`INSERT INTO salons (id, tenant_id, name, address, created_at) VALUES (gen_random_uuid(), $1, $2, $3, NOW()) ON CONFLICT DO NOTHING`, tenantID, "Демо-салон", "Москва")
+			db.Table("salons").Order("created_at").Limit(1).Select("id").Scan(&salonID)
+		}
+		if salonID == "" {
+			log.Printf("Warning: still no salons after creation attempt, skipping SeedProductsAnalytics")
+			return nil
+		}
+		log.Printf("Demo salon created: %s", salonID)
+		// Привязываем демо-менеджера к салону, чтобы GetDashboardProducts не падал на ErrRecordNotFound
+		db.Exec(`UPDATE users SET salon_id = $1 WHERE email = 'salon1@1.ru' AND salon_id IS NULL`, salonID)
+		db.Exec(`UPDATE users SET salon_id = $1 WHERE email = 'manager1@1.ru' AND salon_id IS NULL`, salonID)
 	}
 
 	products := []struct {
