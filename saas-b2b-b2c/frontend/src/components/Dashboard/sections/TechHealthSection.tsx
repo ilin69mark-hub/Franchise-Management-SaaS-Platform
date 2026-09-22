@@ -239,7 +239,7 @@ const TechHealthSection: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      render: (_: any, record: any) => (
+      render: (_: unknown, record: any) => (
         <Button size="small" onClick={() => setSelectedError(record)}>Детали</Button>
       ),
     },

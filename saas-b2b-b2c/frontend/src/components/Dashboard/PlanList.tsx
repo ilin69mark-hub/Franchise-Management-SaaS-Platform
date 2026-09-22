@@ -106,7 +106,7 @@ const PlanList: React.FC = () => {
     {
       title: 'Действия',
       key: 'actions',
-      render: (_: any, rec: Plan) => (
+      render: (_: unknown, rec: Plan) => (
         <Space>
           <Button size="small" onClick={() => openEdit(rec)}>
             Edit

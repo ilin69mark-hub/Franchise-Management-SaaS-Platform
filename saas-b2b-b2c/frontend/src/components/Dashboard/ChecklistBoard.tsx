@@ -170,7 +170,7 @@ const ChecklistBoard: React.FC<Props> = ({
     {
       title: 'Действия',
       key: 'actions',
-      render: (_: any, record: Checklist) => (
+      render: (_: unknown, record: Checklist) => (
         <Space>
           <Button
             icon={<EditOutlined />}

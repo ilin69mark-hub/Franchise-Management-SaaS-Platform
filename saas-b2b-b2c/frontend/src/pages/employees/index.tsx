@@ -98,7 +98,7 @@ const EmployeesPage: React.FC = () => {
     {
       title: 'Действия',
       key: 'actions',
-      render: (_: any, record: Employee) => (
+      render: (_: unknown, record: Employee) => (
         <Space>
           <Button 
             icon={<EditOutlined />} 

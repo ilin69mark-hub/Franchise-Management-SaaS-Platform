@@ -142,7 +142,7 @@ const TerritoryCommunicationsTab: React.FC<TerritoryCommunicationsTabProps> = ({
     { title: 'Суть', dataIndex: 'description', key: 'description' },
     { title: 'Сумма', dataIndex: 'amount', key: 'amount', render: (v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k ₽` : '-' },
     { title: 'Дата', dataIndex: 'createdAt', key: 'createdAt', render: (d: string) => dayjs(d).format('DD.MM HH:mm') },
-    { title: 'SLA', key: 'sla', render: (_: any, r: Request) => (
+    { title: 'SLA', key: 'sla', render: (_: unknown, r: Request) => (
       <Tag color={getSlaColor(r.slaHours)}>{getSlaLabel(r.slaHours)}</Tag>
     )},
     { title: 'Статус', dataIndex: 'status', key: 'status', render: (s: string) => {
@@ -150,7 +150,7 @@ const TerritoryCommunicationsTab: React.FC<TerritoryCommunicationsTabProps> = ({
       const labels: Record<string, string> = { new: 'Новый', in_progress: 'В работе', resolved: 'Решён', escalated: 'Эскалирован' };
       return <Tag color={colors[s]}>{labels[s]}</Tag>;
     }},
-    { title: '', key: 'actions', render: (_: any, r: Request) => (
+    { title: '', key: 'actions', render: (_: unknown, r: Request) => (
       <Space>
         {r.status === 'new' && <Button size="small" onClick={() => message.success('Взять в работу')}>Взять</Button>}
         <Button size="small">Ответить</Button>

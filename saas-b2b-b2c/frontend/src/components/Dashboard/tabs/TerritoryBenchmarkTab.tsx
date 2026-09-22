@@ -191,7 +191,7 @@ const TerritoryBenchmarkTab: React.FC<TerritoryBenchmarkTabProps> = ({ loading }
     { title: 'Дебиторка', dataIndex: 'debtScore', key: 'debtScore', render: (v: number) => <Tag color={v >= 8 ? 'green' : 'orange'}>{v}</Tag> },
     { title: 'Отчёты', dataIndex: 'reportScore', key: 'reportScore' },
     { title: 'Индекс', dataIndex: 'totalIndex', key: 'totalIndex', render: (v: number) => <Text strong style={{ color: v >= 80 ? '#52c41a' : v >= 60 ? '#1890ff' : '#fa8c16' }}>{v}</Text> },
-    { title: 'Динамика', key: 'rankChange', render: (_: any, r: DealerIndex) => r.rankChange > 0 ? <ArrowUpOutlined style={{ color: '#52c41a' }} /> : r.rankChange < 0 ? <ArrowDownOutlined style={{ color: '#ff4d4f' }} /> : <Text>-</Text> },
+    { title: 'Динамика', key: 'rankChange', render: (_: unknown, r: DealerIndex) => r.rankChange > 0 ? <ArrowUpOutlined style={{ color: '#52c41a' }} /> : r.rankChange < 0 ? <ArrowDownOutlined style={{ color: '#ff4d4f' }} /> : <Text>-</Text> },
   ];
 
   return (

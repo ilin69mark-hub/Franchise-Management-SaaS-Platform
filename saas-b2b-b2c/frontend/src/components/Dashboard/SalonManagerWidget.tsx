@@ -95,7 +95,7 @@ const SalonManagerWidget: React.FC = () => {
         {
       title: 'Менеджер',
       key: 'manager',
-      render: (_: any, record: Salon) => {
+      render: (_: unknown, record: Salon) => {
         // Отладка: смотрим, что приходит в record
 
         
@@ -116,7 +116,7 @@ const SalonManagerWidget: React.FC = () => {
       title: 'Действия',
       key: 'actions',
       width: 220,
-      render: (_: any, record: Salon) => (
+      render: (_: unknown, record: Salon) => (
         <Space>
             <Button size="small" icon={<EditOutlined />} onClick={() => showEditModal(record)} />
             <Popconfirm title="Удалить салон?" onConfirm={() => handleDelete(record.id)}>
