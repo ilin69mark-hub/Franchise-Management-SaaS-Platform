@@ -28,6 +28,8 @@ import {
 } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useBillingStore } from '@/store/billingStore';
+import type { PaymentHistoryItem } from '@/store/billingStore';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -207,10 +209,10 @@ const BillingSection: React.FC = () => {
     { title: 'Способ', dataIndex: 'paymentMethod', key: 'paymentMethod', render: (m: string) => getPaymentMethodTag(m) },
   ];
 
-  const historyColumns = [
+  const historyColumns: ColumnsType<PaymentHistoryItem> = [
     { title: 'Дата', dataIndex: 'date', key: 'date', render: (d: string) => dayjs(d).format('DD.MM.YYYY') },
     { title: 'Тенант', dataIndex: 'tenant', key: 'tenant' },
-    { title: 'Сумма', dataIndex: 'amount', key: 'amount', render: (v: number, r: any) => (
+    { title: 'Сумма', dataIndex: 'amount', key: 'amount', render: (v: number, r: PaymentHistoryItem) => (
       <span style={{ color: r.type === 'income' ? '#52c41a' : '#ff4d4f' }}>
         {r.type === 'income' ? '+' : '-'}{v.toLocaleString()} ₽
       </span>

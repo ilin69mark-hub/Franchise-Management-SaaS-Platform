@@ -20,7 +20,7 @@ interface BillingSettings {
   emailTemplate?: string;
 }
 
-interface PaymentHistoryItem {
+export interface PaymentHistoryItem {
   id: string;
   date: string;
   tenant: string;
