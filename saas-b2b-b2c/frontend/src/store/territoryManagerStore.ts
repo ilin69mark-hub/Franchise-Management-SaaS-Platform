@@ -51,9 +51,9 @@ interface TerritoryManagerState {
   setSummaryModalOpen: (open: boolean) => void;
   fetchSummary: () => Promise<void>;
   fetchDealers: () => Promise<void>;
-  fetchFunnel: (period?: string) => Promise<any>;
-  fetchPlanFact: (period?: string) => Promise<any>;
-  fetchBenchmarks: () => Promise<any>;
+  fetchFunnel: (period?: string) => Promise<Record<string, unknown> | null>;
+  fetchPlanFact: (period?: string) => Promise<Record<string, unknown> | null>;
+  fetchBenchmarks: () => Promise<Record<string, unknown> | null>;
 }
 
 export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get) => ({
@@ -107,14 +107,15 @@ export const useTerritoryManagerStore = create<TerritoryManagerState>((set, get)
       const res = await apiClient.get('/territory/planfact?period=month');
       const data = res.data;
       
-      const dealers: DealerMetrics[] = (data.dealers || []).map((d: any) => ({
+      type DealerRaw = { id: string; dealer_name?: string; salon_count?: number; plan_percent?: number; conversion?: number; plan?: number; fact?: number };
+      const dealers: DealerMetrics[] = (data.dealers as DealerRaw[] || []).map((d) => ({
         dealerId: d.id,
         dealerName: d.dealer_name || '',
         salonCount: d.salon_count || 0,
         planPercent: d.plan_percent || 0,
-        forecastPercent: d.plan_percent >= 80 ? 100 : d.plan_percent >= 50 ? 70 : 30,
+        forecastPercent: (d.plan_percent ?? 0) >= 80 ? 100 : (d.plan_percent ?? 0) >= 50 ? 70 : 30,
         conversion: d.conversion || 0,
-        status: d.plan_percent >= 80 ? 'green' : d.plan_percent >= 50 ? 'yellow' : 'red',
+        status: (d.plan_percent ?? 0) >= 80 ? 'green' as const : (d.plan_percent ?? 0) >= 50 ? 'yellow' as const : 'red' as const,
         plan: d.plan || 0,
         fact: d.fact || 0,
       }));
