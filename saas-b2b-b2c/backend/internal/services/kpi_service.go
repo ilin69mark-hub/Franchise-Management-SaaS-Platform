@@ -1478,13 +1478,29 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 		endDate = targetDate
 	}
 
-	// Воронка по стадиям
+	// Воронка по стадиям — батчим 5 COUNT → 1 GROUP BY
 	var newLeads, contactLeads, meetingLeads, waitLeads, saleLeads int64
-	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND created_at BETWEEN ? AND ?", salonIDs, startDate, endDate).Count(&newLeads)
-	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND status = ? AND created_at BETWEEN ? AND ?", salonIDs, "contact", startDate, endDate).Count(&contactLeads)
-	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND status = ? AND created_at BETWEEN ? AND ?", salonIDs, "meeting", startDate, endDate).Count(&meetingLeads)
-	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND status = ? AND created_at BETWEEN ? AND ?", salonIDs, "wait", startDate, endDate).Count(&waitLeads)
-	s.DB.Model(&models.Lead{}).Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, startDate, endDate).Count(&saleLeads)
+	{
+		type cntRow struct {
+			Status string `gorm:"column:status"`
+			Cnt    int64  `gorm:"column:cnt"`
+		}
+		var rows []cntRow
+		s.DB.Model(&models.Lead{}).Select("status, COUNT(*) as cnt").
+			Where("salon_id IN ? AND created_at BETWEEN ? AND ?", salonIDs, startDate, endDate).
+			Group("status").Scan(&rows)
+		m := map[string]int64{}
+		var total int64
+		for _, r := range rows {
+			m[r.Status] = r.Cnt
+			total += r.Cnt
+		}
+		newLeads = total
+		contactLeads = m["contact"]
+		meetingLeads = m["meeting"]
+		waitLeads = m["wait"]
+		saleLeads = m["sale"] + m["paid"]
+	}
 
 	resp.Stages = []models.FunnelStage{
 		{Stage: "traffic", Label: "Трафик", Count: int(newLeads + contactLeads), Conversion: 100},
@@ -1495,34 +1511,66 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 		{Stage: "payment", Label: "Оплата", Count: 0, Conversion: 0},
 	}
 
-	// План по салонам - используем уже полученные salons
+	// План по салонам — батчим N+1 (был Pluck+2 SUM per salon → 3 batched)
+	type goalByAssignee struct {
+		AssigneeID uuid.UUID `gorm:"column:assignee_id"`
+		Plan       float64   `gorm:"column:plan"`
+	}
+	type factBySalon struct {
+		SalonID uuid.UUID `gorm:"column:salon_id"`
+		Fact    float64   `gorm:"column:fact"`
+	}
+	// 1) все менеджеры салонов одним запросом
+	var allManagerRows []struct {
+		ID      uuid.UUID `gorm:"column:id"`
+		SalonID uuid.UUID `gorm:"column:salon_id"`
+	}
+	s.DB.Model(&models.User{}).Select("id, salon_id").Where("salon_id IN ?", salonIDs).Scan(&allManagerRows)
+	managersBySalon := map[uuid.UUID][]uuid.UUID{}
+	var allManagerIDs []uuid.UUID
+	for _, r := range allManagerRows {
+		managersBySalon[r.SalonID] = append(managersBySalon[r.SalonID], r.ID)
+		allManagerIDs = append(allManagerIDs, r.ID)
+	}
+	// 2) планы по менеджерам batched
+	planByAssignee := map[uuid.UUID]float64{}
+	if len(allManagerIDs) > 0 {
+		var goalRows []goalByAssignee
+		s.DB.Model(&models.Goal{}).Select("assignee_id, COALESCE(SUM(sales_plan),0) as plan").
+			Where("assignee_id IN ? AND target_date BETWEEN ? AND ?", allManagerIDs, startDate, endDate).
+			Group("assignee_id").Scan(&goalRows)
+		for _, g := range goalRows {
+			planByAssignee[g.AssigneeID] = g.Plan
+		}
+	}
+	planBySalon := map[uuid.UUID]float64{}
+	for sid, mids := range managersBySalon {
+		sum := 0.0
+		for _, mid := range mids {
+			sum += planByAssignee[mid]
+		}
+		planBySalon[sid] = sum
+	}
+	// 3) fallback dealer plan (один запрос вместо N)
+	var dealerPlan float64
+	s.DB.Model(&models.Goal{}).Where("dealer_id = ? AND target_date BETWEEN ? AND ?", userID, startDate, endDate).
+		Select("COALESCE(SUM(sales_plan),0)").Scan(&dealerPlan)
+	// 4) факты по салонам batched
+	factBySalonMap := map[uuid.UUID]float64{}
+	var factRows []factBySalon
+	s.DB.Model(&models.Lead{}).Select("salon_id, COALESCE(SUM(budget),0) as fact").
+		Where("salon_id IN ? AND status IN ? AND created_at BETWEEN ? AND ?", salonIDs, []string{"sale", "paid"}, startDate, endDate).
+		Group("salon_id").Scan(&factRows)
+	for _, f := range factRows {
+		factBySalonMap[f.SalonID] = f.Fact
+	}
+
 	for _, salon := range salons {
-		var plan, fact float64
-		// План ищем через goals - ищем по назначенным менеджерам салонов или по салонам
-		// Сначала пробуем найти менеджеров этого салона
-		var managerIDs []uuid.UUID
-		s.DB.Model(&models.User{}).
-			Where("salon_id = ?", salon.ID).
-			Pluck("id", &managerIDs)
-
-		if len(managerIDs) > 0 {
-			// План по менеджерам салона
-			s.DB.Model(&models.Goal{}).
-				Where("assignee_id IN ? AND target_date BETWEEN ? AND ?", managerIDs, startDate, endDate).
-				Select("COALESCE(SUM(sales_plan), 0)").Scan(&plan)
-		}
-
-		// Если план не найден, пробуем через dealer_id
+		plan := planBySalon[salon.ID]
 		if plan == 0 {
-			s.DB.Model(&models.Goal{}).
-				Where("dealer_id = ? AND target_date BETWEEN ? AND ?", userID, startDate, endDate).
-				Select("COALESCE(SUM(sales_plan), 0)").Scan(&plan)
+			plan = dealerPlan
 		}
-
-		// Факт - продажи этого салона
-		s.DB.Model(&models.Lead{}).
-			Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salon.ID, []string{"sale", "paid"}, startDate, endDate).
-			Select("COALESCE(SUM(budget), 0)").Scan(&fact)
+		fact := factBySalonMap[salon.ID]
 
 		percent := 0
 		if plan > 0 {
