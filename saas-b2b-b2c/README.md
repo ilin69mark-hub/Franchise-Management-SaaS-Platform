@@ -403,7 +403,11 @@ git push origin feature/new-feature
 git clone https://github.com/ilin69mark-hub/Franchise-Management-SaaS-Platform.git
 cd Franchise-Management-SaaS-Platform
 cp saas-b2b-b2c/.env.example saas-b2b-b2c/.env && nano saas-b2b-b2c/.env
+# dev
 make dev   # или: docker compose -f saas-b2b-b2c/docker-compose.yml up -d --build
+# prod (fail-closed: требует DB_PASSWORD, JWT_SECRET, NEXT_PUBLIC_API_URL)
+DB_PASSWORD=... JWT_SECRET=... NEXT_PUBLIC_API_URL=https://api.example.com make prod-up
+# проверка: DB_PASSWORD=test JWT_SECRET=test NEXT_PUBLIC_API_URL=https://api.example.com docker compose -f saas-b2b-b2c/docker-compose.prod.yml config
 ```
 
 ### Мониторинг
