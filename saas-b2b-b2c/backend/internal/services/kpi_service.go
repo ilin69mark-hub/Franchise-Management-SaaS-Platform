@@ -3221,20 +3221,104 @@ func (s *KPIService) GetDealersMigration(ctx context.Context, userID string, per
 	return map[string]interface{}{"migrations": migrations}, nil
 }
 
-// GetSystemIssues - системные проблемы
+// GetSystemIssues - системные проблемы (alerts + просроченные заявки/контракты)
 func (s *KPIService) GetSystemIssues(ctx context.Context, userID string, status string) ([]map[string]interface{}, error) {
-	var issues []map[string]interface{}
+	issues := []map[string]interface{}{}
+	// alerts (DB alerts table has status column even if Go model omits it, query via Table)
+	type AlertRow struct {
+		ID        uuid.UUID `gorm:"column:id"`
+		Title     string    `gorm:"column:title"`
+		Description string  `gorm:"column:description"`
+		Severity  string    `gorm:"column:severity"`
+		Status    string    `gorm:"column:status"`
+		CreatedAt time.Time `gorm:"column:created_at"`
+	}
+	var alerts []AlertRow
+	q := s.DB.Table("alerts").Limit(50).Order("created_at DESC")
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	q.Find(&alerts)
+	for _, a := range alerts {
+		issues = append(issues, map[string]interface{}{"id": a.ID.String(), "type": "alert", "title": a.Title, "message": a.Description, "severity": a.Severity, "status": a.Status, "created_at": a.CreatedAt})
+	}
+	// dealer_requests pending
+	type Req struct {
+		ID          uuid.UUID `gorm:"column:id"`
+		Type        string    `gorm:"column:type"`
+		Description string    `gorm:"column:description"`
+		Status      string    `gorm:"column:status"`
+		CreatedAt   time.Time `gorm:"column:created_at"`
+	}
+	var reqs []Req
+	s.DB.Table("dealer_requests").Where("status = ?", "pending").Limit(20).Find(&reqs)
+	for _, r := range reqs {
+		issues = append(issues, map[string]interface{}{"id": r.ID.String(), "type": "request", "title": "Заявка " + r.Type, "message": r.Description, "severity": "medium", "status": r.Status, "created_at": r.CreatedAt})
+	}
+	// просроченные контракты
+	var overdue []models.Contract
+	s.DB.Where("status = ? AND deadline_date < ?", "pending", time.Now()).Limit(20).Find(&overdue)
+	for _, c := range overdue {
+		issues = append(issues, map[string]interface{}{"id": c.ID.String(), "type": "contract", "title": "Просрочен контракт " + c.ClientName, "severity": "high", "status": c.Status, "deadline": c.DeadlineDate})
+	}
 	return issues, nil
 }
 
-// GetDealersGeography - география дилеров
+// GetDealersGeography - география дилеров (GROUP BY region/city)
 func (s *KPIService) GetDealersGeography(ctx context.Context, userID string) ([]map[string]interface{}, error) {
-	return []map[string]interface{}{}, nil
+	type Row struct {
+		Region string  `gorm:"column:region"`
+		City   string  `gorm:"column:city"`
+		Count  int     `gorm:"column:cnt"`
+	}
+	var rows []Row
+	s.DB.Table("salons").Select("COALESCE(region,'Не указан') as region, COALESCE(city,'') as city, COUNT(*) as cnt").Group("region, city").Limit(100).Scan(&rows)
+	res := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		res = append(res, map[string]interface{}{"region": r.Region, "city": r.City, "dealers": r.Count})
+	}
+	// fallback: если region пусто — группируем по address LIKE
+	if len(res) == 0 {
+		var salons []models.Salon
+		s.DB.Limit(100).Find(&salons)
+		countByAddr := map[string]int{}
+		for _, s := range salons {
+			key := "Не указан"
+			if s.Address != "" {
+				addr := s.Address
+				if len(addr) > 20 {
+					addr = addr[:20]
+				}
+				key = addr
+			}
+			countByAddr[key]++
+		}
+		for k, v := range countByAddr {
+			res = append(res, map[string]interface{}{"region": k, "city": "", "dealers": v})
+		}
+	}
+	return res, nil
 }
 
-// GetMarketingROI - ROI маркетинга
+// GetMarketingROI - ROI маркетинга (gain-cost)/cost*100
 func (s *KPIService) GetMarketingROI(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
-	return map[string]interface{}{"roi": 0}, nil
+	start, end := getPeriodBounds(period)
+	// cost: marketing_budgets used_amount + dealer_expenses category marketing
+	var cost float64
+	s.DB.Table("marketing_budgets").Select("COALESCE(SUM(used_amount),0)").Scan(&cost)
+	var expCost float64
+	s.DB.Table("dealer_expenses").Where("category = ? AND period = ?", "marketing", period).Select("COALESCE(SUM(amount),0)").Scan(&expCost)
+	if expCost > 0 {
+		cost += expCost
+	}
+	// gain: сумма бюджетов закрытых лидов за период
+	var gain float64
+	s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&gain)
+	roi := 0.0
+	if cost > 0 {
+		roi = (gain - cost) / cost * 100
+	}
+	return map[string]interface{}{"roi": roi, "gain": gain, "cost": cost, "period": period}, nil
 }
 
 // GetAlertSettings - настройки алертов
