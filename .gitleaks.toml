@@ -37,4 +37,8 @@ regexes = [
   '''\.env(\.example)?$''',
   # JWT-ПРИМЕРЫ в README (формат Bearer <token>, оборвано на "...") — НЕ реальные токены
   '''eyJhbGciOiJIUzI1NiIs[A-Za-z0-9_+/]*\.\.\.''',
+  # Docs примеры с test-заглушками (DEPLOY.md) — не прод-секреты
+  '''JWT_SECRET=test''',
+  '''DB_PASSWORD=test''',
+  '''test1234567890''',
 ]

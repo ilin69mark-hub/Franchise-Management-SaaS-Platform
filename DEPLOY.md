@@ -9,7 +9,7 @@ cp saas-b2b-b2c/.env.example saas-b2b-b2c/.env
 
 ## 2. Проверка (fail-closed)
 ```bash
-DB_PASSWORD=test JWT_SECRET=test1234567890 NEXT_PUBLIC_API_URL=https://api.example.com docker compose -f saas-b2b-b2c/docker-compose.prod.yml config | head -40
+DB_PASSWORD=CHANGE_ME_DB_PASSWORD JWT_SECRET=CHANGE_ME_JWT_SECRET NEXT_PUBLIC_API_URL=https://api.example.com docker compose -f saas-b2b-b2c/docker-compose.prod.yml config | head -40
 NEXT_PUBLIC_API_URL=https://api.example.com npm --prefix saas-b2b-b2c/frontend run build
 ```
 
