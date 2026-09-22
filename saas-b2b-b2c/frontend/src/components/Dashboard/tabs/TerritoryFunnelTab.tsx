@@ -130,7 +130,7 @@ const TerritoryFunnelTab: React.FC<TerritoryFunnelTabProps> = ({ loading }) => {
     { title: 'Договор', dataIndex: 'contract', key: 'contract' },
     { title: 'Оплата', dataIndex: 'payment', key: 'payment' },
     { title: 'Конверсия', dataIndex: 'conversion', key: 'conversion', render: (c: number, r: ManagerFunnel) => <Tag color={r.conversion >= 12 ? 'green' : r.conversion >= 8 ? 'orange' : 'red'}>{c}%</Tag> },
-    { title: 'История', key: 'history', render: (_: any, r: ManagerFunnel) => (
+    { title: 'История', key: 'history', render: (_: unknown, r: ManagerFunnel) => (
       <div style={{ display: 'flex', alignItems: 'flex-end', height: 24, gap: 2, width: 80 }}>
         {r.history.map((v, i) => (
           <div key={i} style={{ flex: 1, background: v >= 10 ? '#52c41a' : v >= 7 ? '#fa8c16' : '#ff4d4f', height: `${v * 2}%`, borderRadius: 1 }} />

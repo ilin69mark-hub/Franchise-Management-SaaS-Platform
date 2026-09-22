@@ -158,7 +158,7 @@ const FranchiserNetworkHealthTab: React.FC = () => {
     {
       title: 'Визуализация',
       key: 'chart',
-      render: (_: any, r: SegmentationData) => (
+      render: (_: unknown, r: SegmentationData) => (
         <Progress 
           percent={Math.round((r.count / totalDealers) * 100)} 
           size="small" 

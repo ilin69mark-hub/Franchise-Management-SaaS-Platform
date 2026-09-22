@@ -199,7 +199,7 @@ const FranchiserNetworkTab: React.FC<FranchiserNetworkTabProps> = ({ summary }) 
     {
       title: 'Статус',
       key: 'status',
-      render: (_: any, r: TerritoryData) => {
+      render: (_: unknown, r: TerritoryData) => {
         const status = getTerritoryStatus(r);
         return (
           <Tag color={status} icon={<CheckCircleOutlined />}>

@@ -355,7 +355,7 @@ const FranchiserTeamTab: React.FC = () => {
               { 
                 title: 'План продаж', 
                 key: 'salesPlan',
-                render: (_: any, r: Manager) => (
+                render: (_: unknown, r: Manager) => (
                   <InputNumber 
                     value={plans[r.id]?.salesPlan} 
                     onChange={(v) => handlePlanChange(r.id, 'salesPlan', v || 0)}
@@ -368,7 +368,7 @@ const FranchiserTeamTab: React.FC = () => {
               { 
                 title: 'Цель дилеров', 
                 key: 'targetDealers',
-                render: (_: any, r: Manager) => (
+                render: (_: unknown, r: Manager) => (
                   <InputNumber 
                     value={plans[r.id]?.targetDealers}
                     onChange={(v) => handlePlanChange(r.id, 'targetDealers', v || 0)}
@@ -380,7 +380,7 @@ const FranchiserTeamTab: React.FC = () => {
               { 
                 title: 'Макс красных %', 
                 key: 'targetRedDealers',
-                render: (_: any, r: Manager) => (
+                render: (_: unknown, r: Manager) => (
                   <InputNumber 
                     value={plans[r.id]?.targetRedDealers}
                     onChange={(v) => handlePlanChange(r.id, 'targetRedDealers', v || 0)}
@@ -395,7 +395,7 @@ const FranchiserTeamTab: React.FC = () => {
               { 
                 title: 'Цель SLA', 
                 key: 'targetSla',
-                render: (_: any, r: Manager) => (
+                render: (_: unknown, r: Manager) => (
                   <InputNumber 
                     value={plans[r.id]?.targetSla}
                     onChange={(v) => handlePlanChange(r.id, 'targetSla', v || 0)}
