@@ -18,10 +18,15 @@ regexes = [
   '''unsafe-default-jwt-secret-change-me''',
   '''CHANGE_ME_JWT_SECRET''',
   '''CHANGE_ME_JWT_SECRET_KEY''',
-  # Docker-/compose-фолбэки
+  # Docker-/compose-фолбэки (узко: только dev-postgres, не любой postgres)
   '''unsafe-default-dev-db-password-change-me''',
   '''CHANGE_ME_DB_PASSWORD''',
-  '''postgres''',
+  '''POSTGRES_PASSWORD\s*=\s*postgres''',
+  '''POSTGRES_USER\s*=\s*postgres''',
+  '''DB_PASSWORD\s*=\s*postgres''',
+  '''DB_USER\s*=\s*postgres''',
+  '''\$\{DB_PASSWORD:-postgres\}''',
+  '''\$\{DB_USER:-postgres\}''',
   # Старые литералы, которые filter-repo УЖЕ заменил на плейсхолдеры — просто чтобы
   # CI не падал, если кто-то случайно вернёт их в dev-config. В прод НЕ идут.
   '''supersecretkeyfordevelopment''',

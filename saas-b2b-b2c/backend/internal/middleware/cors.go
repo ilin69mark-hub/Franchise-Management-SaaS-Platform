@@ -20,6 +20,7 @@ func CORS() gin.HandlerFunc {
 			if origin == allowed {
 				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+				c.Writer.Header().Set("Vary", "Origin")
 				break
 			}
 		}

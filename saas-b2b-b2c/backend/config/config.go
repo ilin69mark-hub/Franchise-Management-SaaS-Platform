@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -30,7 +31,8 @@ func LoadConfig() *Config {
 	viper.SetDefault("jwt_expires", "24h")
 	viper.SetDefault("debug", false)
 
-	// Загружаем из переменных окружения
+	// Загружаем из переменных окружения (поддержка JWT_SECRET, DB_HOST и т.п.)
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 
 	// Создаем экземпляр конфигурации
