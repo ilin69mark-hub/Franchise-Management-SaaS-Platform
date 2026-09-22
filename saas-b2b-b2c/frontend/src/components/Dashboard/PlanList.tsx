@@ -60,8 +60,9 @@ const PlanList: React.FC = () => {
       await deletePlan(id).unwrap();
       message.success('План удалён');
       refetch();            // обновляем список
-    } catch (e: any) {
-      message.error(e?.data?.error || 'Не удалось удалить');
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      message.error(err?.data?.error || 'Не удалось удалить');
     }
   };
 
@@ -84,9 +85,10 @@ const PlanList: React.FC = () => {
 
       setModalVisible(false);
       refetch();
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Ошибки валидации уже отобразятся в форме, здесь – только ошибки от сервера
-      message.error(e?.data?.error || 'Ошибка при сохранении');
+      const err = e as { data?: { error?: string } };
+      message.error(err?.data?.error || 'Ошибка при сохранении');
     }
   };
 

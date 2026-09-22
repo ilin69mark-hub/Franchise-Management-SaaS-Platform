@@ -36,7 +36,7 @@ interface ManagerTargetsData {
 }
 
 interface DealerDirectivesProps {
-  user: any;
+  user: { id: string; role?: string } | null;
 }
 
 const DealerDirectives: React.FC<DealerDirectivesProps> = ({ user }) => {
@@ -52,8 +52,9 @@ const DealerDirectives: React.FC<DealerDirectivesProps> = ({ user }) => {
       const res = await apiClient.get(`/manager/targets?date=${date}`);
       setData(res.data);
       setError(null);
-    } catch (e: any) {
-      setError(e?.response?.data?.error || 'Ошибка загрузки данных');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      setError(err?.response?.data?.error || 'Ошибка загрузки данных');
     } finally {
       setLoading(false);
     }
