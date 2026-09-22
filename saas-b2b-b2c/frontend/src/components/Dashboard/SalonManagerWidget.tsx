@@ -97,7 +97,7 @@ const SalonManagerWidget: React.FC = () => {
       key: 'manager',
       render: (_: any, record: Salon) => {
         // Отладка: смотрим, что приходит в record
-        // console.log('Salon record:', record); 
+
         
         // Проверяем, есть ли объект manager и есть ли у него first_name
         if (record.manager && record.manager.first_name) {

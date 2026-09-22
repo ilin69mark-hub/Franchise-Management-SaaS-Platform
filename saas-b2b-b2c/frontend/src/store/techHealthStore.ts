@@ -128,7 +128,7 @@ export const useTechHealthStore = create<TechHealthState>((set, get) => ({
         avgResponseTime: Number(data.avg_response_time) || 150,
         p95ResponseTime: Number(data.p95_response_time) || 300,
         p99ResponseTime: Number(data.p99_response_time) || 500,
-        errorRate: Number(data.error_rate) || 0.1,
+        errorRate: Number(data.error_rate) || 0,
         activeWebsockets: 0,
       });
     } catch {

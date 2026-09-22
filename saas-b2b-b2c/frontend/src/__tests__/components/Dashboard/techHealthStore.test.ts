@@ -576,7 +576,7 @@ describe('techHealthStore', () => {
       expect(status?.avgResponseTime).toBe(150);
       expect(status?.p95ResponseTime).toBe(300);
       expect(status?.p99ResponseTime).toBe(500);
-      expect(status?.errorRate).toBe(0.1);
+      expect(status?.errorRate).toBe(0);
       expect(status?.uptime).toBe(99.9);
     });
 

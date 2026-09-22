@@ -118,7 +118,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
         
         wsRef.current.onopen = () => {
           setWsConnected(true);
-          console.log('WebSocket connected');
+          if (process.env.NODE_ENV !== 'production') console.debug('WebSocket connected');
         };
         
         wsRef.current.onmessage = (event) => {
@@ -188,7 +188,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
         });
         break;
       default:
-        console.log('Unknown WebSocket message type:', data.type);
+        if (process.env.NODE_ENV !== 'production') console.debug('Unknown WebSocket message type:', data.type);
     }
   };
 

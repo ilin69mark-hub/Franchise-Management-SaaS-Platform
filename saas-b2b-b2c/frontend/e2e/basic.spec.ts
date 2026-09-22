@@ -15,7 +15,7 @@ test.describe('Authentication E2E', () => {
     
     const loginButton = page.locator('button:has-text("войти"), button:has-text("Войти"), button:has-text("Login")');
     await expect(loginButton.first()).toBeVisible({ timeout: 5000 }).catch(() => {
-      console.log('Login button not found - page may redirect or use different selector');
+      test.info().annotations.push({type: 'note', description: 'Login button not found - page may redirect'});
     });
   });
 });
@@ -27,7 +27,7 @@ test.describe('Dashboard E2E', () => {
     
     const nav = page.locator('nav, header, .ant-layout');
     await expect(nav.first()).toBeVisible({ timeout: 5000 }).catch(() => {
-      console.log('Navigation not found');
+      test.info().annotations.push({type: 'note', description: 'Navigation not found'});
     });
   });
 
@@ -53,7 +53,7 @@ test.describe('API Integration', () => {
     const hasErrorAlert = await consoleErrors.count();
     
     if (hasErrorAlert > 0) {
-      console.log('Found error alerts on page');
+      test.info().annotations.push({type: 'note', description: 'Found error alerts on page'});
     }
   });
 });

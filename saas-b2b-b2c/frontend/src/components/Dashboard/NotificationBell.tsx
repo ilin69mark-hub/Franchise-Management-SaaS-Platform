@@ -95,7 +95,7 @@ const NotificationBell: React.FC = () => {
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
+        if (process.env.NODE_ENV !== 'production') console.debug('WebSocket connected');
       };
 
       ws.onmessage = (event) => {
@@ -131,7 +131,7 @@ const NotificationBell: React.FC = () => {
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected, falling back to polling');
+        if (process.env.NODE_ENV !== 'production') console.debug('WebSocket disconnected, falling back to polling');
         startPolling();
       };
 
