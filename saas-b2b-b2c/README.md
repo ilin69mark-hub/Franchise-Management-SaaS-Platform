@@ -103,8 +103,8 @@ saas-b2b-b2c/
 │   │   └── utils/              # Утилиты
 │   └── Dockerfile.frontend
 │
-├── docker-compose.yml           # Продакшн
-├── docker-compose.dev.yml       # Разработка
+├── docker-compose.yml           # Dev-стек (PG+Redis+backend+frontend, hot-reload)
+├── docker-compose.prod.yml      # Продакшн (fail-closed: JWT_SECRET/DB_PASSWORD обязательны)
 ├── nginx.conf                   # Reverse proxy
 ├── config.yaml                  # Конфигурация Go
 └── APIDOCS.md                   # Документация API
@@ -119,13 +119,28 @@ saas-b2b-b2c/
 - Docker >= 20.10
 - Docker Compose >= 2.0
 
-### Запуск
+### Быстрый запуск через Make (рекомендуется)
+
+В **корне репозитория** доступен Makefile-агрегатор — единая точка входа
+для dev-стека, тестов, линта и аудита:
 
 ```bash
-# Клонирование и запуск
-docker-compose up -d --build
+# 1. Поднять полный dev-стек (PG + Redis + backend + frontend)
+make dev
 
-# Проверка статуса
+# 2. Статус контейнеров
+make ps
+
+# 3. Логи (режим follow)
+make logs
+
+# 4. Остановить стек
+make down
+```
+
+Ручной эквивалент (без make):
+```bash
+docker-compose up -d --build
 docker-compose ps
 ```
 
@@ -306,8 +321,8 @@ npm run dev
 ### Docker для разработки
 
 ```bash
-# С hot-reload
-docker-compose -f docker-compose.dev.yml up -d
+# С hot-reload (dev-стек из корня; это тот же стек, что поднимает make dev)
+docker-compose -f docker-compose.yml up -d
 ```
 
 ### Тестирование
