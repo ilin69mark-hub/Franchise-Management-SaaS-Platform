@@ -127,7 +127,7 @@ const BillingSection: React.FC = () => {
     }
   };
 
-  const handleCreateInvoice = async (values: any) => {
+  const handleCreateInvoice = async (values: { amount: number; dueDate?: string }) => {
     try {
       await apiClient.post('/admin/billing/invoices', values);
       message.success('Счёт выставлен');
@@ -139,7 +139,7 @@ const BillingSection: React.FC = () => {
     }
   };
 
-  const handleCreatePayment = async (values: any) => {
+  const handleCreatePayment = async (values: { amount: number }) => {
     try {
       await apiClient.post('/admin/billing/payments', values);
       message.success('Платёж зачислен');
@@ -275,7 +275,7 @@ const BillingSection: React.FC = () => {
             <InputForm
               type="number"
               defaultValue={settings?.notifyAfterDays}
-              onPressEnter={(e: any) => handleUpdateSettings('notifyAfterDays', parseInt(e.target.value))}
+              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => handleUpdateSettings('notifyAfterDays', parseInt((e.target as HTMLInputElement).value))}
               style={{ marginTop: 4 }}
             />
           </Col>
@@ -284,7 +284,7 @@ const BillingSection: React.FC = () => {
             <InputForm
               type="number"
               defaultValue={settings?.secondNotifyAfterDays}
-              onPressEnter={(e: any) => handleUpdateSettings('secondNotifyAfterDays', parseInt(e.target.value))}
+              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => handleUpdateSettings('secondNotifyAfterDays', parseInt((e.target as HTMLInputElement).value))}
               style={{ marginTop: 4 }}
             />
           </Col>
@@ -293,7 +293,7 @@ const BillingSection: React.FC = () => {
             <InputForm
               type="number"
               defaultValue={settings?.suspendAfterDays}
-              onPressEnter={(e: any) => handleUpdateSettings('suspendAfterDays', parseInt(e.target.value))}
+              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => handleUpdateSettings('suspendAfterDays', parseInt((e.target as HTMLInputElement).value))}
               style={{ marginTop: 4 }}
             />
           </Col>
@@ -304,7 +304,7 @@ const BillingSection: React.FC = () => {
             <InputForm
               type="number"
               defaultValue={settings?.autoInvoiceDays}
-              onPressEnter={(e: any) => handleUpdateSettings('autoInvoiceDays', parseInt(e.target.value))}
+              onPressEnter={(e: React.KeyboardEvent<HTMLInputElement>) => handleUpdateSettings('autoInvoiceDays', parseInt((e.target as HTMLInputElement).value))}
               style={{ marginTop: 4 }}
             />
           </Col>
