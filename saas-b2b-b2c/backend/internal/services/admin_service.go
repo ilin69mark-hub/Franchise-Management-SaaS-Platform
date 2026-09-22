@@ -313,7 +313,7 @@ func (s *AdminService) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 
 func (s *AdminService) GetAllPlans() ([]models.Plan, error) {
 	var plans []models.Plan
-	err := s.db.Find(&plans).Error
+	err := s.db.Limit(100).Find(&plans).Error
 	return plans, err
 }
 
@@ -520,7 +520,7 @@ type RiskTenant struct {
 func (s *AdminService) GetRisksAnalytics() ([]RiskTenant, error) {
 	var tenants []models.Tenant
 	// Берем все сети, включая неактивные (soft deleted не берем)
-	if err := s.db.Where("status != ?", "churned").Find(&tenants).Error; err != nil {
+	if err := s.db.Where("status != ?", "churned").Limit(100).Find(&tenants).Error; err != nil {
 		return nil, err
 	}
 

@@ -2119,11 +2119,28 @@ func (s *KPIService) GetFranchiserTeam(ctx context.Context, userID uuid.UUID) (*
 		return nil, err
 	}
 
+	// Батчим dealersCount — 1 GROUP BY вместо N
+	dealersByMgr := map[uuid.UUID]int64{}
+	{
+		var mgrIDs []uuid.UUID
+		for _, m := range managers {
+			mgrIDs = append(mgrIDs, m.ID)
+		}
+		if len(mgrIDs) > 0 {
+			type cRow struct {
+				ManagedBy uuid.UUID `gorm:"column:managed_by"`
+				Cnt       int64     `gorm:"column:cnt"`
+			}
+			var cRows []cRow
+			s.DB.Model(&models.User{}).Select("managed_by, COUNT(*) as cnt").
+				Where("role = ? AND managed_by IN ?", models.RoleDealer, mgrIDs).Group("managed_by").Scan(&cRows)
+			for _, r := range cRows {
+				dealersByMgr[r.ManagedBy] = r.Cnt
+			}
+		}
+	}
 	for _, mgr := range managers {
-		// Считаем их дилеров
-		var dealersCount int64
-		s.DB.Model(&models.User{}).Where("role = ? AND managed_by = ?", models.RoleDealer, mgr.ID).Count(&dealersCount)
-
+		dealersCount := dealersByMgr[mgr.ID]
 		resp.TeamMembers = append(resp.TeamMembers, models.FranchiserTeamMember{
 			ID:           mgr.ID,
 			Name:         mgr.FirstName + " " + mgr.LastName,
@@ -2185,15 +2202,26 @@ func (s *KPIService) GetTerritorySummary(ctx context.Context, userID uuid.UUID, 
 		resp.QuarterForecastPercent = int((forecastAmount / totalPlan) * 100)
 	}
 
-	// Красные дилеры
+	// Красные дилеры — батчим N → 1 GROUP BY
 	redZoneDealersCount := 0
-	for _, dealer := range dealers {
-		var fact float64
-		s.DB.Model(&models.Lead{}).
-			Where("manager_id = ? AND status IN ?", dealer.ID, []string{"sale", "paid"}).
-			Select("COALESCE(SUM(budget), 0)").Scan(&fact)
-		if totalPlan > 0 && (fact/totalPlan)*100 < 50 {
-			redZoneDealersCount++
+	{
+		type rRow struct {
+			ManagerID uuid.UUID `gorm:"column:manager_id"`
+			Fact      float64   `gorm:"column:fact"`
+		}
+		var rRows []rRow
+		s.DB.Model(&models.Lead{}).Select("manager_id, COALESCE(SUM(budget),0) as fact").
+			Where("manager_id IN ? AND status IN ?", dealerIDs, []string{"sale", "paid"}).
+			Group("manager_id").Scan(&rRows)
+		mFact := map[uuid.UUID]float64{}
+		for _, r := range rRows {
+			mFact[r.ManagerID] = r.Fact
+		}
+		for _, d := range dealers {
+			fact := mFact[d.ID]
+			if totalPlan > 0 && (fact/totalPlan)*100 < 50 {
+				redZoneDealersCount++
+			}
 		}
 	}
 	resp.RedZoneDealersCount = redZoneDealersCount
