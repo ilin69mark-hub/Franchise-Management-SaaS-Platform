@@ -323,7 +323,7 @@ const NotificationBell: React.FC = () => {
       placement="bottomRight"
     >
       <Badge count={unreadCount} size="small" style={{ cursor: 'pointer', backgroundColor: unreadCount > 0 ? '#ff4d4f' : undefined }}>
-        <BellOutlined style={{ fontSize: '18px', cursor: 'pointer', color: unreadCount > 0 ? '#ff4d4f' : undefined }} />
+        <BellOutlined aria-label="Уведомления" role="button" style={{ fontSize: '18px', cursor: 'pointer', color: unreadCount > 0 ? '#ff4d4f' : undefined }} />
       </Badge>
     </Dropdown>
   );
