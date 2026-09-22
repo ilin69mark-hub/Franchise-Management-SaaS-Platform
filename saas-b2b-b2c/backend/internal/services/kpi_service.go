@@ -336,13 +336,15 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 		Where("salon_id = ? AND status = ? AND created_at BETWEEN ? AND ?", salonID, "sale", firstOfMonth, targetDate).
 		Select("COALESCE(SUM(budget), 0)").Scan(&monthFact)
 
-	// Также добавляем факт из заказов (более точные данные)
+	// Факт из заказов — более точный, не суммируем с leads чтобы избежать двойного учета одного договора
 	s.DB.Model(&models.Order{}).
 		Where("salon_id = ? AND status IN ? AND created_at BETWEEN ? AND ?", salonID, []string{"paid", "contract"}, firstOfMonth, targetDate).
 		Select("COALESCE(SUM(total_price), 0)").Scan(&orderFact)
 
-	// СУММИРУЕМ оба источника для более точного подсчёта
-	monthFact = monthFact + orderFact
+	// Берём максимум из двух источников (заказ точнее, но может отсутствовать)
+	if orderFact > monthFact {
+		monthFact = orderFact
+	}
 
 	resp.Plan = monthPlan
 	resp.Fact = monthFact
@@ -364,6 +366,14 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// ====================
 	// 2. ДИНАМИКА (сравнение с прошлым днем и неделей)
 	// ====================
+	// Сегодня vs вчера/неделю — корректно сравниваем день к дню
+	todayStart := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location())
+	todayEnd := todayStart.AddDate(0, 0, 1)
+	var todaySales float64
+	s.DB.Model(&models.Lead{}).
+		Where("salon_id = ? AND status = ? AND created_at >= ? AND created_at < ?", salonID, "sale", todayStart, todayEnd).
+		Select("COALESCE(SUM(budget), 0)").Scan(&todaySales)
+
 	// Вчера
 	yesterday := targetDate.AddDate(0, 0, -1)
 	yesterdayStart := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
@@ -383,10 +393,10 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 		Select("COALESCE(SUM(budget), 0)").Scan(&weekAgoSales)
 
 	if yesterdaySales > 0 {
-		resp.DynamicDay = ((monthFact - yesterdaySales) / yesterdaySales) * 100
+		resp.DynamicDay = ((todaySales - yesterdaySales) / yesterdaySales) * 100
 	}
 	if weekAgoSales > 0 {
-		resp.DynamicWeek = ((monthFact - weekAgoSales) / weekAgoSales) * 100
+		resp.DynamicWeek = ((todaySales - weekAgoSales) / weekAgoSales) * 100
 	}
 
 	// ====================
@@ -438,8 +448,6 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// ====================
 	// Трафик (количество лидов за сегодня vs норма)
 	today := targetDate.Format("2006-01-02")
-	todayStart := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, targetDate.Location())
-	todayEnd := todayStart.AddDate(0, 0, 1)
 	var todayLeads int64
 	s.DB.Model(&models.Lead{}).
 		Where("salon_id = ? AND created_at >= ? AND created_at < ?", salonID, todayStart, todayEnd).
@@ -1208,12 +1216,12 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	}
 	resp.MaxBonus = maxBonus
 
-	// Уровень предупреждения
+	// Уровень предупреждения — сначала <30 red, иначе <50 yellow
 	bonusPercent := (resp.BonusForecast / maxBonus) * 100
-	if bonusPercent < 50 {
-		resp.WarningLevel = "yellow"
-	} else if bonusPercent < 30 {
+	if bonusPercent < 30 {
 		resp.WarningLevel = "red"
+	} else if bonusPercent < 50 {
+		resp.WarningLevel = "yellow"
 	} else {
 		resp.WarningLevel = "none"
 	}
@@ -1575,9 +1583,9 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 		}
 		planBySalon[sid] = sum
 	}
-	// 3) fallback dealer plan (один запрос вместо N)
+	// 3) fallback dealer plan (один запрос вместо N) — goals.assignee_id, не dealer_id
 	var dealerPlan float64
-	s.DB.Model(&models.Goal{}).Where("dealer_id = ? AND target_date BETWEEN ? AND ?", userID, startDate, endDate).
+	s.DB.Model(&models.Goal{}).Where("assignee_id = ? AND target_date BETWEEN ? AND ?", userID, startDate, endDate).
 		Select("COALESCE(SUM(sales_plan),0)").Scan(&dealerPlan)
 	// 4) факты по салонам batched
 	factBySalonMap := map[uuid.UUID]float64{}
