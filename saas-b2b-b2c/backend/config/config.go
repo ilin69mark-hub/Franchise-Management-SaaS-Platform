@@ -103,7 +103,7 @@ func LoadConfig() *Config {
 func (c *Config) DBContext() context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	go func() {
-		time.Sleep(10 * time.Second)
+		<-ctx.Done()
 		cancel()
 	}()
 	return ctx
