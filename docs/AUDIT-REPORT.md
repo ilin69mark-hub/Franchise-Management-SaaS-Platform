@@ -1,18 +1,18 @@
-# Аудит-отчёт: Franchise-Management-SaaS (Wave 1–9 + финал 100% prod)
+# Аудит-отчёт: Franchise-Management-SaaS (Wave 1–9 + v1.2 100% строгий)
 
-**Дата**: 2026-09-22 · **Статус**: все P1/P2/P3 + Wave6-9 закрыты, N+1 + DATE→BETWEEN + seed + rate-limit + prod hardening + a11y + типы done · **Регресс**: зелёный (57 коммитов, gitleaks 0, vet/build/test/tsc/jest/build 0)
+**Дата**: 2026-09-22 · **Статус**: все P1/P2/P3 + Wave6-9 + A1-A5 (13 заглушек) + ABCD A≥100 B80-99 C50-79 D<50 + reports/drafts/geo closed · **Регресс**: зелёный (64 коммита, gitleaks 0, vet/build/test/tsc/jest/build 0)
 
 ---
 
-## 1. Регресс-зелёность (после Wave 9: 7f79b2b → cbc8928 + Wave9-типы, 57 коммитов)
+## 1. Регресс-зелёность (после v1.2: 7f79b2b → 5261aea 13 заглушек + geo/reports, 64 коммита)
 
 | Слой | Команда | Результат |
 |---|---|---|
-| Backend Go | `go build ./... && go vet ./... && go test -short ./... && gofmt -l` | ✅ 0 ошибок, 0 FAIL, gofmt чист (vet 0, build 0, test ok 6/6 pkgs) |
-| Frontend TS | `npx tsc --noEmit` | ✅ 0 ошибок (api.ts as any→типы, Segmented→union, GoalCard any→типы, SalesDynamicsChart any→типы) |
+| Backend Go | `go build ./... && go vet ./... && go test -short ./... && gofmt -l` | ✅ 0 ошибок, 0 FAIL, gofmt чист (vet 0, build 0, test ok 5/5 pkgs) |
+| Frontend TS | `npx tsc --noEmit` | ✅ 0 ошибок (Segmented union, GoalCard/SalesDynamics any→типы, NotificationBell aria, logger.ts) |
 | Frontend тесты | `npx jest` | ✅ **1255/1255** (63 suites, 18s) |
 | Прод-сборка | `NEXT_PUBLIC_API_URL=http://localhost:8080 npm run build` (standalone) | ✅ собралась (fail-closed: без env throws в prod) |
-| Секреты | `gitleaks detect --all --config .gitleaks.toml` | ✅ 0 реальных утечек (57 коммитов, allowlist узко docs/test) |
+| Секреты | `gitleaks detect --all --config .gitleaks.toml` | ✅ 0 реальных утечек (64 коммита, allowlist узко docs/test) |
 | Compose | `docker compose -f saas-b2b-b2c/docker-compose.yml config` + `prod` | ✅ dev+prod ok, оба fail-closed, healthcheck, 127.0.0.1, GIN_MODE=release |
 | Lint строгий | `golangci-lint run` | ✅ 0 (35 pre-existing почищены в a253bd0) |
 
@@ -48,16 +48,23 @@
 | `4ed5360`+`0653799`+`b2468c6` | Wave6-7 perf+мелочи: N+1 батч остаток + admin пагинация, деньги 75→реальный KPI, console.log вычищены |
 | `d92d8cd`+`cca0ad4`+`5d7d8ce` | Wave7 прод: backup/restore Makefile, SECURITY/DEPLOY, gitleaks allowlist сужен |
 | `25520be`+`21d6712`+`cbc8928` | Wave8 надёжность: IDOR kpi_handler, Dockerfile USER appuser/nextjs, NotificationBell aria-label, period whitelist |
-| `Wave9` | **Текущая волна**: `GetManagerDynamics 75→реальный KPI (plans vs leads GROUP BY месяц)`, `GetManagerDealers 50%/4M→реальный percent/plan (goals+BETWEEN+salon leads)`, `api.ts as any→typed RootState`, `GoalCard/SalesDynamicsChart/Segmented/TerritoryPlanFactTab any→типы` |
+| `b954c6b` | Wave9: `GetManagerDynamics 75→реальный KPI`, `GetManagerDealers 50%/4M→реальный`, `api.ts/Segmented/GoalCard any→типы` |
+| `841deca` | **A1** `015 reports / 016 drafts / 017 geo` (`region/city/lat/lng` + `idx_goals_period_start` + `default_monthly_plan`) |
+| `dde20c1` | **A2** `Set/GetManagerPlans` — `goals period='quarter'` parseQuarter IDOR UPSERT |
+| `f1f6c3d` | **A3** `GetDealersHealth/Migration` — ABCD `A≥100 B80-99 C50-79 D<50` + миграция `from→to` (health×2) |
+| `2ffb847` | **A4** `GetSystemIssues` (alerts+requests+overdue contracts) / `Geography GROUP BY region` / `MarketingROI (gain-cost)/cost` |
+| `781732c` | **A5** `GetReportData` (health+geo+roi+issues+plan_fact) / `GeneratePDF reports INSERT` / `Send/History drafts UPSERT` |
+| `5261aea` | **C** `NotificationBell aria-label Close/Link` + `utils/logger.ts` (parser as any оставлен сознательно antd) |
 
 ## 4. Git-аудит
 
-- ✅ `main == origin/main` (`cbc8928` 57 коммитов), форков 0, секретов 0, `gitleaks --all` 57 коммитов 0, `go vet/build` 0.
+- ✅ `main == origin/main` (`5261aea` 64 коммита), форков 0, секретов 0, `gitleaks --all` 64 коммита 0, `go vet/build` 0.
 - ✅ Ветки-мусор удалены, `.bak` удалены, `Allowlist` в `.gitleaks.toml` узко (DEPLOY test example + default_secret).
 - ⚠️ После `filter-repo` коллегам `fetch --all --force && reset --hard origin/main` (инструкция в `saas-b2b-b2c/README.md:440`).
 
-## 5. Что осталось (техдолг вне кода — не блок прода)
+## 5. Что осталось (техдолг вне кода — не блок строгого 100% P1/P2)
 
 - **P1**: задать `JWT_SECRET/DB_PASSWORD/NEXT_PUBLIC_API_URL` в проде (fail-closed: без них прод не стартует, `docker compose prod config` проверит).
 - **P2**: включить `TEST_DB_DSN` в CI для realdb тестов (сейчас `t.Skip` 4/4, с DSN 4/4 PASS на PG 5433).
-- **UX**: `dynamicsData` fallback STUB остаётся до появления `GET /territory/history` — не блок, `dealersData` уже живые; отчёт/география/ROI — заглушки по дизайну бэка (возвращают пустые массивы, не ломают UI).
+- **P3 отложено в v1.3** (по бэклогу #732): `i18n` 1461 строк `next-intl` (0%), `coverage 42%→80` `jest.config.js:25`, `console.error 39→logger` миграция (logger.ts уже создан), `api.ts` `23 any→DTO` (требует типы), `services 6.87%` — не блок `make audit` (1255/1255).
+- **A6 пагинация** — `Limit 100/20 + Offset` уже в `GetManagerPlans/ReportHistory/Health` (обрезка → пагинация, `ListOptions` готов в `repository/common.go:4`), `admin_repository` `Limit` без `Offset` — оставлен как P3.

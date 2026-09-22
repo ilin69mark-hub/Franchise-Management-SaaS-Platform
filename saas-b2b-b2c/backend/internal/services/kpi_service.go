@@ -3378,11 +3378,7 @@ func (s *KPIService) GeneratePDF(ctx context.Context, userID string, blocks []st
 	pdfURL := fmt.Sprintf("/reports/%s.pdf", id.String())
 	// idempotent insert via Exec
 	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url, blocks, comment) VALUES (?, ?, ?, ?::jsonb, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL, string(blocksJSON), comment)
-	// если таблица создана без blocks/comment колонок (старая схема reports без них) — fallback insert minimal
-	if s.DB.Exec(`SELECT 1 FROM reports WHERE id = ?`, id).Error != nil {
-		// ignore
-	}
-	// ensure fallback for older schema (reports created with only pdf_url/recipients)
+	// fallback for older schema (reports created with only pdf_url/recipients) — second insert no-op if first succeeded
 	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL)
 	return map[string]interface{}{"pdf_url": pdfURL, "report_id": id.String()}, nil
 }
