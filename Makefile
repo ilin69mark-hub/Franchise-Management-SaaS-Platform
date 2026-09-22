@@ -130,6 +130,15 @@ clean: ## Остановить стек и почистить артефакты
 	$(BACKEND) clean
 	$(FRONTEND) clean
 
+backup: ## Бэкап БД (pg_dump) + volume в ./backups
+	@mkdir -p backups
+	$(COMPOSE) $(COMPOSE_PROD) exec -T postgres pg_dump -U postgres franchise_db | gzip > backups/backup_$(shell date +%F_%H%M).sql.gz
+	@ls -lh backups/backup_*.sql.gz | tail -1
+	@printf '\n\033[1;32m✔ Бэкап сохранён в backups/\033[0m\n'
+
+restore: ## Восстановление из последнего бэкапа (backups/backup_*.sql.gz)
+	@ls backups/backup_*.sql.gz 2>/dev/null | tail -1 | xargs -I {} sh -c 'gunzip < {} | $(COMPOSE) $(COMPOSE_PROD) exec -T postgres psql -U postgres franchise_db && echo "✔ Восстановлено из {}"'
+
 audit: ## gitleaks-скан секретов во всей истории + полный регресс (CI-дубликат)
 	@printf '\n\033[1;33m[1/5] Gitleaks-скан (история + HEAD)...\033[0m\n'
 	gitleaks detect --source . --redact --log-opts='--all'
