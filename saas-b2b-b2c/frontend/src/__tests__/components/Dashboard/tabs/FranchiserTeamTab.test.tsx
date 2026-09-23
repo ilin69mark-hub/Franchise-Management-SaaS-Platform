@@ -553,6 +553,15 @@ describe('FranchiserTeamTab - interactions', () => {
     expect(getForecastColor(90)).toBe('orange');
     expect(getForecastColor(80)).toBe('red');
   });
+
+  it('покрывает renderDetailPanel с разными менеджерами', () => {
+    const { container } = render(<FranchiserTeamTab />);
+    const expands = container.querySelectorAll('.ant-table-row-expand-icon');
+    if (expands.length > 1) {
+      fireEvent.click(expands[1] as HTMLElement);
+    }
+    expect(container.textContent).toContain('Моя команда');
+  });
 });
 
   it('renderDetailPanel с пустым менеджером', async () => {

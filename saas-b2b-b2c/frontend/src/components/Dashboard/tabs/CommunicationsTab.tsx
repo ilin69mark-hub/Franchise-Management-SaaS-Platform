@@ -242,7 +242,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
     return filterTasks(tasks, filterStatus, filterPriority);
   }, [tasks, filterStatus, filterPriority]);
 
-  const tasksTableColumns = [
+  const tasksTableColumns: import('antd/es/table').ColumnsType<Task> = [
     {
       title: 'Задача',
       dataIndex: 'title',

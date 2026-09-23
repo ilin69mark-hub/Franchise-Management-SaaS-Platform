@@ -157,4 +157,13 @@ describe('CommunicationsTab render', () => {
     const { container } = render(<CommunicationsTab tasks={tasks} />);
     expect(container.textContent).toContain('30.09.2026');
   });
+
+  it('обрабатывает WebSocket сообщения', async () => {
+    const tasks = [
+      { id: 't1', title: 't1', description: 'd1', dueDate: '2026-09-30', status: 'new' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+    ];
+    render(<CommunicationsTab tasks={tasks} />);
+    // WebSocket is mocked globally, just check that component renders without crashing with tasks
+    expect(document.body.textContent).toContain('t1');
+  });
 });

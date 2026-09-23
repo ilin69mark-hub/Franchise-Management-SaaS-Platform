@@ -293,4 +293,29 @@ describe('apiSlice', () => {
     await (r3 as Promise<unknown>).catch(() => {});
     expect(r3).toBeDefined();
   });
+
+  it('использует NEXT_PUBLIC_API_URL', async () => {
+    const original = process.env.NEXT_PUBLIC_API_URL;
+    process.env.NEXT_PUBLIC_API_URL = 'https://example.com';
+    jest.resetModules();
+    const { apiSlice: newApi } = await import('@/services/api');
+    expect(newApi.reducerPath).toBe('api');
+    process.env.NEXT_PUBLIC_API_URL = original;
+    jest.resetModules();
+    await import('@/services/api');
+  });
+
+  it('бросает ошибку в production без URL', async () => {
+    const originalEnv = process.env.NODE_ENV;
+    const originalUrl = process.env.NEXT_PUBLIC_API_URL;
+    // @ts-ignore
+    process.env.NODE_ENV = 'production';
+    delete process.env.NEXT_PUBLIC_API_URL;
+    jest.resetModules();
+    await expect(import('@/services/api')).rejects.toThrow('NEXT_PUBLIC_API_URL must be set');
+    process.env.NODE_ENV = originalEnv;
+    process.env.NEXT_PUBLIC_API_URL = originalUrl;
+    jest.resetModules();
+    await import('@/services/api');
+  });
 });
