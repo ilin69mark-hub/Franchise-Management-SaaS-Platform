@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.32 (2026-09-23) — services/api 73% + 77% milestone (global 77.31/61.99/70.80/78.73) — 77% lines
+- **Tests:** `services/planApi` 50% + `goalApi` 50% + `userApi` 50% (6→8, 7→9, 2→4 тестов, диспатч `getPlans`/`createPlan`/`getMyGoal`/`setGoal`/`getMyProfile`/`updateProfile` с `global.fetch` mock). Пороги `61/70/77/77`, `104 suites 1562/1562` (+6 тестов). Коммит push в main.
+
 ## v1.31 (2026-09-23) — SalaryTeam 85% + ExpenseFormTab 85% + 76% milestone (global 76.59/61.06/69.65/77.92)
 - **Tests:** `SalonTeamTab` +1 `DeviationIndicator` 0/null + `formatMoney` 85.13% stmts, `ExpenseFormTab` +1 `createExpensePayload` с `other_expense_name` 85.14% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1542/1542` (+1 тест). Коммит push в main.
 

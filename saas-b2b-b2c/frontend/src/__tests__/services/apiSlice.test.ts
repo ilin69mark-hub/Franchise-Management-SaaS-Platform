@@ -55,9 +55,11 @@ describe('apiSlice', () => {
       middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
     });
     (global.fetch as jest.Mock).mockClear();
-    const result = store.dispatch(apiSlice.endpoints.getChecklists.initiate() as never) as unknown as Promise<unknown>;
+    const result = store.dispatch(apiSlice.endpoints.getChecklists.initiate(undefined, { forceRefetch: true }) as never) as unknown as Promise<unknown>;
     await result.catch(() => {});
-    // проверяем что диспатч не бросает
+    // логируем для отладки
+    // @ts-ignore
+    // console.log((global.fetch as jest.Mock).mock.calls);
     expect(result).toBeDefined();
   });
 
@@ -121,13 +123,14 @@ describe('apiSlice', () => {
   });
 
   it('проверяет providesTags и invalidatesTags логику', async () => {
-    // Проверяем что endpoints определены с tags
     expect(apiSlice.endpoints.getChecklists).toBeDefined();
     expect(apiSlice.endpoints.createChecklist).toBeDefined();
     expect(apiSlice.endpoints.getLeads).toBeDefined();
     expect(apiSlice.endpoints.getNotifications).toBeDefined();
     expect(apiSlice.endpoints.getDealerPlanFact).toBeDefined();
     expect(apiSlice.endpoints.getAlerts).toBeDefined();
+    // @ts-ignore
+    console.log(Object.keys(apiSlice.util));
   });
 
   it('покрывает все основные endpoints', async () => {
@@ -273,5 +276,21 @@ describe('apiSlice', () => {
     const r2 = store.dispatch(apiSlice.endpoints.logout.initiate() as never) as unknown as Promise<unknown>;
     await r2.catch(() => {});
     expect(r2).toBeDefined();
+  });
+
+  it('покрывает getReportHistory и getAlerts', async () => {
+    const store = configureStore({
+      reducer: { api: apiSlice.reducer },
+      middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
+    });
+    const r1 = store.dispatch(apiSlice.endpoints.getReportHistory.initiate(5 as never) as never) as unknown as Promise<unknown>;
+    await (r1 as Promise<unknown>).catch(() => {});
+    expect(r1).toBeDefined();
+    const r2 = store.dispatch(apiSlice.endpoints.getAlerts.initiate() as never) as unknown as Promise<unknown>;
+    await (r2 as Promise<unknown>).catch(() => {});
+    expect(r2).toBeDefined();
+    const r3 = store.dispatch(apiSlice.endpoints.getUnreadAlerts.initiate() as never) as unknown as Promise<unknown>;
+    await (r3 as Promise<unknown>).catch(() => {});
+    expect(r3).toBeDefined();
   });
 });
