@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.22 (2026-09-23) — CommunicationsTab 53% + api мутации + Expense/SalonTeam (global 75.36/60.48/67.60/76.69)
+- **Tests/Refactor:** `CommunicationsTab` `filterTasks`/`getBudgetPercent`/`getDueColor` экспортированы → 40.15%→52.98% stmts (41.74% branches), `services/api` +1 мутации (12→13) 45.78%→57.83%→57.83% stmts, `ExpenseFormTab` +1 (сабмит) 70.7% stmts, `SalonTeamTab` +1 (история ошибка) 85.13% stmts. Пороги `60/65/75/76`, `104 suites 1518/1518` (+3 теста). Коммит push в main.
+
 ## v1.21 (2026-09-23) — services/api 58% + ExpenseFormTab 71% + SalonTeamTab 85% (global 75.01/60.03/67.47/76.42)
 - **Tests:** `services/api` +2 (все endpoints + мутации → 24%→57.83% stmts), `ExpenseFormTab` +2 (импорт/ошибка загрузки/сабмит) 62.62%→70.70% stmts (89.89% branches), `SalonTeamTab` +1 (история ошибка) 63.51%→85.13% stmts. Пороги `59/64/75/75`, `104 suites 1515/1515` (+9 тестов). Коммит push в main.
 

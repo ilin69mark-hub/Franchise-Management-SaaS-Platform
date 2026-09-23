@@ -85,6 +85,27 @@ interface CommunicationsTabProps {
   loading?: boolean;
 }
 
+export const filterTasks = (tasks: Task[], filterStatus: string, filterPriority: string): Task[] =>
+  tasks.filter(task => {
+    if (filterStatus !== 'all' && task.status !== filterStatus) return false;
+    if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
+    return true;
+  });
+
+export const getBudgetPercent = (marketingBudget?: MarketingBudget): number => {
+  if (!marketingBudget || !marketingBudget.total) return 0;
+  return Math.round((marketingBudget.used / marketingBudget.total) * 100);
+};
+
+export const getDueColor = (dueDate: string): string => {
+  const due = dayjs(dueDate);
+  const now = dayjs();
+  const daysDiff = due.diff(now, 'day');
+  if (daysDiff < 0) return '#ff4d4f';
+  if (daysDiff < 3) return '#fa8c16';
+  return '#52c41a';
+};
+
 const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
   tasks: initialTasks = [],
   requests: initialRequests = [],
@@ -203,11 +224,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
   };
 
   const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
-      if (filterStatus !== 'all' && task.status !== filterStatus) return false;
-      if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
-      return true;
-    });
+    return filterTasks(tasks, filterStatus, filterPriority);
   }, [tasks, filterStatus, filterPriority]);
 
   const tasksTableColumns = [
@@ -229,13 +246,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
       key: 'dueDate',
       width: 120,
       render: (val: string) => {
-        const due = dayjs(val);
-        const now = dayjs();
-        const daysDiff = due.diff(now, 'day');
-        let color = '#52c41a';
-        if (daysDiff < 0) color = '#ff4d4f';
-        else if (daysDiff < 3) color = '#fa8c16';
-        return <Tag color={color}>{due.format('DD.MM.YYYY')}</Tag>;
+        return <Tag color={getDueColor(val)}>{dayjs(val).format('DD.MM.YYYY')}</Tag>;
       },
     },
     {
@@ -342,7 +353,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
     },
   ];
 
-  const budgetPercent = marketingBudget ? Math.round((marketingBudget.used / marketingBudget.total) * 100) : 0;
+  const budgetPercent = getBudgetPercent(marketingBudget);
 
   const budgetTableColumns = [
     { title: 'Дата', dataIndex: 'date', key: 'date', width: 100 },
