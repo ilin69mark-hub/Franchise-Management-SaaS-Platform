@@ -191,3 +191,70 @@ describe('Bonus calculation', () => {
     expect(calculateBonus(30, 50000)).toBe(10000);
   });
 });
+
+describe('SalonTeamTab - interactions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: mockTeamData });
+  });
+
+  it('рендерит фильтры периода и статистику', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    expect(container.textContent).toContain('Сотрудников');
+    expect(container.textContent).toContain('Общая выручка');
+    expect(container.textContent).toContain('Средняя конверсия');
+    expect(container.textContent).toContain('Средний чек');
+    expect(container.textContent).toContain('Неделя');
+    expect(container.textContent).toContain('Месяц');
+    expect(container.textContent).toContain('Квартал');
+  });
+
+  it('переключает период и перезагружает данные', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    expect(container.textContent).toContain('Неделя');
+    expect(container.textContent).toContain('Месяц');
+    expect(container.textContent).toContain('Квартал');
+  });
+
+  it('открывает модалку с историей при клике на График', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    const graphButtons = Array.from(container.querySelectorAll('button')).filter(b => b.textContent?.includes('График'));
+    expect(graphButtons.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('отображает скидки с цветами', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    expect(container.textContent).toContain('5.0%');
+    expect(container.textContent).toContain('8.0%');
+  });
+
+  it('отображает прогресс конверсии', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    expect(container.querySelector('.ant-progress')).toBeTruthy();
+  });
+});

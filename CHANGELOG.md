@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.15 (2026-09-23) — FranchiserTeamTab 60% + SalonFunnelTab 66% + SalonTeamTab interactions (global 66.28/53.86/60.80/67.12)
+- **Tests:** `FranchiserTeamTab` +6 (сохранение планов/копирование квартала/детальная панель/регистрация ok+err/квартал) 49.53%→59.81% stmts, `SalonFunnelTab` +6 (модалка создания/фильтр воронки/горячие сделки/взять лида/ошибка) 54.16%→65.62% stmts, `SalonTeamTab` +5 (фильтры периода/статистика/скидки/прогресс/График) 63.51% stmts, `ExpenseFormTab` фикс таймаута (Popconfirm). Пороги `53/59/66/66`, `91 suites 1416/1416`. Коммит push в main.
+
 ## v1.14 (2026-09-23) — DealerReportTab 90.5% + ExpenseFormTab 61% (global 65.76/53.40/60.27/66.55)
 - **Tests:** `DealerReportTab` 10 (генерация отчёта/загрузка/предпросмотр 7 блоков/история/генерация модалка/скачать PDF/отправить ok+err/комментарий) 90.47% stmts (67.85% branches), `ExpenseFormTab` 9 (форма поля/loading/загрузка данных/копирование прошлого месяца/сохранение onSave/api/переключение налога/алерт/ошибка) 60.95% stmts (54.36% branches). Пороги `52/58/65/65`, `91 suites 1400/1400`. Коммит push в main.
 

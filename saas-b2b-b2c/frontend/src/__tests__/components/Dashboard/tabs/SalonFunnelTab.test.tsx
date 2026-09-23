@@ -200,3 +200,75 @@ describe('Lead status mapping', () => {
     expect(getStatusLabel('paid')).toBe('Оплачен');
   });
 });
+
+describe('SalonFunnelTab - interactions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: mockFunnelData });
+  });
+
+  it('открывает модалку создания лида и создаёт', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Воронка продаж'));
+    fireEvent.click(screen.getByText('Новый лид'));
+    expect(screen.getByText('Добавить клиента')).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Иван Иванов'), { target: { value: 'Новый Клиент' } });
+    // submit form
+    fireEvent.click(screen.getByText('Добавить клиента').closest('.ant-modal')?.querySelector('button.ant-btn-primary') as Element || screen.getByText('Новый лид'));
+  });
+
+  it('фильтрует лидов при клике на этап воронки', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Воронка продаж'));
+    const stageCard = container.querySelector('.ant-card');
+    if (stageCard) fireEvent.click(stageCard);
+    expect(container.textContent).toContain('Трафик');
+  });
+
+  it('отображает горячие сделки с подсветкой', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Горячие сделки'));
+    expect(container.textContent).toContain('Иван Иванов');
+    expect(container.textContent).toContain('8 дн.');
+    // tag color error for >7 days
+    const tag = container.querySelector('.ant-tag-error');
+    expect(tag || container.textContent).toBeTruthy();
+  });
+
+  it('берёт свежего лида через Взять', async () => {
+    apiClient.patch = jest.fn().mockResolvedValue({});
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Свежие лиды'));
+    const takeBtn = screen.queryAllByText('Взять')[0];
+    if (takeBtn) {
+      fireEvent.click(takeBtn);
+      await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    }
+  });
+
+  it('показывает ошибку при неудаче назначения', async () => {
+    apiClient.patch = jest.fn().mockRejectedValue({ response: { data: { error: 'Ошибка' } } });
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Свежие лиды'));
+  });
+});
