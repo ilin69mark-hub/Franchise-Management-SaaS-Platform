@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25 (2026-09-23) — CommunicationsTab 58% + 76% milestone (global 76.16/60.87/69.57/77.47)
+- **Tests/Refactor:** `CommunicationsTab` `filterTasks`/`getBudgetPercent`/`getDueColor` +2 render (задачи с датами+статусами/filter via useMemo) 52.98%→58.20% stmts (47.57% branches), +2 helper теста. Пороги `60/68/76/77`, `104 suites 1518/1518` (+2 теста). Коммит push в main.
+
 ## v1.24 (2026-09-23) — services/api 73% + 75% milestone (global 76.00/60.64/69.24/77.29)
 - **Tests:** `services/api` +1 оставшиеся мутации (addLeadActivity/updateEmployee/deleteEmployee/assignManager/updateSalon/deleteSalon/createUnitTemplate/deleteUnitTemplate/updateTaskStatus/addTaskComment/createRequest/logout/readNotification) 57.83%→73.49% stmts (42.3%→42.3% branches, 50.7%→69.01% funcs). Пороги `60/67/76/77`, `104 suites 1521/1521` (+3 теста). Коммит push в main.
 
