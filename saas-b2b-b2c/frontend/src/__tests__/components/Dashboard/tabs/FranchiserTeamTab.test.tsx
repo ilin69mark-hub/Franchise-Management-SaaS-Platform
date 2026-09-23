@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus, getRowColor as exportedRowColor } from '@/components/Dashboard/tabs/FranchiserTeamTab';
+import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus, getRowColor as exportedRowColor, getPlanPercentColor, getRedDealersColor, getSlaColor } from '@/components/Dashboard/tabs/FranchiserTeamTab';
 
 jest.mock('@/components/Dashboard/tabs/ManagerKpiChart', () => {
   return { __esModule: true, default: () => <div data-testid="kpi-chart">KPI Chart</div> };
@@ -464,14 +464,12 @@ describe('FranchiserTeamTab - interactions', () => {
     const { container } = render(<FranchiserTeamTab />);
     fireEvent.click(screen.getByText('Алексей Петров'));
     await waitFor(() => expect(screen.getByText('Моя команда')).toBeInTheDocument());
-    // проверяем expand иконку и кликаем для детальной панели
-    const expandIcon = container.querySelector('.ant-table-row-expand-icon') as HTMLElement;
-    if (expandIcon) {
-      fireEvent.click(expandIcon);
-      await waitFor(() => expect(screen.getByText('KPI за 6 месяцев')).toBeInTheDocument());
-      expect(screen.getByText('Дилеры менеджера')).toBeInTheDocument();
-      expect(screen.getByText('Детальный отчёт (PDF)')).toBeInTheDocument();
-    }
+    const expandIcons = container.querySelectorAll('.ant-table-row-expand-icon');
+    expect(expandIcons.length).toBeGreaterThan(0);
+    fireEvent.click(expandIcons[0] as HTMLElement);
+    await waitFor(() => expect(screen.getByText('KPI за 6 месяцев')).toBeInTheDocument());
+    expect(screen.getByText('Дилеры менеджера')).toBeInTheDocument();
+    expect(screen.getByText('Детальный отчёт (PDF)')).toBeInTheDocument();
   });
 
   it('сортирует по % плана', () => {
@@ -537,4 +535,26 @@ describe('FranchiserTeamTab - interactions', () => {
     expect(exportedRowColor(80)).toBe('#fffbe6');
     expect(exportedRowColor(50)).toBe('#fff1f0');
   });
+
+  it('экспортированные цвета колонок', () => {
+    expect(getPlanPercentColor(95)).toBe('#52c41a');
+    expect(getPlanPercentColor(90)).toBe('#fa8c16');
+    expect(getPlanPercentColor(80)).toBe('#ff4d4f');
+    expect(getRedDealersColor(5)).toBe('green');
+    expect(getRedDealersColor(15)).toBe('orange');
+    expect(getRedDealersColor(30)).toBe('red');
+    expect(getSlaColor(95)).toBe('green');
+    expect(getSlaColor(85)).toBe('orange');
+    expect(getSlaColor(70)).toBe('red');
+  });
 });
+
+  it('renderDetailPanel с пустым менеджером', async () => {
+    const { container } = render(<FranchiserTeamTab />);
+    const expandIcons = container.querySelectorAll('.ant-table-row-expand-icon');
+    if (expandIcons.length > 0) {
+      fireEvent.click(expandIcons[0] as HTMLElement);
+      await waitFor(() => expect(screen.getByText('KPI за 6 месяцев')).toBeInTheDocument());
+    }
+    expect(screen.getByText('Моя команда')).toBeInTheDocument();
+  });

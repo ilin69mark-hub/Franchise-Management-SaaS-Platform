@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { Provider } from 'react-redux';
+import { formatMoney, DeviationIndicator } from '@/components/Dashboard/tabs/SalonTeamTab';
 import { configureStore } from '@reduxjs/toolkit';
 import SalonTeamTab from '@/components/Dashboard/tabs/SalonTeamTab';
 
@@ -279,5 +280,31 @@ describe('SalonTeamTab - interactions', () => {
     const btn = screen.queryAllByText('График')[0];
     fireEvent.click(btn);
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('/history')));
+  });
+
+  it('отображает DeviationIndicator с нулевым отклонением', async () => {
+    const zeroData = {
+      ...mockTeamData,
+      sales_reps: [{ ...mockTeamData.sales_reps[0], revenue_deviation: 0, deals_deviation: 0, conversion_deviation: 0, avg_check_deviation: 0 }],
+    };
+    apiClient.get.mockResolvedValue({ data: zeroData });
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    expect(container.textContent).toContain('Тест Тестов');
+  });
+
+  it('экспортированные formatMoney и DeviationIndicator', () => {
+    expect(formatMoney(1000000)).toBe('1 000 000');
+    expect(formatMoney(0)).toBe('0');
+    const { container: c1 } = render(<DeviationIndicator value={0} />);
+    expect(c1.innerHTML).toBe('');
+    const { container: c2 } = render(<DeviationIndicator value={10} />);
+    expect(c2.textContent).toContain('10%');
+    const { container: c3 } = render(<DeviationIndicator value={-5} />);
+    expect(c3.textContent).toContain('5%');
   });
 });

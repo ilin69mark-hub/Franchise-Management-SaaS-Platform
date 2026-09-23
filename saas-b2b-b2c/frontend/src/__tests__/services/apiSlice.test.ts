@@ -131,6 +131,12 @@ describe('apiSlice', () => {
   });
 
   it('покрывает все основные endpoints', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/notifications') || url.includes('/users') || url.includes('/checklists') || url.includes('/leads') || url.includes('/dealers')) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([{ id: '1' }]), text: () => Promise.resolve(''), headers: { get: () => 'application/json' } } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: { get: () => null } } as unknown as Response);
+    });
     const store = configureStore({
       reducer: { api: apiSlice.reducer },
       middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
@@ -160,6 +166,7 @@ describe('apiSlice', () => {
       const r = store.dispatch(d as never) as unknown as Promise<unknown>;
       await r.catch(() => {});
       expect(r).toBeDefined();
+      await new Promise(resolve => setTimeout(resolve, 5));
     }
   });
 
@@ -214,5 +221,57 @@ describe('apiSlice', () => {
       await r.catch(() => {});
       expect(r).toBeDefined();
     }
+  });
+
+  it('prepareHeaders без window', async () => {
+    const originalWindow = (global as unknown as { window: unknown }).window;
+    // @ts-ignore
+    delete (global as unknown as { window: unknown }).window;
+    const store = configureStore({
+      reducer: { api: apiSlice.reducer, auth: (state = {}) => state },
+      middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
+    });
+    const r = store.dispatch(apiSlice.endpoints.getChecklists.initiate() as never) as unknown as Promise<unknown>;
+    await r.catch(() => {});
+    expect(r).toBeDefined();
+    (global as unknown as { window: unknown }).window = originalWindow;
+  });
+
+  it('providesTags с результатом', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([{ id: '1' }, { id: '2' }]),
+      text: () => Promise.resolve(''),
+      headers: { get: () => 'application/json' },
+    } as unknown as Response);
+    const store = configureStore({
+      reducer: { api: apiSlice.reducer },
+      middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
+    });
+    const result = (await store.dispatch(apiSlice.endpoints.getChecklists.initiate() as never)) as unknown as { data: unknown };
+    expect(result).toBeDefined();
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([]),
+      text: () => Promise.resolve(''),
+      headers: { get: () => 'application/json' },
+    } as unknown as Response);
+    const result2 = (await store.dispatch(apiSlice.endpoints.getChecklists.initiate(undefined, { forceRefetch: true }) as never)) as unknown as { data: unknown };
+    expect(result2).toBeDefined();
+  });
+
+  it('выполняет getProfile и logout', async () => {
+    const store = configureStore({
+      reducer: { api: apiSlice.reducer },
+      middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
+    });
+    const r1 = store.dispatch(apiSlice.endpoints.getProfile.initiate() as never) as unknown as Promise<unknown>;
+    await r1.catch(() => {});
+    expect(r1).toBeDefined();
+    const r2 = store.dispatch(apiSlice.endpoints.logout.initiate() as never) as unknown as Promise<unknown>;
+    await r2.catch(() => {});
+    expect(r2).toBeDefined();
   });
 });

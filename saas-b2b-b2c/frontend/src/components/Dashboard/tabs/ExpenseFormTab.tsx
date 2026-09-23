@@ -48,6 +48,43 @@ interface ExpenseFormTabProps {
   onImport?: (file: File) => Promise<void>;
 }
 
+export const fields = [
+  { name: 'rent', label: 'Аренда помещения', prefix: '₽', prevKey: 'rent' },
+  { name: 'utilities', label: 'Коммунальные платежи', prefix: '₽', prevKey: 'utilities' },
+  { name: 'payroll', label: 'Фонд оплаты труда', prefix: '₽', prevKey: 'payroll' },
+  { name: 'logistics', label: 'Логистика и доставка', prefix: '₽', prevKey: 'logistics' },
+  { name: 'marketing', label: 'Маркетинг и реклама', prefix: '₽', prevKey: 'marketing' },
+  { name: 'defects', label: 'Брак и рекламации', prefix: '₽', prevKey: 'defects' },
+  { name: 'other_expenses', label: 'Прочие расходы', prefix: '₽', prevKey: 'other_expenses', hasName: true },
+];
+
+export const prevMonthFields: (keyof ExpenseRecord)[] = ['rent', 'utilities', 'payroll', 'logistics', 'marketing', 'defects', 'other_expenses'];
+
+export const createExpensePayload = (values: ExpenseFormValues, monthStr: string): ExpenseRecord => {
+  const total =
+    (values.rent || 0) +
+    (values.utilities || 0) +
+    (values.payroll || 0) +
+    (values.taxes || 0) +
+    (values.logistics || 0) +
+    (values.marketing || 0) +
+    (values.defects || 0) +
+    (values.other_expenses || 0);
+  return {
+    month: monthStr,
+    rent: values.rent || 0,
+    utilities: values.utilities || 0,
+    payroll: values.payroll || 0,
+    taxes: values.taxes || 0,
+    logistics: values.logistics || 0,
+    marketing: values.marketing || 0,
+    defects: values.defects || 0,
+    other_expenses: values.other_expenses || 0,
+    other_expense_name: values.other_expense_name || '',
+    total,
+  };
+};
+
 const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => {
   const [form] = Form.useForm();
   const [selectedMonth, setSelectedMonth] = useState(dayjs());
@@ -121,29 +158,7 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
   const handleSave = async (values: ExpenseFormValues) => {
     setSaving(true);
     try {
-      const total = 
-        (values.rent || 0) + 
-        (values.utilities || 0) + 
-        (values.payroll || 0) + 
-        (values.taxes || 0) + 
-        (values.logistics || 0) + 
-        (values.marketing || 0) + 
-        (values.defects || 0) + 
-        (values.other_expenses || 0);
-
-      const payload = {
-        month: monthStr,
-        rent: values.rent || 0,
-        utilities: values.utilities || 0,
-        payroll: values.payroll || 0,
-        taxes: values.taxes || 0,
-        logistics: values.logistics || 0,
-        marketing: values.marketing || 0,
-        defects: values.defects || 0,
-        other_expenses: values.other_expenses || 0,
-        other_expense_name: values.other_expense_name || '',
-        total,
-      };
+      const payload = createExpensePayload(values, monthStr);
 
       if (onSave) {
         await onSave(payload);
@@ -189,17 +204,6 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
     }
   };
 
-  const fields = [
-    { name: 'rent', label: 'Аренда помещения', prefix: '₽', prevKey: 'rent' },
-    { name: 'utilities', label: 'Коммунальные платежи', prefix: '₽', prevKey: 'utilities' },
-    { name: 'payroll', label: 'Фонд оплаты труда', prefix: '₽', prevKey: 'payroll' },
-    { name: 'logistics', label: 'Логистика и доставка', prefix: '₽', prevKey: 'logistics' },
-    { name: 'marketing', label: 'Маркетинг и реклама', prefix: '₽', prevKey: 'marketing' },
-    { name: 'defects', label: 'Брак и рекламации', prefix: '₽', prevKey: 'defects' },
-    { name: 'other_expenses', label: 'Прочие расходы', prefix: '₽', prevKey: 'other_expenses', hasName: true },
-  ];
-
-  const prevMonthFields: (keyof ExpenseRecord)[] = ['rent', 'utilities', 'payroll', 'logistics', 'marketing', 'defects', 'other_expenses'];
   const hasPrevMonthData = prevMonthData && prevMonthFields.some(f => (prevMonthData[f] as number) > 0);
 
   if (loading) {

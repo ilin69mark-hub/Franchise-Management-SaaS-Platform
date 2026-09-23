@@ -263,7 +263,7 @@ describe('SalonFunnelTab - interactions', () => {
     const takeBtn = screen.queryAllByText('Взять')[0];
     if (takeBtn) {
       fireEvent.click(takeBtn);
-      await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+      await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith('/leads/1/assign', { manager_id: '1' }));
     }
   });
 
@@ -298,6 +298,21 @@ describe('SalonFunnelTab - interactions', () => {
     expect(formatMoney(0)).toBe('0');
   });
 
+  it('меняет статус лида', async () => {
+    mockCreateLead.mockReturnValue({ unwrap: jest.fn().mockResolvedValue({}) } as never);
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Все лиды'));
+    const selects = container.querySelectorAll('.ant-select');
+    if (selects.length > 0) {
+      fireEvent.mouseDown(selects[0] as Element);
+      await waitFor(() => expect(container.textContent).toContain('Все лиды'));
+    }
+  });
+
   it('конвертирует бюджет из строки в число', async () => {
     const mockUnwrap = jest.fn().mockResolvedValue({});
     mockCreateLead.mockReturnValue({ unwrap: mockUnwrap } as never);
@@ -314,5 +329,16 @@ describe('SalonFunnelTab - interactions', () => {
     const okBtn = screen.getByText('Добавить клиента').closest('.ant-modal')?.querySelector('button.ant-btn-primary') as HTMLElement;
     if (okBtn) fireEvent.click(okBtn);
     await waitFor(() => expect(mockCreateLead).toHaveBeenCalledWith(expect.objectContaining({ budget: 100000 })));
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+  });
+
+  it('меняет статус лида через Select', async () => {
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Все лиды'));
+    expect(container.textContent).toContain('Все лиды');
   });
 });

@@ -44,6 +44,21 @@ interface DashboardTeamData {
   sales_reps: SalesRepMetrics[];
 }
 
+export const formatMoney = (val: number): string => new Intl.NumberFormat('ru-RU').format(val);
+
+export const DeviationIndicator: React.FC<{ value: number }> = ({ value }) => {
+  if (value === 0) return null;
+  const isPositive = value > 0;
+  return (
+    <Tooltip title={isPositive ? `Выше среднего на ${Math.abs(value).toFixed(1)}%` : `Ниже среднего на ${Math.abs(value).toFixed(1)}%`}>
+      <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f', marginLeft: 4, fontSize: 12 }}>
+        {isPositive ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+        {Math.abs(value).toFixed(0)}%
+      </span>
+    </Tooltip>
+  );
+};
+
 const SalonTeamTab: React.FC<SalonTeamTabProps> = ({ user }) => {
   const [data, setData] = useState<DashboardTeamData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,21 +100,6 @@ const SalonTeamTab: React.FC<SalonTeamTabProps> = ({ user }) => {
   const handleRowClick = (record: SalesRepMetrics) => {
     setSelectedRep(record);
     fetchHistory(record.user_id);
-  };
-
-  const formatMoney = (val: number) => new Intl.NumberFormat('ru-RU').format(val);
-
-  const DeviationIndicator: React.FC<{ value: number }> = ({ value }) => {
-    if (value === 0) return null;
-    const isPositive = value > 0;
-    return (
-      <Tooltip title={isPositive ? `Выше среднего на ${Math.abs(value).toFixed(1)}%` : `Ниже среднего на ${Math.abs(value).toFixed(1)}%`}>
-        <span style={{ color: isPositive ? '#52c41a' : '#ff4d4f', marginLeft: 4, fontSize: 12 }}>
-          {isPositive ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
-          {Math.abs(value).toFixed(0)}%
-        </span>
-      </Tooltip>
-    );
   };
 
   const columns = [

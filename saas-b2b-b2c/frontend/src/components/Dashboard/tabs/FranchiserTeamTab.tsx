@@ -71,6 +71,10 @@ export const getRowColor = (kpi: number): string => {
   return '#fff1f0';
 };
 
+export const getPlanPercentColor = (v: number): string => (v >= 95 ? '#52c41a' : v >= 85 ? '#fa8c16' : '#ff4d4f');
+export const getRedDealersColor = (v: number): string => (v < 10 ? 'green' : v < 25 ? 'orange' : 'red');
+export const getSlaColor = (v: number): string => (v >= 95 ? 'green' : v >= 80 ? 'orange' : 'red');
+
 const mockManagers: Manager[] = [
   { 
     id: '1', name: 'Алексей Петров', territory: 'Север', planPercent: 92, redDealersPercent: 0, sla: 98, dealerGrowth: 2, churnRate: 5, forecastPercent: 95, integralKpi: 94, bonusForecast: 75000,
@@ -146,7 +150,7 @@ const FranchiserTeamTab: React.FC = () => {
       key: 'planPercent',
       sorter: (a: Manager, b: Manager) => a.planPercent - b.planPercent,
       render: (v: number) => (
-        <Progress percent={v} size="small" strokeColor={v >= 95 ? '#52c41a' : v >= 85 ? '#fa8c16' : '#ff4d4f'} />
+        <Progress percent={v} size="small" strokeColor={getPlanPercentColor(v)} />
       ),
     },
     {
@@ -155,7 +159,7 @@ const FranchiserTeamTab: React.FC = () => {
       key: 'redDealersPercent',
       sorter: (a: Manager, b: Manager) => a.redDealersPercent - b.redDealersPercent,
       render: (v: number) => (
-        <Tag color={v < 10 ? 'green' : v < 25 ? 'orange' : 'red'}>
+        <Tag color={getRedDealersColor(v)}>
           {v}%
         </Tag>
       ),
@@ -166,7 +170,7 @@ const FranchiserTeamTab: React.FC = () => {
       key: 'sla',
       sorter: (a: Manager, b: Manager) => a.sla - b.sla,
       render: (v: number) => (
-        <Tag color={v >= 95 ? 'green' : v >= 80 ? 'orange' : 'red'}>
+        <Tag color={getSlaColor(v)}>
           {v}%
         </Tag>
       ),

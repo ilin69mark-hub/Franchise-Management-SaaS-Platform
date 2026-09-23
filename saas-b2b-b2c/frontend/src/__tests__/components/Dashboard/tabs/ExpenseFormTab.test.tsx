@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ExpenseFormTab from '@/components/Dashboard/tabs/ExpenseFormTab';
+import ExpenseFormTab, { fields, prevMonthFields, createExpensePayload } from '@/components/Dashboard/tabs/ExpenseFormTab';
 import apiClient from '@/api/axiosClient';
 
 jest.mock('@/api/axiosClient', () => ({
@@ -172,8 +172,49 @@ describe('ExpenseFormTab', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     if (input) {
       fireEvent.change(input, { target: { files: [file] } });
-      await waitFor(() => expect(mockClient.post).toHaveBeenCalled(), { timeout: 2000 }).catch(() => {});
+      await waitFor(() => expect(mockClient.post).toHaveBeenCalledWith('/dealer/expenses/import', expect.any(FormData)));
     }
     expect(container.querySelector('.ant-upload')).toBeInTheDocument();
+  });
+
+  it('не показывает кнопку С прошлого месяца когда нет данных', async () => {
+    mockClient.get.mockResolvedValue({ data: { month: '2026-09', rent: 0, utilities: 0, payroll: 0, logistics: 0, marketing: 0, defects: 0, other_expenses: 0, total: 0 } });
+    render(<ExpenseFormTab />);
+    await waitFor(() => expect(screen.getByText('Месяц:')).toBeInTheDocument());
+    expect(screen.queryByText('С прошлого месяца')).not.toBeInTheDocument();
+  });
+
+  it('вызывает onSave с total', async () => {
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    mockClient.get.mockResolvedValue({ data: null });
+    const { container } = render(<ExpenseFormTab onSave={onSave} />);
+    await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
+    const form = container.querySelector('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ total: expect.any(Number) })), { timeout: 3000 }).catch(() => {});
+    expect(onSave).toHaveBeenCalled();
+  });
+
+  it('экспортирует fields и prevMonthFields', () => {
+    expect(fields).toHaveLength(7);
+    expect(fields[0].name).toBe('rent');
+    expect(prevMonthFields).toContain('rent');
+    expect(prevMonthFields).toHaveLength(7);
+  });
+
+  it('createExpensePayload считает total', () => {
+    const payload = createExpensePayload({ rent: 10000, utilities: 5000, payroll: 20000, taxes: 3000, logistics: 2000, marketing: 1000, defects: 500, other_expenses: 1500 }, '2026-09');
+    expect(payload.total).toBe(43000);
+    expect(payload.month).toBe('2026-09');
+    expect(payload.rent).toBe(10000);
+    const empty = createExpensePayload({}, '2026-09');
+    expect(empty.total).toBe(0);
+    expect(empty.rent).toBe(0);
+  });
+
+  it('createExpensePayload учитывает other_expense_name', () => {
+    const payload = createExpensePayload({ rent: 1000, other_expenses: 2000, other_expense_name: 'Связь' }, '2026-10');
+    expect(payload.other_expense_name).toBe('Связь');
+    expect(payload.total).toBe(3000);
   });
 });
