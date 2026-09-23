@@ -1,8 +1,25 @@
 // src/__tests__/components/Dashboard/tabs/TerritoryMapTab.test.tsx
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import TerritoryMapTab from '@/components/Dashboard/tabs/TerritoryMapTab';
 import { DealerMetrics } from '@/store/territoryManagerStore';
+
+jest.mock('@/store/territoryManagerStore', () => ({
+  useTerritoryManagerStore: () => ({ dealers: [], setDealers: jest.fn(), summary: null }),
+}));
+
+jest.mock('@/api/axiosClient', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(() => Promise.reject(new Error('network'))),
+  },
+}));
+
+const mapDealers: DealerMetrics[] = [
+  { dealerId: 'd1', dealerName: 'Мебель Москва', salonCount: 3, planPercent: 110, forecastPercent: 105, conversion: 4.5, status: 'green', plan: 15000000, fact: 13800000, debt: 50000, margin: 28, avgCheck: 125000, taskCount: 2 },
+  { dealerId: 'd2', dealerName: 'Диванит Воронеж', salonCount: 2, planPercent: 82, forecastPercent: 80, conversion: 2.5, status: 'yellow', plan: 8000000, fact: 6240000, debt: 0, margin: 22, avgCheck: 98000, taskCount: 0 },
+  { dealerId: 'd3', dealerName: 'МебельЛига', salonCount: 1, planPercent: 45, forecastPercent: 40, conversion: 1.5, status: 'red', plan: 5000000, fact: 2250000, debt: 260000, margin: 15, avgCheck: 70000, taskCount: 1 },
+];
 
 describe('TerritoryMapTab', () => {
   it('renders', () => {
@@ -107,5 +124,67 @@ describe('TerritoryMapTab', () => {
     ];
     const problems = dealers.filter(d => d.planPercent < 70);
     expect(problems.length).toBe(1);
+  });
+});
+
+describe('TerritoryMapTab render', () => {
+  it('рендерит статистику, теплокарту и статусы дилеров', () => {
+    render(<TerritoryMapTab dealers={mapDealers} />);
+    expect(screen.getByPlaceholderText('Поиск дилера...')).toBeInTheDocument();
+    expect(screen.getByText('Все')).toBeInTheDocument();
+    expect(screen.getByText('Лидеры')).toBeInTheDocument();
+    expect(screen.getByText('Проблемные')).toBeInTheDocument();
+    expect(screen.getByText('Выполнение плана')).toBeInTheDocument();
+    expect(screen.getByText('Прогноз квартала')).toBeInTheDocument();
+    expect(screen.getByText('В красной зоне')).toBeInTheDocument();
+    expect(screen.getByText('Дебиторская задолженность')).toBeInTheDocument();
+    expect(screen.getByText('Конверсия средняя')).toBeInTheDocument();
+    expect(screen.getByText('Маржинальность')).toBeInTheDocument();
+    expect(screen.getByText(/Теплокарта дилер/)).toBeInTheDocument();
+    expect(screen.getByText(/Run Rate/)).toBeInTheDocument();
+    expect(screen.getByText(/70% плана/)).toBeInTheDocument();
+    expect(screen.getByText('Мебель Москва')).toBeInTheDocument();
+    expect(screen.getByText('Диванит Воронеж')).toBeInTheDocument();
+    expect(screen.getByText('МебельЛига')).toBeInTheDocument();
+    expect(screen.getByText('Норма')).toBeInTheDocument();
+    expect(screen.getByText('Внимание')).toBeInTheDocument();
+    expect(screen.getByText('Проблема')).toBeInTheDocument();
+    expect(screen.getByText(/⚠️ Дилеры в красной зоне \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/80%.*к прошлому месяцу/s)).toBeInTheDocument();
+  });
+
+  it('ищет дилера по имени', () => {
+    render(<TerritoryMapTab dealers={mapDealers} />);
+    fireEvent.change(screen.getByPlaceholderText('Поиск дилера...'), { target: { value: 'москва' } });
+    expect(screen.getByText('Мебель Москва')).toBeInTheDocument();
+    expect(screen.queryByText('МебельЛига')).toBeNull();
+  });
+
+  it('фильтрует проблемных и лидеров через Segmented и карточку', () => {
+    render(<TerritoryMapTab dealers={mapDealers} />);
+    fireEvent.click(screen.getByText('Лидеры'));
+    expect(screen.getByText('Мебель Москва')).toBeInTheDocument();
+    expect(screen.queryByText('МебельЛига')).toBeNull();
+    fireEvent.click(screen.getByText('Все'));
+    fireEvent.click(screen.getByText('В красной зоне'));
+    expect(screen.getByText('МебельЛига')).toBeInTheDocument();
+    expect(screen.queryByText('Мебель Москва')).toBeNull();
+    expect(screen.queryByText('Диванит Воронеж')).toBeNull();
+  });
+
+  it('разворачивает детализацию дилера из красной зоны', async () => {
+    render(<TerritoryMapTab dealers={mapDealers} />);
+    fireEvent.click(screen.getByText(/⚠️ Дилеры в красной зоне \(1\)/));
+    fireEvent.click(screen.getByText('Детали'));
+    expect(await screen.findByText('Салон 1')).toBeInTheDocument();
+    expect(screen.getByText('Салон 2')).toBeInTheDocument();
+    expect(screen.getByText('4.2 млн ₽')).toBeInTheDocument();
+    expect(screen.getByText('2.8 млн ₽')).toBeInTheDocument();
+    expect(screen.getByText('Продажи по салонам:')).toBeInTheDocument();
+    expect(screen.getByText('Динамика (6 мес):')).toBeInTheDocument();
+    expect(screen.getByText('Последние алерты:')).toBeInTheDocument();
+    expect(screen.getByText('Падение конверсии')).toBeInTheDocument();
+    expect(screen.getByText('Низкий трафик')).toBeInTheDocument();
+    expect(screen.getByText('Перейти к дилеру')).toBeInTheDocument();
   });
 });

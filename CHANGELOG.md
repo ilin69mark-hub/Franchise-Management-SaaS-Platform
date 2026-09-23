@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.12 (2026-09-23) — TerritoryMapTab + FranchiserManagerDashboard (global 61.87/50.6/56.07/62.84)
+- **Tests:** TerritoryMapTab +4 render (статистика+теплокарта+статусы/поиск/Segmented+карточка фильтры/drill-down красной зоны → Салон 1 детализация). FranchiserManagerDashboard.render +3 (заголовок+метрики+вкладки lazy-табы/модалка сводки/fallback на дефолт при ошибке API). Stmts: MapTab 88.6, FranchiserManagerDashboard 82.8. Пороги `49/53/60/60`, `86 suites 1366/1366`. Коммит push в main.
+
 ## v1.11 (2026-09-23) — Territory-табы +16 render-тестов (global 60.05/47.96/54.43/61.02)
 - **Tests:** TerritoryFunnelTab +3 (контролы/аномалии/drill-down до менеджеров), TerritoryBenchmarkTab +3 (маржинальность/рейтинг/риски+структура), TerritoryCommunicationsTab +5 (запросы/взять в работу/задачи-модал/история-контакт), TerritoryPlanFactTab +5 (сценарии/Топ-3/период месяц/PDF-ошибка/reopen). План-факт и коммуникации с моками axiosClient (fallback STUB) и antd message. Статус: Benchmark 85.7, Funnel 91, Comms 82.1, PlanFact 75.2 stmts. Пороги `46.5/43/53/59.5`, `85 suites 1359/1359`. Коммит push в main.
 
