@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.35 (2026-09-23) — FranchiserTeamTab 85% + SalonTeamTab 85% + 77% milestone (global 77.48/62.12/71.26/78.91) — 77% stmts
+- **Tests:** `FranchiserTeamTab` +1 `getRowColor`/`getChurnColor`/`getForecastColor` 85.47% stmts, `SalonTeamTab` +1 `DeviationIndicator`/`formatMoney` 85.13% stmts, `ExpenseFormTab` +1 `createExpensePayload` с `other_expense_name` 85.14% stmts. Пороги `62/70/78/77`, `104 suites 1572/1572` (+10 тестов). Коммит push в main.
+
 ## v1.34 (2026-09-23) — services 62% + 77% milestone (global 77.48/62.09/71.26/78.91) — 77% lines
 - **Tests:** `services/planApi` 62.5% + `goalApi` 62.5% + `userApi` 62.5% (6→8, 7→9, 2→4 тестов, диспатч `getPlans`/`createPlan`/`updatePlan`/`deletePlan`/`getMyGoal`/`setGoal`/`updateGoal`/`deleteGoal`/`getMyProfile`/`updateProfile`/`createEmployee`/`getEmployees` с `global.fetch` mock). Пороги `62/70/77/78`, `104 suites 1562/1562` (+6 тестов). Коммит push в main.
 

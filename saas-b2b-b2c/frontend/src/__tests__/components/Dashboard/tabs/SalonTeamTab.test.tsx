@@ -307,4 +307,9 @@ describe('SalonTeamTab - interactions', () => {
     const { container: c3 } = render(<DeviationIndicator value={-5} />);
     expect(c3.textContent).toContain('5%');
   });
+
+  it('покрывает все периоды', () => {
+    expect(formatMoney(500000)).toBe('500 000');
+    expect(formatMoney(1234567)).toBe('1 234 567');
+  });
 });

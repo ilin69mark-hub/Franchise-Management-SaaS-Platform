@@ -554,6 +554,14 @@ describe('FranchiserTeamTab - interactions', () => {
     expect(getForecastColor(80)).toBe('red');
   });
 
+  it('покрывает все bonus tiers', () => {
+    expect(getPlanPercentColor(100)).toBe('#52c41a');
+    expect(getRedDealersColor(0)).toBe('green');
+    expect(getSlaColor(100)).toBe('green');
+    expect(getChurnColor(0)).toBe('green');
+    expect(getForecastColor(100)).toBe('green');
+  });
+
   it('покрывает renderDetailPanel с разными менеджерами', () => {
     const { container } = render(<FranchiserTeamTab />);
     const expands = container.querySelectorAll('.ant-table-row-expand-icon');
@@ -562,7 +570,6 @@ describe('FranchiserTeamTab - interactions', () => {
     }
     expect(container.textContent).toContain('Моя команда');
   });
-});
 
   it('renderDetailPanel с пустым менеджером', async () => {
     const { container } = render(<FranchiserTeamTab />);
@@ -573,3 +580,5 @@ describe('FranchiserTeamTab - interactions', () => {
     }
     expect(screen.getByText('Моя команда')).toBeInTheDocument();
   });
+
+});

@@ -240,4 +240,10 @@ describe('ExpenseFormTab', () => {
     fireEvent.submit(form);
     await waitFor(() => expect(jest.requireMock('antd').message.error).toHaveBeenCalledWith('Ошибка сохранения'));
   });
+
+  it('покрывает все поля формы', () => {
+    expect(fields.length).toBe(7);
+    expect(fields.find(f => f.name === 'other_expenses')?.hasName).toBe(true);
+    expect(prevMonthFields).toContain('other_expenses');
+  });
 });
