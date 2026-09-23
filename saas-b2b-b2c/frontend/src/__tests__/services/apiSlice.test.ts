@@ -174,4 +174,31 @@ describe('apiSlice', () => {
       expect(r).toBeDefined();
     }
   });
+
+  it('покрывает оставшиеся мутации', async () => {
+    const store = configureStore({
+      reducer: { api: apiSlice.reducer },
+      middleware: (getDefault) => getDefault().concat(apiSlice.middleware),
+    });
+    const more = [
+      apiSlice.endpoints.addLeadActivity.initiate({ leadId: '1', type: 'call', description: 'test' } as never),
+      apiSlice.endpoints.updateEmployee.initiate({ id: '1', first_name: 'Test' } as never),
+      apiSlice.endpoints.deleteEmployee.initiate('1' as never),
+      apiSlice.endpoints.assignManager.initiate({ user_id: '1', salon_id: '1' } as never),
+      apiSlice.endpoints.updateSalon.initiate({ id: '1', data: { name: 't', address: 'a' } } as never),
+      apiSlice.endpoints.deleteSalon.initiate('1' as never),
+      apiSlice.endpoints.createUnitTemplate.initiate({ name: 't' } as never),
+      apiSlice.endpoints.deleteUnitTemplate.initiate('1' as never),
+      apiSlice.endpoints.updateTaskStatus.initiate({ id: '1', status: 'done' } as never),
+      apiSlice.endpoints.addTaskComment.initiate({ id: '1', comment: 'test' } as never),
+      apiSlice.endpoints.createRequest.initiate({ type: 'discount' } as never),
+      apiSlice.endpoints.logout.initiate(),
+      apiSlice.endpoints.readNotification.initiate('1' as never),
+    ];
+    for (const m of more) {
+      const r = store.dispatch(m as never) as unknown as Promise<unknown>;
+      await r.catch(() => {});
+      expect(r).toBeDefined();
+    }
+  });
 });

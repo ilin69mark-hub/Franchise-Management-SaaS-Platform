@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.24 (2026-09-23) — services/api 73% + 75% milestone (global 76.00/60.64/69.24/77.29)
+- **Tests:** `services/api` +1 оставшиеся мутации (addLeadActivity/updateEmployee/deleteEmployee/assignManager/updateSalon/deleteSalon/createUnitTemplate/deleteUnitTemplate/updateTaskStatus/addTaskComment/createRequest/logout/readNotification) 57.83%→73.49% stmts (42.3%→42.3% branches, 50.7%→69.01% funcs). Пороги `60/67/76/77`, `104 suites 1521/1521` (+3 теста). Коммит push в main.
+
 ## v1.23 (2026-09-23) — FranchiserTeamTab 84% (global 75.69/60.67/68.39/76.95)
 - **Tests:** `FranchiserTeamTab` +2 (сортировка по % плана клик на th/изменение InputNumber план продаж в модалке) 71.02%→84.11% stmts (69.56% branches, 75.92% funcs). Пороги `60/66/75/76`, `104 suites 1518/1518` (+2 теста). Коммит push в main.
 
