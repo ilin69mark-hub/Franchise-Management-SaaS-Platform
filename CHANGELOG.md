@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.6 (2026-09-23) — B3 src 0 any (последние 9 any + parser as any)
+- **Frontend B3:** `AuditSection` `ColumnsType<AdminAction|ActiveSession|UserLogin>` (интерфейсы export из auditStore), `TechHealthSection` `useState<ErrorLog|null>` + `ColumnsType<ErrorLog>` (`ErrorLog` export из techHealthStore), `ChecklistBoard` `handleFinish ChecklistFormValues` (dayjs RangePicker tuple, `Checklist` тип +`recurrence`), `CommunicationsTab` `WsMessage` discriminated union (Task/Request), `ExpenseFormTab` `handleSave ExpenseFormValues`, `TerritoryFunnelTab` `point Record<string,string|number>`, `TerritoryBenchmarkTab` `CustomTooltip DealerScatter` + `shape props:unknown→cast`. `InputNumber parser as any→Number(...)||0` (`min={0 as number}`).
+- **Аудит:** `0 :any/as any` в `src` (кроме `__tests__/setupTests`), `tsc 0`, `jest 1268/1268`, `lint` чисто, коммит `d3958ca` push в main. Остаток `any` — только в тестах (state mocks, сознательно).
+
 ## v1.5-prod (2026-09-22) — B3 27 any + utils 97% (logger/i18n 8 tests, 1263/1263)
 - **Tests:** `utils/logger.test.ts + i18n.test.ts 8 tests` `utils 37→97%` `global 42.3→42.57%` (35/37/42/42 факт 37.06/37.82/43.61), `65 suites 1263/1263` `audit` зелёный. `ExpenseFormTab/Billing/Activity` B3 уже `27 any (<30)`.
 - **Docs:** `any 141→27` (<30 достигнут), `B3` 8 файлов уже `v1.4`.
