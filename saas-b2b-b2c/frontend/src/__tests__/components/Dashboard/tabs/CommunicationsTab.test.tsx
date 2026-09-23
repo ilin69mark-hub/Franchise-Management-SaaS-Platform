@@ -64,8 +64,14 @@ describe('CommunicationsTab render', () => {
       { id: '1', title: 't1', description: 'd1', dueDate: '2026-09-30', status: 'new' as const, priority: 'high' as const, createdAt: '2026-09-01' },
       { id: '2', title: 't2', description: 'd2', dueDate: '2026-09-01', status: 'in_progress' as const, priority: 'medium' as const, createdAt: '2026-09-01' },
     ];
-    // filterTasks pure уже покрыт, здесь проверяем что компонент использует его
     expect(filterTasks(tasks, 'new', 'all')).toHaveLength(1);
     expect(filterTasks(tasks, 'all', 'medium')).toHaveLength(1);
+  });
+
+  it('отображает пустой бюджет и историю', () => {
+    const { container } = render(<CommunicationsTab marketingBudget={{ total: 0, used: 0, remaining: 0, items: [] }} interactions={[]} />);
+    expect(container.textContent).toContain('Задачи от бренда');
+    expect(getBudgetPercent({ total: 0, used: 0, remaining: 0, items: [] })).toBe(0);
+    expect(getBudgetPercent({ total: 200000, used: 100000, remaining: 100000, items: [] })).toBe(50);
   });
 });

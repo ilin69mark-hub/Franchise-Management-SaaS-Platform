@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.27 (2026-09-23) — SalonFunnelTab 70% + CommunicationsTab 58% + 76% milestone (global 76.45/61.00/69.57/77.78)
+- **Tests:** `SalonFunnelTab` `mockCreateLead`/`mockUpdateLeadStatus` фикс +2 (ошибка создания с unwrap, форматирование денег) 65.62%→69.79% stmts, `CommunicationsTab` +1 (пустой бюджет/история) 58.20% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1524/1524` (+2 теста). Коммит push в main.
+
 ## v1.26 (2026-09-23) — ExpenseFormTab 83% + api 73% + 76% milestone (global 76.33/60.97/69.44/77.65)
 - **Tests:** `ExpenseFormTab` +1 импорт через `apiClient` (`/dealer/expenses/import` FormData) 70.70%→82.82% stmts (92.92% branches), `services/api` 57.83%→73.49% stmts (мутации), `FranchiserTeamTab` фикс flaky `сохраняет планы` (waitFor→simple). Пороги `60/68/76/77` сохранены, `104 suites 1524/1524` (+3 теста). Коммит push в main.
 

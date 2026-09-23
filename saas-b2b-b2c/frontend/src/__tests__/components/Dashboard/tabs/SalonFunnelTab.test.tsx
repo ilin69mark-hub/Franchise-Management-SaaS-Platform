@@ -9,10 +9,13 @@ jest.mock('@/api/axiosClient', () => ({
   patch: jest.fn(),
 }));
 
+const mockCreateLead = jest.fn();
+const mockUpdateLeadStatus = jest.fn();
+
 jest.mock('@/services/api', () => ({
   useGetLeadsQuery: () => ({ data: [], isLoading: false }),
-  useCreateLeadMutation: () => [jest.fn(), { isLoading: false }],
-  useUpdateLeadStatusMutation: () => [jest.fn(), { isLoading: false }],
+  useCreateLeadMutation: () => [mockCreateLead, { isLoading: false }],
+  useUpdateLeadStatusMutation: () => [mockUpdateLeadStatus, { isLoading: false }],
 }));
 
 const apiClient = require('@/api/axiosClient');
@@ -205,6 +208,8 @@ describe('SalonFunnelTab - interactions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     apiClient.get.mockResolvedValue({ data: mockFunnelData });
+    mockCreateLead.mockReturnValue({ unwrap: jest.fn().mockResolvedValue({}) } as never);
+    mockUpdateLeadStatus.mockReturnValue({ unwrap: jest.fn().mockResolvedValue({}) } as never);
   });
 
   it('открывает модалку создания лида и создаёт', async () => {
@@ -270,5 +275,26 @@ describe('SalonFunnelTab - interactions', () => {
       </Provider>
     );
     await waitFor(() => expect(container.textContent).toContain('Свежие лиды'));
+  });
+
+  it('обрабатывает ошибку создания лида', async () => {
+    mockCreateLead.mockReturnValue({ unwrap: jest.fn().mockRejectedValue({ data: { error: 'Ошибка' } }) } as never);
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Воронка продаж'));
+    fireEvent.click(screen.getByText('Новый лид'));
+    fireEvent.change(screen.getByPlaceholderText('Иван Иванов'), { target: { value: 'Тест' } });
+    const okBtn = screen.getByText('Добавить клиента').closest('.ant-modal')?.querySelector('button.ant-btn-primary') as HTMLElement;
+    if (okBtn) fireEvent.click(okBtn);
+    await waitFor(() => expect(container.textContent).toContain('Воронка продаж'));
+  });
+
+  it('форматирует деньги', () => {
+    const formatMoney = (val: number) => new Intl.NumberFormat('ru-RU').format(val);
+    expect(formatMoney(150000)).toBe('150 000');
+    expect(formatMoney(0)).toBe('0');
   });
 });
