@@ -94,3 +94,57 @@ describe('DealerAlerts', () => {
     expect(categories.includes('communication')).toBe(true);
   });
 });
+
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import DealerAlerts from '@/components/Dashboard/Alerts/DealerAlerts';
+import type { Alert } from '@/components/Dashboard/Alerts/DealerAlerts';
+
+const testAlerts: Alert[] = [
+  { id: '1', category: 'finance', priority: 'high', title: 'ФОТ превышен', description: 'Проверьте ФОТ', createdAt: '2026-04-30T10:00:00', isRead: false },
+  { id: '2', category: 'operation', priority: 'medium', title: 'Зависшая сделка', description: 'Сделка не двигается', createdAt: '2026-04-30T10:00:00', isRead: false },
+];
+
+describe('DealerAlerts (render)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('отображает колокольчик и счётчик непрочитанных', () => {
+    render(<DealerAlerts alerts={testAlerts} loading={false} />);
+    expect(screen.getByRole('button')).toBeInTheDocument();
+    expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('открывает попап с категориями и заголовками алертов', () => {
+    render(<DealerAlerts alerts={testAlerts} loading={false} />);
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText('Алерты')).toBeInTheDocument();
+    expect(screen.getByText('Финансы')).toBeInTheDocument();
+    expect(screen.getByText('Операции')).toBeInTheDocument();
+    expect(screen.getByText('ФОТ превышен')).toBeInTheDocument();
+    expect(screen.getByText('Зависшая сделка')).toBeInTheDocument();
+  });
+
+  it('показывает «Нет алертов» при пустом списке', () => {
+    render(<DealerAlerts alerts={[]} loading={false} />);
+    fireEvent.click(screen.getByRole('button'));
+    expect(screen.getByText('Нет алертов')).toBeInTheDocument();
+  });
+
+  it('показывает спиннер при загрузке', () => {
+    render(<DealerAlerts alerts={[]} loading />);
+    fireEvent.click(screen.getByRole('button'));
+    expect(document.querySelector('.ant-spin')).not.toBeNull();
+  });
+
+  it('открывает модалку настроек и вызывает onSettingsSave', () => {
+    const onSettingsSave = jest.fn().mockResolvedValue(undefined);
+    render(<DealerAlerts alerts={testAlerts} loading={false} onSettingsSave={onSettingsSave} />);
+    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(screen.getAllByText('Настройки алертов')[0]);
+    expect(screen.getByText('⚙️ Настройки порогов алертов')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Сохранить настройки'));
+    expect(onSettingsSave).toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.10 (2026-09-23) — DealerAlerts render + ChecklistBoard + employee api (global 53.36/44.02/45.69/54.87)
+- **Tests:** DealerAlerts +5 render (bell/popup категории/Empty/Spin/settings save), ChecklistBoard 7 (canCreate/статусы/повторение/сроки/modal create+edit/delete), employee.ts api 4 (getAll/create/update/delete 100%). Пороги `42/44/53/51`, `85 suites 1343/1343`. Коммит push в main.
+
 ## v1.9 (2026-09-23) — дэшборды +6 render-тестов (global 50.62/42.78/43.53/51.97)
 - **Tests:** SalonManagerDashboard 3 (top-bar success/fallback/tabs), DealerDashboard.render 2, FranchiserDashboard.render 1 (ленивые табы/Suspense, store/axiosClient mocked). Store-тесты DealerDashboard/FranchiserDashboard (50) сохранены в оригинальных файлах. Пороги `41/42/50/48`, `83 suites 1327/1327`, коммит push в main.
 
