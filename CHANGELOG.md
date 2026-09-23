@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.13 (2026-09-23) — api kpi/leads 100% + AlertSettings + checklists page (global 64.89/52.10/58.96/65.64)
+- **Tests:** `api/kpi.test.ts` 6 (getMyStats/SalonStats/setGoal/getSchedule/createEvent/updateEventStatus 100%), `api/leads.test.ts` 5 (getLeads/createLead/updateLeadStatus/addLeadActivity/getLeadDetails 100%), `AlertSettingsPanel` 4 (рендер секций/switch/checkbox/сохранить+onClose), `FranchiserAlertSettings` 2 (рендер каналов+порогов/сохранить), `pages/checklists` 8 (отображение/загрузка/редирект/ошибка/создание/редактирование/завершить/удалить 90.1% stmts). Пороги `50.5/57/64/63`, `91 suites 1391/1391`. Коммит push в main.
+
 ## v1.12 (2026-09-23) — TerritoryMapTab + FranchiserManagerDashboard (global 61.87/50.6/56.07/62.84)
 - **Tests:** TerritoryMapTab +4 render (статистика+теплокарта+статусы/поиск/Segmented+карточка фильтры/drill-down красной зоны → Салон 1 детализация). FranchiserManagerDashboard.render +3 (заголовок+метрики+вкладки lazy-табы/модалка сводки/fallback на дефолт при ошибке API). Stmts: MapTab 88.6, FranchiserManagerDashboard 82.8. Пороги `49/53/60/60`, `86 suites 1366/1366`. Коммит push в main.
 
