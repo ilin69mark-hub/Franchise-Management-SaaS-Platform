@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.21 (2026-09-23) — services/api 58% + ExpenseFormTab 71% + SalonTeamTab 85% (global 75.01/60.03/67.47/76.42)
+- **Tests:** `services/api` +2 (все endpoints + мутации → 24%→57.83% stmts), `ExpenseFormTab` +2 (импорт/ошибка загрузки/сабмит) 62.62%→70.70% stmts (89.89% branches), `SalonTeamTab` +1 (история ошибка) 63.51%→85.13% stmts. Пороги `59/64/75/75`, `104 suites 1515/1515` (+9 тестов). Коммит push в main.
+
 ## v1.20 (2026-09-23) — FranchiserTeamTab 71% + ExpenseFormTab 63% (global 73.78/58.79/64.91/75.07)
 - **Tests/Refactor:** `FranchiserTeamTab` `calculateIntegralKpi`/`calculateBonus` экспортированы → 59.81%→71.02% stmts (60.86% branches), `ExpenseFormTab` удалён мёртвый `calculateTax` (12 строк) → 60.95%→62.62% stmts. Пороги `58/63/73/73` сохранены, `104 suites 1506/1506` (+1 тест). Коммит push в main.
 

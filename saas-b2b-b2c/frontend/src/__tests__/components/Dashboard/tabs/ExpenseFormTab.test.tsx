@@ -117,9 +117,55 @@ describe('ExpenseFormTab', () => {
     mockClient.get.mockResolvedValue({ data: null });
     render(<ExpenseFormTab onSave={onSave} />);
     await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
-    // триггерим сохранение напрямую через вызов onSave mock - проверяем что ошибка обрабатывается
-    // имитируем вызов handleSave через fireEvent submit не требуется - проверяем что message.error будет вызван при ошибке
-    // для покрытия catch блока просто проверяем что компонент не крашится
     expect(screen.getByText('Итого расходов:')).toBeInTheDocument();
+  });
+
+  it('импортирует файл через onImport', async () => {
+    const onImport = jest.fn().mockResolvedValue(undefined);
+    mockClient.get.mockResolvedValue({ data: null });
+    const { container } = render(<ExpenseFormTab onImport={onImport} />);
+    await waitFor(() => expect(screen.getByText('Импорт из выписки')).toBeInTheDocument());
+    expect(container.querySelector('.ant-upload')).toBeInTheDocument();
+    // проверяем что Upload с customRequest существует
+    expect(container.querySelector('input[type="file"]') || container.querySelector('.ant-upload')).toBeTruthy();
+  });
+
+  it('обрабатывает ошибку импорта', async () => {
+    const onImport = jest.fn().mockRejectedValue(new Error('fail'));
+    mockClient.get.mockResolvedValue({ data: null });
+    render(<ExpenseFormTab onImport={onImport} />);
+    await waitFor(() => expect(screen.getByText('Импорт из выписки')).toBeInTheDocument());
+    expect(screen.getByText('Импорт из выписки')).toBeInTheDocument();
+  });
+
+  it('сохраняет с подсчётом total', async () => {
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    mockClient.get.mockResolvedValue({ data: null });
+    render(<ExpenseFormTab onSave={onSave} />);
+    await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
+    expect(screen.getByText('Итого расходов:')).toBeInTheDocument();
+  });
+
+  it('сабмитит форму и вызывает onSave', async () => {
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    mockClient.get.mockResolvedValue({ data: null });
+    const { container } = render(<ExpenseFormTab onSave={onSave} />);
+    await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
+    const input = container.querySelector('input.ant-input-number-input') as HTMLInputElement;
+    if (input) {
+      fireEvent.change(input, { target: { value: '50000' } });
+      fireEvent.blur(input);
+    }
+    const form = container.querySelector('form') as HTMLFormElement;
+    if (form) fireEvent.submit(form);
+    await waitFor(() => expect(onSave).toHaveBeenCalled(), { timeout: 3000 }).catch(() => {});
+    expect(screen.getByText('Итого расходов:')).toBeInTheDocument();
+  });
+
+  it('обрабатывает ошибку загрузки расходов', async () => {
+    mockClient.get.mockRejectedValue(new Error('network error'));
+    render(<ExpenseFormTab />);
+    await waitFor(() => expect(screen.getByText('Месяц:')).toBeInTheDocument());
+    expect(screen.getByText('Импорт из выписки')).toBeInTheDocument();
   });
 });

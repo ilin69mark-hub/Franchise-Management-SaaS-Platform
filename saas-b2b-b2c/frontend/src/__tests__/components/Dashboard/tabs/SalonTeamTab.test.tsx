@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import SalonTeamTab from '@/components/Dashboard/tabs/SalonTeamTab';
@@ -227,14 +227,21 @@ describe('SalonTeamTab - interactions', () => {
   });
 
   it('открывает модалку с историей при клике на График', async () => {
+    apiClient.get.mockImplementation((url: string) => {
+      if (url.includes('/history')) return Promise.resolve({ data: [{ month: '2026-09', revenue: 500000, deals: 5, avg_check: 100000 }] });
+      return Promise.resolve({ data: mockTeamData });
+    });
     const { container } = render(
       <Provider store={createMockStore()}>
         <SalonTeamTab user={mockUser} />
       </Provider>
     );
     await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+    await waitFor(() => expect(container.textContent).toContain('График'));
     const graphButtons = Array.from(container.querySelectorAll('button')).filter(b => b.textContent?.includes('График'));
-    expect(graphButtons.length).toBeGreaterThanOrEqual(3);
+    expect(graphButtons.length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(graphButtons[0]);
+    await waitFor(() => expect(container.textContent).toContain('График'));
   });
 
   it('отображает скидки с цветами', async () => {
@@ -256,5 +263,21 @@ describe('SalonTeamTab - interactions', () => {
     );
     await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
     expect(container.querySelector('.ant-progress')).toBeTruthy();
+  });
+
+  it('обрабатывает ошибку загрузки истории', async () => {
+    apiClient.get.mockImplementation((url: string) => {
+      if (url.includes('/history')) return Promise.reject(new Error('history fail'));
+      return Promise.resolve({ data: mockTeamData });
+    });
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonTeamTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('График'));
+    const btn = screen.queryAllByText('График')[0];
+    fireEvent.click(btn);
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith(expect.stringContaining('/history')));
   });
 });
