@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus } from '@/components/Dashboard/tabs/FranchiserTeamTab';
+import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus, getRowColor as exportedRowColor } from '@/components/Dashboard/tabs/FranchiserTeamTab';
 
 jest.mock('@/components/Dashboard/tabs/ManagerKpiChart', () => {
   return { __esModule: true, default: () => <div data-testid="kpi-chart">KPI Chart</div> };
@@ -530,5 +530,11 @@ describe('FranchiserTeamTab - interactions', () => {
     expect(exportedBonus(94)).toBe(75000);
     expect(exportedBonus(58)).toBe(25000);
     expect(exportedBonus(0)).toBe(0);
+  });
+
+  it('экспортированный getRowColor покрыт', () => {
+    expect(exportedRowColor(95)).toBe('#f6ffed');
+    expect(exportedRowColor(80)).toBe('#fffbe6');
+    expect(exportedRowColor(50)).toBe('#fff1f0');
   });
 });

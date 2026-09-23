@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.28 (2026-09-23) — FranchiserTeamTab 84% + CommunicationsTab 58% + SalonFunnelTab 70% (global 76.78/61.55/70.09/78.15)
+- **Tests:** `FranchiserTeamTab` `getRowColor` экспорт →84.11% stmts, `CommunicationsTab` +2 render (задачи с разными сроками/цветами) 58.20% stmts, `SalonFunnelTab` +2 (бюджет конвертация/деньги) 69.79% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1521/1521` (+2 теста). Коммит push в main.
+
 ## v1.27 (2026-09-23) — SalonFunnelTab 70% + CommunicationsTab 58% + 76% milestone (global 76.45/61.00/69.57/77.78)
 - **Tests:** `SalonFunnelTab` `mockCreateLead`/`mockUpdateLeadStatus` фикс +2 (ошибка создания с unwrap, форматирование денег) 65.62%→69.79% stmts, `CommunicationsTab` +1 (пустой бюджет/история) 58.20% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1524/1524` (+2 теста). Коммит push в main.
 

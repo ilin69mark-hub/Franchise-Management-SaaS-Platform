@@ -65,6 +65,12 @@ export const calculateBonus = (kpi: number, baseBonus: number = 50000): number =
   return 0;
 };
 
+export const getRowColor = (kpi: number): string => {
+  if (kpi >= 90) return '#f6ffed';
+  if (kpi >= 75) return '#fffbe6';
+  return '#fff1f0';
+};
+
 const mockManagers: Manager[] = [
   { 
     id: '1', name: 'Алексей Петров', territory: 'Север', planPercent: 92, redDealersPercent: 0, sla: 98, dealerGrowth: 2, churnRate: 5, forecastPercent: 95, integralKpi: 94, bonusForecast: 75000,
@@ -116,12 +122,6 @@ const FranchiserTeamTab: React.FC = () => {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addForm] = Form.useForm();
   const [createEmployee, { isLoading: isCreating }] = useCreateEmployeeMutation();
-
-  const getRowColor = (kpi: number) => {
-    if (kpi >= 90) return '#f6ffed';
-    if (kpi >= 75) return '#fffbe6';
-    return '#fff1f0';
-  };
 
   const columns = [
     {

@@ -297,4 +297,22 @@ describe('SalonFunnelTab - interactions', () => {
     expect(formatMoney(150000)).toBe('150 000');
     expect(formatMoney(0)).toBe('0');
   });
+
+  it('конвертирует бюджет из строки в число', async () => {
+    const mockUnwrap = jest.fn().mockResolvedValue({});
+    mockCreateLead.mockReturnValue({ unwrap: mockUnwrap } as never);
+    const { container } = render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(container.textContent).toContain('Воронка продаж'));
+    fireEvent.click(screen.getByText('Новый лид'));
+    fireEvent.change(screen.getByPlaceholderText('Иван Иванов'), { target: { value: 'Тест Бюджет' } });
+    const budgetInput = screen.getByPlaceholderText('50000') as HTMLInputElement;
+    fireEvent.change(budgetInput, { target: { value: '100000' } });
+    const okBtn = screen.getByText('Добавить клиента').closest('.ant-modal')?.querySelector('button.ant-btn-primary') as HTMLElement;
+    if (okBtn) fireEvent.click(okBtn);
+    await waitFor(() => expect(mockCreateLead).toHaveBeenCalledWith(expect.objectContaining({ budget: 100000 })));
+  });
 });

@@ -74,4 +74,19 @@ describe('CommunicationsTab render', () => {
     expect(getBudgetPercent({ total: 0, used: 0, remaining: 0, items: [] })).toBe(0);
     expect(getBudgetPercent({ total: 200000, used: 100000, remaining: 100000, items: [] })).toBe(50);
   });
+
+  it('отображает задачи с разными сроками и цветами', () => {
+    const tasks = [
+      { id: 't1', title: 'Просроченная', description: 'd1', dueDate: dayjs().subtract(5, 'day').format('YYYY-MM-DD'), status: 'overdue' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+      { id: 't2', title: 'Срочная', description: 'd2', dueDate: dayjs().add(1, 'day').format('YYYY-MM-DD'), status: 'new' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+      { id: 't3', title: 'Обычная', description: 'd3', dueDate: dayjs().add(10, 'day').format('YYYY-MM-DD'), status: 'new' as const, priority: 'low' as const, createdAt: '2026-09-01' },
+    ];
+    const { container } = render(<CommunicationsTab tasks={tasks} />);
+    expect(container.textContent).toContain('Просроченная');
+    expect(container.textContent).toContain('Срочная');
+    expect(container.textContent).toContain('Обычная');
+    expect(container.textContent).toContain('Просрочено');
+    expect(container.textContent).toContain('Высокий');
+    expect(container.textContent).toContain('Низкий');
+  });
 });
