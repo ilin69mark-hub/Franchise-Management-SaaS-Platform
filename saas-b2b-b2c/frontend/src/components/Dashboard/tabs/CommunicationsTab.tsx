@@ -83,6 +83,7 @@ interface CommunicationsTabProps {
   marketingBudget?: MarketingBudget;
   interactions?: Interaction[];
   loading?: boolean;
+  initialTab?: 'tasks' | 'requests' | 'budget' | 'history';
 }
 
 export const filterTasks = (tasks: Task[], filterStatus: string, filterPriority: string): Task[] =>
@@ -112,8 +113,9 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
   marketingBudget,
   interactions = [],
   loading = false,
+  initialTab = 'tasks',
 }) => {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'requests' | 'budget' | 'history'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'requests' | 'budget' | 'history'>(initialTab);
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);

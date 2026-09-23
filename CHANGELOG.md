@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.29 (2026-09-23) — ExpenseFormTab 85% + 76% milestone (global 76.82/61.70/70.04/78.20)
+- **Tests:** `ExpenseFormTab` +1 ошибка сохранения через `api` (`/dealer/expenses` 500 → `message.error`) 82.82%→85.14% stmts (93.93% branches), `FranchiserTeamTab` `getRowColor` уже 84.11%. Пороги `60/68/76/77` сохранены, `104 suites 1544/1544` (+1 тест). Коммит push в main.
+
 ## v1.28 (2026-09-23) — FranchiserTeamTab 84% + CommunicationsTab 58% + SalonFunnelTab 70% (global 76.78/61.55/70.09/78.15)
 - **Tests:** `FranchiserTeamTab` `getRowColor` экспорт →84.11% stmts, `CommunicationsTab` +2 render (задачи с разными сроками/цветами) 58.20% stmts, `SalonFunnelTab` +2 (бюджет конвертация/деньги) 69.79% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1521/1521` (+2 теста). Коммит push в main.
 

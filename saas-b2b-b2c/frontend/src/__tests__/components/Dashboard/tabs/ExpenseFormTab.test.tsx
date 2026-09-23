@@ -217,4 +217,21 @@ describe('ExpenseFormTab', () => {
     expect(payload.other_expense_name).toBe('Связь');
     expect(payload.total).toBe(3000);
   });
+
+  it('обрабатывает ошибку с response', async () => {
+    mockClient.get.mockRejectedValue({ response: { data: { error: 'Ошибка сервера' } } });
+    render(<ExpenseFormTab />);
+    await waitFor(() => expect(screen.getByText('Месяц:')).toBeInTheDocument());
+    expect(screen.getByText('Месяц:')).toBeInTheDocument();
+  });
+
+  it('обрабатывает ошибку сохранения через api', async () => {
+    mockClient.get.mockResolvedValue({ data: null });
+    mockClient.post.mockRejectedValue(new Error('fail'));
+    const { container } = render(<ExpenseFormTab />);
+    await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
+    const form = container.querySelector('form') as HTMLFormElement;
+    fireEvent.submit(form);
+    await waitFor(() => expect(jest.requireMock('antd').message.error).toHaveBeenCalledWith('Ошибка сохранения'));
+  });
 });

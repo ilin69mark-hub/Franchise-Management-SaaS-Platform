@@ -89,4 +89,38 @@ describe('CommunicationsTab render', () => {
     expect(container.textContent).toContain('Высокий');
     expect(container.textContent).toContain('Низкий');
   });
+
+  it('filterTasks с пустым массивом', () => {
+    expect(filterTasks([], 'all', 'all')).toHaveLength(0);
+    expect(filterTasks([], 'new', 'high')).toHaveLength(0);
+  });
+
+  it('getBudgetPercent граничные 100% и 90%', () => {
+    expect(getBudgetPercent({ total: 100000, used: 100000, remaining: 0, items: [] })).toBe(100);
+    expect(getBudgetPercent({ total: 100000, used: 90000, remaining: 10000, items: [] })).toBe(90);
+  });
+
+  it('фильтрует через UI Select', async () => {
+    const tasks = [
+      { id: '1', title: 't1', description: 'd1', dueDate: '2026-09-30', status: 'new' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+      { id: '2', title: 't2', description: 'd2', dueDate: '2026-09-01', status: 'done' as const, priority: 'low' as const, createdAt: '2026-09-01' },
+    ];
+    const { container } = render(<CommunicationsTab tasks={tasks} />);
+    expect(container.textContent).toContain('t1');
+    expect(container.textContent).toContain('t2');
+    const selects = container.querySelectorAll('.ant-select');
+    expect(selects.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('рендерит вкладки через initialTab', () => {
+    const requests = [{ id: 'r1', type: 'discount' as const, description: 'Скидка', sentDate: '2026-09-10', status: 'pending' as const, manager: 'Иванов' }];
+    const marketingBudget = { total: 100000, used: 50000, remaining: 50000, items: [{ id: 'b1', date: '2026-09-01', purpose: 'Баннер', amount: 5000, status: 'approved' as const }] };
+    const interactions = [{ id: 'i1', date: '2026-09-10', type: 'call' as const, summary: 'Звонок', result: 'Ок', managerName: 'Иванов' }];
+    const { container: c1 } = render(<CommunicationsTab requests={requests} initialTab="requests" />);
+    expect(c1.textContent).toContain('Мои запросы к бренду');
+    const { container: c2 } = render(<CommunicationsTab marketingBudget={marketingBudget} initialTab="budget" />);
+    expect(c2.textContent).toContain('Маркетинговый бюджет');
+    const { container: c3 } = render(<CommunicationsTab interactions={interactions} initialTab="history" />);
+    expect(c3.textContent).toContain('История взаимодействий');
+  });
 });

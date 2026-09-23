@@ -341,4 +341,17 @@ describe('SalonFunnelTab - interactions', () => {
     await waitFor(() => expect(container.textContent).toContain('Все лиды'));
     expect(container.textContent).toContain('Все лиды');
   });
+
+  it('фильтрует stageLeads по выбранному этапу', async () => {
+    render(
+      <Provider store={createMockStore()}>
+        <SalonFunnelTab user={mockUser} />
+      </Provider>
+    );
+    await waitFor(() => expect(screen.getByText('Воронка продаж')).toBeInTheDocument());
+    const trafficText = screen.getByText('Трафик');
+    const card = trafficText.closest('.ant-card') as HTMLElement;
+    fireEvent.click(card);
+    await waitFor(() => expect(document.body.textContent).toContain('Сделки:'));
+  });
 });
