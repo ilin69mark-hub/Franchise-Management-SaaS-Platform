@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.16 (2026-09-23) — pages login 58% + register 80% + profile 86% (global 68.06/55.00/61.98/68.99)
+- **Tests:** `pages/login` 8 (форма/ошибка/loading/редиректы 4 роли/переход на register) 57.57% stmts, `pages/register` 5 (форма/ошибка/loading/редирект) 80% stmts, `pages/profile` 7 (рендер/скелетон/ошибка+повтор/сохранение основной+контакты/инициалы/Назад) 86.27% stmts. Пороги `54/60/68/68`, `94 suites 1436/1436`. Коммит push в main.
+
 ## v1.15 (2026-09-23) — FranchiserTeamTab 60% + SalonFunnelTab 66% + SalonTeamTab interactions (global 66.28/53.86/60.80/67.12)
 - **Tests:** `FranchiserTeamTab` +6 (сохранение планов/копирование квартала/детальная панель/регистрация ok+err/квартал) 49.53%→59.81% stmts, `SalonFunnelTab` +6 (модалка создания/фильтр воронки/горячие сделки/взять лида/ошибка) 54.16%→65.62% stmts, `SalonTeamTab` +5 (фильтры периода/статистика/скидки/прогресс/График) 63.51% stmts, `ExpenseFormTab` фикс таймаута (Popconfirm). Пороги `53/59/66/66`, `91 suites 1416/1416`. Коммит push в main.
 
