@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19 (2026-09-23) — _app 100% + services/api 24% (global 73.42/58.48/64.74/74.72)
+- **Tests:** `pages/_app` 5 (рендер/диспатч auth с token+user/нет токена/ошибка парсинга/showChild) 100% stmts (90% branches), `services/api` 8 (reducerPath/tagTypes/хуки/prepareHeaders store+localStorage+parse error/login/createChecklist/getSalons) 24.09% stmts (3.61%→24%). Пороги `58/63/73/73`, `104 suites 1506/1506`. Коммит push в main.
+
 ## v1.18 (2026-09-23) — pages salon-manager 100% + franchiser-manager 100% + salons 95% + index 100% (global 72.61/57.96/64.14/73.84)
 - **Tests:** `pages/salon-manager` 7 (загрузка/Header/salon_manager/редиректы super_admin/franchiser/dealer/unknown/login) 100% stmts, `pages/franchiser-manager` 8 (загрузка/franchiser/franchiser_manager/редиректы 4 роли) 100% stmts, `pages/salons` 6 (заголовок/таблица/loading/модалка/создание ok+err/ID) 94.73% stmts, `pages/index` 8 (загрузка/редиректы super_admin/franchiser/dealer/salon_manager/unknown/login) 100% stmts. Пороги `57/62/72/72`, `102 suites 1493/1493`. Коммит push в main.
 
