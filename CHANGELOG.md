@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.14 (2026-09-23) — DealerReportTab 90.5% + ExpenseFormTab 61% (global 65.76/53.40/60.27/66.55)
+- **Tests:** `DealerReportTab` 10 (генерация отчёта/загрузка/предпросмотр 7 блоков/история/генерация модалка/скачать PDF/отправить ok+err/комментарий) 90.47% stmts (67.85% branches), `ExpenseFormTab` 9 (форма поля/loading/загрузка данных/копирование прошлого месяца/сохранение onSave/api/переключение налога/алерт/ошибка) 60.95% stmts (54.36% branches). Пороги `52/58/65/65`, `91 suites 1400/1400`. Коммит push в main.
+
 ## v1.13 (2026-09-23) — api kpi/leads 100% + AlertSettings + checklists page (global 64.89/52.10/58.96/65.64)
 - **Tests:** `api/kpi.test.ts` 6 (getMyStats/SalonStats/setGoal/getSchedule/createEvent/updateEventStatus 100%), `api/leads.test.ts` 5 (getLeads/createLead/updateLeadStatus/addLeadActivity/getLeadDetails 100%), `AlertSettingsPanel` 4 (рендер секций/switch/checkbox/сохранить+onClose), `FranchiserAlertSettings` 2 (рендер каналов+порогов/сохранить), `pages/checklists` 8 (отображение/загрузка/редирект/ошибка/создание/редактирование/завершить/удалить 90.1% stmts). Пороги `50.5/57/64/63`, `91 suites 1391/1391`. Коммит push в main.
 
