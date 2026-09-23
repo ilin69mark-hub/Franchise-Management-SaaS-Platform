@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-interface AdminAction {
+export interface AdminAction {
   id: string;
   timestamp: string;
   adminName: string;
@@ -23,7 +23,7 @@ interface Impersonation {
   ip: string;
 }
 
-interface ActiveSession {
+export interface ActiveSession {
   id: string;
   adminName: string;
   ip: string;
@@ -31,7 +31,7 @@ interface ActiveSession {
   lastActivity: string;
 }
 
-interface UserLogin {
+export interface UserLogin {
   id: string;
   timestamp: string;
   tenant: string;

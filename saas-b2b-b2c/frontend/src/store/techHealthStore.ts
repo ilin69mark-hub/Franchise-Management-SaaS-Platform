@@ -20,7 +20,7 @@ interface PerformancePoint {
   errorRate5xx: number;
 }
 
-interface ErrorLog {
+export interface ErrorLog {
   id: string;
   timestamp: string;
   code: number;

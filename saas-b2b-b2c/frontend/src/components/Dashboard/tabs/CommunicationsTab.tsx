@@ -48,6 +48,11 @@ interface Request {
   amount?: number;
 }
 
+type WsMessage =
+  | { type: 'TASK_UPDATED'; payload: Task }
+  | { type: 'TASK_CREATED'; payload: Task }
+  | { type: 'REQUEST_STATUS_CHANGED'; payload: Request };
+
 interface BudgetItem {
   id: string;
   date: string;
@@ -153,7 +158,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
     };
   }, []);
 
-  const handleWebSocketMessage = (data: { type: string; payload: any }) => {
+  const handleWebSocketMessage = (data: WsMessage) => {
     switch (data.type) {
       case 'TASK_UPDATED':
         setTasks(prev => prev.map(t => t.id === data.payload.id ? { ...t, ...data.payload } : t));
@@ -189,7 +194,7 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
         });
         break;
       default:
-        if (process.env.NODE_ENV !== 'production') console.debug('Unknown WebSocket message type:', data.type);
+        if (process.env.NODE_ENV !== 'production') console.debug('Unknown WebSocket message type:', (data as { type: string }).type);
     }
   };
 

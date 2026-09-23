@@ -35,6 +35,16 @@ interface Props {
   employees?: Employee[];
 }
 
+interface ChecklistFormValues {
+  title: string;
+  description?: string;
+  assigned_to?: string;
+  dates?: [dayjs.Dayjs, dayjs.Dayjs] | null;
+  priority?: string;
+  status?: string;
+  recurrence?: string;
+}
+
 const ChecklistBoard: React.FC<Props> = ({
   canCreate = false,
   employees = [],
@@ -70,7 +80,7 @@ const ChecklistBoard: React.FC<Props> = ({
   };
 
   /* ---------- Валидация и отправка ---------- */
-  const handleFinish = async (values: any) => {
+  const handleFinish = async (values: ChecklistFormValues) => {
     // Проверка даты начала (не может быть в прошлом)
     if (
       values.dates &&

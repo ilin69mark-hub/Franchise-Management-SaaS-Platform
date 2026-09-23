@@ -61,6 +61,7 @@ export interface Checklist {
   assigned_to?: string; // id сотрудника
   start_date?: string;
   end_date?: string;
+  recurrence?: string;
   user_id?: string;
   tenant_id?: string;
   is_overdue?: boolean;

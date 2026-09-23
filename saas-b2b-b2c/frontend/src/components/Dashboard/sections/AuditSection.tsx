@@ -26,6 +26,8 @@ import {
 } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useAuditStore } from '@/store/auditStore';
+import type { AdminAction, ActiveSession, UserLogin } from '@/store/auditStore';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -210,9 +212,9 @@ const AuditSection: React.FC = () => {
     );
   }
 
-  const actionColumns = [
+  const actionColumns: ColumnsType<AdminAction> = [
     { title: 'Время', dataIndex: 'timestamp', key: 'timestamp', render: (d: string) => dayjs(d).format('DD.MM HH:mm') },
-    { title: 'Админ', dataIndex: 'adminName', key: 'adminName', render: (_: unknown, r: any) => `${r.adminName} (${r.adminEmail})` },
+    { title: 'Админ', dataIndex: 'adminName', key: 'adminName', render: (_: unknown, r: AdminAction) => `${r.adminName} (${r.adminEmail})` },
     { title: 'Действие', dataIndex: 'action', key: 'action', render: (a: string) => getActionTag(a) },
     { title: 'Объект', dataIndex: 'object', key: 'object' },
     { title: 'Детали', dataIndex: 'details', key: 'details', render: (d: string) => <Text style={{ fontSize: 12 }}>{d}</Text> },
@@ -230,7 +232,7 @@ const AuditSection: React.FC = () => {
     { title: 'IP', dataIndex: 'ip', key: 'ip' },
   ];
 
-  const sessionColumns = [
+  const sessionColumns: ColumnsType<ActiveSession> = [
     { title: 'Админ', dataIndex: 'adminName', key: 'adminName' },
     { title: 'IP', dataIndex: 'ip', key: 'ip' },
     { title: 'Начало', dataIndex: 'startedAt', key: 'startedAt', render: (d: string) => dayjs(d).format('DD.MM HH:mm') },
@@ -238,7 +240,7 @@ const AuditSection: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      render: (_: unknown, r: any) => (
+      render: (_: unknown, r: ActiveSession) => (
         <Popconfirm title="Завершить сессию?" onConfirm={() => handleTerminateSession(r.id)}>
           <Button size="small" danger icon={<CloseCircleOutlined />}>Завершить</Button>
         </Popconfirm>
@@ -246,10 +248,10 @@ const AuditSection: React.FC = () => {
     },
   ];
 
-  const loginColumns = [
+  const loginColumns: ColumnsType<UserLogin> = [
     { title: 'Время', dataIndex: 'timestamp', key: 'timestamp', render: (d: string) => dayjs(d).format('DD.MM HH:mm') },
     { title: 'Тенант', dataIndex: 'tenant', key: 'tenant' },
-    { title: 'Пользователь', render: (_: unknown, r: any) => `${r.userName} (${r.userEmail})` },
+    { title: 'Пользователь', render: (_: unknown, r: UserLogin) => `${r.userName} (${r.userEmail})` },
     { title: 'Роль', dataIndex: 'role', key: 'role' },
     { title: 'Действие', dataIndex: 'action', key: 'action', render: (a: string) => getLoginActionTag(a) },
     { title: 'IP', dataIndex: 'ip', key: 'ip' },

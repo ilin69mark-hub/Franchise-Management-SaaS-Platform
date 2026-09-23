@@ -67,7 +67,7 @@ const TerritoryFunnelTab: React.FC<TerritoryFunnelTabProps> = ({ loading }) => {
 
   const chartData = useMemo(() => {
     return STAGES.map((stage, i) => {
-      const point: any = { name: stage };
+      const point: Record<string, string | number> = { name: stage };
       funnelByDealer
         .filter(d => selectedDealers.includes(d.dealerId))
         .forEach(d => {

@@ -31,6 +31,18 @@ interface ExpenseRecord {
   total: number;
 }
 
+interface ExpenseFormValues {
+  rent?: number;
+  utilities?: number;
+  payroll?: number;
+  taxes?: number;
+  logistics?: number;
+  marketing?: number;
+  defects?: number;
+  other_expenses?: number;
+  other_expense_name?: string;
+}
+
 interface ExpenseFormTabProps {
   onSave?: (data: ExpenseRecord) => Promise<void>;
   onImport?: (file: File) => Promise<void>;
@@ -119,7 +131,7 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
     }
   };
 
-  const handleSave = async (values: any) => {
+  const handleSave = async (values: ExpenseFormValues) => {
     setSaving(true);
     try {
       const total = 
@@ -281,9 +293,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -297,9 +309,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -313,9 +325,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -341,9 +353,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -357,9 +369,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -373,9 +385,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -389,9 +401,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>
@@ -405,9 +417,9 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={(value) => value?.replace(/ /g, '') as any}
+                  parser={(value) => Number(value?.replace(/ /g, '')) || 0}
                   placeholder="0"
-                  min={0}
+                  min={0 as number}
                 />
               </Form.Item>
             </Col>

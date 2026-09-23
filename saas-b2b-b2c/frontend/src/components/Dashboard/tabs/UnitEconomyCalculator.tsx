@@ -140,7 +140,7 @@ const UnitEconomyCalculator: React.FC<UnitEconomyCalculatorProps> = ({ templates
                   min={0}
                   placeholder="0"
                   formatter={value => `${value} ₽`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={value => value?.replace(/ ₽/g, '').replace(/ /g, '') as any}
+                  parser={value => Number(value?.replace(/ ₽/g, '').replace(/ /g, '')) || 0}
                 />
               </div>
 
@@ -153,7 +153,7 @@ const UnitEconomyCalculator: React.FC<UnitEconomyCalculatorProps> = ({ templates
                   min={0}
                   placeholder="0"
                   formatter={value => `${value} ₽`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={value => value?.replace(/ ₽/g, '').replace(/ /g, '') as any}
+                  parser={value => Number(value?.replace(/ ₽/g, '').replace(/ /g, '')) || 0}
                 />
               </div>
 
@@ -191,7 +191,7 @@ const UnitEconomyCalculator: React.FC<UnitEconomyCalculatorProps> = ({ templates
                   min={0}
                   placeholder="0"
                   formatter={value => `${value} ₽`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={value => value?.replace(/ ₽/g, '').replace(/ /g, '') as any}
+                  parser={value => Number(value?.replace(/ ₽/g, '').replace(/ /g, '')) || 0}
                 />
               </div>
 
@@ -204,7 +204,7 @@ const UnitEconomyCalculator: React.FC<UnitEconomyCalculatorProps> = ({ templates
                   min={0}
                   placeholder="0"
                   formatter={value => `${value} ₽`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={value => value?.replace(/ ₽/g, '').replace(/ /g, '') as any}
+                  parser={value => Number(value?.replace(/ ₽/g, '').replace(/ /g, '')) || 0}
                 />
               </div>
 
@@ -217,7 +217,7 @@ const UnitEconomyCalculator: React.FC<UnitEconomyCalculatorProps> = ({ templates
                   min={0}
                   placeholder="0"
                   formatter={value => `${value} ₽`.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}
-                  parser={value => value?.replace(/ ₽/g, '').replace(/ /g, '') as any}
+                  parser={value => Number(value?.replace(/ ₽/g, '').replace(/ /g, '')) || 0}
                 />
               </div>
             </Space>

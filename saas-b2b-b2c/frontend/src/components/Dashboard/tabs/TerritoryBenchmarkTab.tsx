@@ -135,7 +135,7 @@ const TerritoryBenchmarkTab: React.FC<TerritoryBenchmarkTabProps> = ({ loading }
     return data.sort((a, b) => b.totalIndex - a.totalIndex).map((d, i) => ({ ...d, rank: i + 1, rankChange: i === 0 ? 0 : Math.floor(Math.random() * 3) - 1 }));
   }, [scatterData]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: DealerScatter }> }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
@@ -248,8 +248,8 @@ const TerritoryBenchmarkTab: React.FC<TerritoryBenchmarkTabProps> = ({ loading }
                   name={`${segment}-дилеры`}
                   data={scatterData.filter(d => d.segment === segment)}
                   fill={color}
-                  shape={(props: any) => {
-                    const { cx, cy, payload } = props;
+                  shape={(props: unknown) => {
+                    const { cx, cy, payload } = props as { cx?: number; cy?: number; payload: DealerScatter };
                     const size = 20 + (payload.salons * 15);
                     return <circle cx={cx} cy={cy} r={size / 2} fill={color} opacity={0.7} />;
                   }}

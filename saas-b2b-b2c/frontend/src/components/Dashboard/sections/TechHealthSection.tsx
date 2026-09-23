@@ -26,6 +26,8 @@ import {
 } from '@ant-design/icons';
 import apiClient from '@/api/axiosClient';
 import { useTechHealthStore } from '@/store/techHealthStore';
+import type { ErrorLog } from '@/store/techHealthStore';
+import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -50,7 +52,7 @@ const TechHealthSection: React.FC = () => {
   } = useTechHealthStore();
 
   const [localLoading, setLocalLoading] = useState(true);
-  const [selectedError, setSelectedError] = useState<any>(null);
+  const [selectedError, setSelectedError] = useState<ErrorLog | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -230,7 +232,7 @@ const TechHealthSection: React.FC = () => {
     );
   }
 
-  const errorColumns = [
+  const errorColumns: ColumnsType<ErrorLog> = [
     { title: 'Время', dataIndex: 'timestamp', key: 'timestamp', render: (d: string) => dayjs(d).format('HH:mm:ss') },
     { title: 'Код', dataIndex: 'code', key: 'code', render: (c: number) => <Tag color={c >= 500 ? 'red' : 'orange'}>{c}</Tag> },
     { title: 'Endpoint', dataIndex: 'endpoint', key: 'endpoint' },
@@ -239,7 +241,7 @@ const TechHealthSection: React.FC = () => {
     {
       title: '',
       key: 'actions',
-      render: (_: unknown, record: any) => (
+      render: (_: unknown, record: ErrorLog) => (
         <Button size="small" onClick={() => setSelectedError(record)}>Детали</Button>
       ),
     },
