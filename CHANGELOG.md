@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9 (2026-09-23) — дэшборды +6 render-тестов (global 50.62/42.78/43.53/51.97)
+- **Tests:** SalonManagerDashboard 3 (top-bar success/fallback/tabs), DealerDashboard.render 2, FranchiserDashboard.render 1 (ленивые табы/Suspense, store/axiosClient mocked). Store-тесты DealerDashboard/FranchiserDashboard (50) сохранены в оригинальных файлах. Пороги `41/42/50/48`, `83 suites 1327/1327`, коммит push в main.
+
+## v1.8 (2026-09-23) — 15 тестов на 10 компонентов (global 48.09/41.08/42.08/49.48)
+- **Tests:** BackButton/Header/GeographyMap/ThemeProvider 100%, PlanList 6 тестов, SalonManagerWidget 5, charts (ManagerKpiChart/ManagerPlanFactChart ветки «Нет данных», ReportPlanFactChart smoke, SalesDynamicsChart Radio cumulative). Пороги `40/41/47/46`, `80 suites 1321/1321`, `make audit` зелёный, коммит `53ba5e6` push в main.
+
 ## v1.7 (2026-09-23) — GoalCard 100% + GoalList/GoalFormModal (26 тестов)
 - **Tests:** `GoalCard.test.tsx` 6 тестов (Spin/404/error/data — файл 100%), `GoalList.test.tsx` 11 тестов (canSeeGoal-фильтр, period label, модалка create/edit, delete ok/err через mock `antd` message), `GoalFormModal.test.tsx` 9 тестов (заголовки, ok-disabled без ролей, employees dropdown, onCancel). `global 42.99/37.14/38.14/44.03→44.74/38.87/39.33/45.9`, `70 suites 1294/1294`.
 - **Пороги:** `jest.config.js` `35/37/42/42→37/38/44/43`, `make audit` зелёный, коммит `5f04b2c` push в main.
