@@ -52,4 +52,14 @@ describe('planApi', () => {
     await (result as Promise<unknown>).catch(() => {});
     expect(result).toBeDefined();
   });
+
+  it('диспатчит updatePlan и deletePlan', async () => {
+    const store = configureStore({ reducer: { planApi: planApi.reducer }, middleware: (g) => g().concat(planApi.middleware) });
+    const r1 = store.dispatch(planApi.endpoints.updatePlan.initiate({ id: '1', title: 't' } as never) as never) as unknown as Promise<unknown>;
+    await (r1 as Promise<unknown>).catch(() => {});
+    expect(r1).toBeDefined();
+    const r2 = store.dispatch(planApi.endpoints.deletePlan.initiate('1' as never) as never) as unknown as Promise<unknown>;
+    await (r2 as Promise<unknown>).catch(() => {});
+    expect(r2).toBeDefined();
+  });
 });

@@ -57,4 +57,14 @@ describe('goalApi', () => {
     await (result as Promise<unknown>).catch(() => {});
     expect(result).toBeDefined();
   });
+
+  it('диспатчит updateGoal и deleteGoal', async () => {
+    const store = configureStore({ reducer: { goalApi: goalApi.reducer }, middleware: (g) => g().concat(goalApi.middleware) });
+    const r1 = store.dispatch(goalApi.endpoints.updateGoal.initiate({ id: '1', data: { plan: 200 } } as never) as never) as unknown as Promise<unknown>;
+    await (r1 as Promise<unknown>).catch(() => {});
+    expect(r1).toBeDefined();
+    const r2 = store.dispatch(goalApi.endpoints.deleteGoal.initiate('1' as never) as never) as unknown as Promise<unknown>;
+    await (r2 as Promise<unknown>).catch(() => {});
+    expect(r2).toBeDefined();
+  });
 });

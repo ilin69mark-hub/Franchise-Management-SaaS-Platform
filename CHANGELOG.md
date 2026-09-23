@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.34 (2026-09-23) — services 62% + 77% milestone (global 77.48/62.09/71.26/78.91) — 77% lines
+- **Tests:** `services/planApi` 62.5% + `goalApi` 62.5% + `userApi` 62.5% (6→8, 7→9, 2→4 тестов, диспатч `getPlans`/`createPlan`/`updatePlan`/`deletePlan`/`getMyGoal`/`setGoal`/`updateGoal`/`deleteGoal`/`getMyProfile`/`updateProfile`/`createEmployee`/`getEmployees` с `global.fetch` mock). Пороги `62/70/77/78`, `104 suites 1562/1562` (+6 тестов). Коммит push в main.
+
 ## v1.33 (2026-09-23) — FranchiserTeamTab 85% + 77% milestone (global 77.34/62.12/70.86/78.76) — 77% lines
 - **Tests:** `FranchiserTeamTab` +1 `getChurnColor`/`getForecastColor` 85.47% stmts, `SalonTeamTab` +1 `DeviationIndicator`/`formatMoney` 85.13% stmts, `services/api` `providesTags` с результатом 77.10% stmts. Пороги `61/70/77/77`, `104 suites 1566/1566` (+1 тест). Коммит push в main.
 

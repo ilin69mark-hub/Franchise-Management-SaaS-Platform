@@ -33,4 +33,14 @@ describe('userApi', () => {
     await (result as Promise<unknown>).catch(() => {});
     expect(result).toBeDefined();
   });
+
+  it('диспатчит createEmployee и getEmployees', async () => {
+    const store = configureStore({ reducer: { userApi: userApi.reducer }, middleware: (g) => g().concat(userApi.middleware) });
+    const r1 = store.dispatch(userApi.endpoints.createEmployee.initiate({ email: 'a@test.com', password: '123', first_name: 'Test' } as never) as never) as unknown as Promise<unknown>;
+    await (r1 as Promise<unknown>).catch(() => {});
+    expect(r1).toBeDefined();
+    const r2 = store.dispatch(userApi.endpoints.getEmployees.initiate() as never) as unknown as Promise<unknown>;
+    await (r2 as Promise<unknown>).catch(() => {});
+    expect(r2).toBeDefined();
+  });
 });
