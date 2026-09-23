@@ -1,4 +1,8 @@
 // src/__tests__/components/Dashboard/tabs/TerritoryBenchmarkTab.test.tsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import TerritoryBenchmarkTab from '@/components/Dashboard/tabs/TerritoryBenchmarkTab';
+
 describe('TerritoryBenchmarkTab', () => {
   it('calculates scatter data', () => {
     const data = [
@@ -111,5 +115,43 @@ describe('TerritoryBenchmarkTab', () => {
     const previous = [72, 85, 93, 58];
     const changes = current.map((c, i) => previous.indexOf(c) - i);
     expect(changes[0]).not.toBe(0);
+  });
+});
+
+describe('TerritoryBenchmarkTab render', () => {
+  it('рендерит блок маржинальности по умолчанию', () => {
+    render(<TerritoryBenchmarkTab />);
+    expect(screen.getByText('Сравнение дилеров по маржинальности')).toBeInTheDocument();
+    expect(screen.getByText('Маржинальность')).toBeInTheDocument();
+    expect(screen.getByText('Структура')).toBeInTheDocument();
+    expect(screen.getByText('Месяц')).toBeInTheDocument();
+    expect(screen.getByText('Все категории')).toBeInTheDocument();
+    expect(screen.getByText('Все сегменты')).toBeInTheDocument();
+  });
+
+  it('переключает на рейтинг дилеров', () => {
+    render(<TerritoryBenchmarkTab />);
+    fireEvent.click(screen.getByText('Рейтинг'));
+    expect(screen.getByText('Рейтинг дилеров по комплексному показателю')).toBeInTheDocument();
+    expect(screen.getByText('Формула индекса:')).toBeInTheDocument();
+    expect(screen.getByText(/% плана \(40%\) \+ Конверсия \(25%\) \+ Маржа \(20%\) \+ Дебиторка \(10%\) \+ Отчёты \(5%\)/)).toBeInTheDocument();
+    expect(screen.getByText('Мебель Москва')).toBeInTheDocument();
+    expect(screen.getAllByText('Диванит Воронеж').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('переключает на риски и структуру', () => {
+    render(<TerritoryBenchmarkTab />);
+    fireEvent.click(screen.getByText('Риски'));
+    expect(screen.getByText('Затоваренность')).toBeInTheDocument();
+    expect(screen.getByText('Дефицит')).toBeInTheDocument();
+    expect(screen.getByText('Диван Бостон')).toBeInTheDocument();
+    expect(screen.getByText('Кровать Прима')).toBeInTheDocument();
+    expect(screen.getByText('Срочная дозаказка')).toBeInTheDocument();
+    expect(screen.getByText('Проверить поставку')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Структура'));
+    expect(screen.getByText('Структура продаж по категориям')).toBeInTheDocument();
+    expect(screen.getByText('Белые пятна')).toBeInTheDocument();
+    expect(screen.getByText('Предложить обучение по кухням')).toBeInTheDocument();
+    expect(screen.getByText('Проверить выставочные образцы')).toBeInTheDocument();
   });
 });

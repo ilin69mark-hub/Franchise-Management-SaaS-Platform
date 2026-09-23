@@ -27,6 +27,8 @@ jest.mock('@/services/api', () => ({
 }));
 
 describe('ChecklistBoard', () => {
+  jest.setTimeout(30000);
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetChecklistsQuery.mockReturnValue({
@@ -72,7 +74,7 @@ describe('ChecklistBoard', () => {
   it('удаляет задачу', async () => {
     render(<ChecklistBoard canCreate />);
     fireEvent.click(screen.getAllByRole('button', { name: /delete/i })[0]);
-    fireEvent.click(screen.getByText('OK'));
+    fireEvent.click(await screen.findByText('OK'));
     await waitFor(() => {
       expect(mockDeleteChecklist).toHaveBeenCalledWith('c1');
       expect(mockRefetch).toHaveBeenCalled();

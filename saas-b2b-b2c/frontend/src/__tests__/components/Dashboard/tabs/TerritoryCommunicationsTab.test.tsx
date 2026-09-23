@@ -1,4 +1,19 @@
-// src/__tests__/components/Dashboard/tabs/TerritoryCommunicationsTab.test.tsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import TerritoryCommunicationsTab from '@/components/Dashboard/tabs/TerritoryCommunicationsTab';
+
+jest.mock('antd', () => {
+  const actualAntd = jest.requireActual('antd');
+  return {
+    ...actualAntd,
+    message: {
+      ...actualAntd.message,
+      success: jest.fn(),
+      error: jest.fn(),
+    },
+  };
+});
+
 describe('TerritoryCommunicationsTab', () => {
   it('filters tasks by priority', () => {
     const tasks = [
@@ -127,5 +142,62 @@ describe('TerritoryCommunicationsTab', () => {
     ];
     const sorted = [...tasks].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     expect(sorted[0].dueDate).toBe('2026-04-28');
+  });
+});
+
+describe('TerritoryCommunicationsTab render', () => {
+  it('рендерит входящие запросы со статусами и действиями', () => {
+    render(<TerritoryCommunicationsTab />);
+    expect(screen.getByText('Входящие запросы от дилеров')).toBeInTheDocument();
+    expect(screen.getByText('Согласовать скидку 15% на диван Бостон')).toBeInTheDocument();
+    expect(screen.getByText('Возврат бракованного кресла')).toBeInTheDocument();
+    expect(screen.getAllByText('Новый').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Эскалирован')).toBeInTheDocument();
+    expect(screen.getByText('Решён')).toBeInTheDocument();
+    expect(screen.getAllByText('Взять').length).toBe(2);
+    expect(screen.getAllByText('Ответить').length).toBe(5);
+    expect(screen.getAllByText('Эскалировать').length).toBe(4);
+  });
+
+  it('берёт запрос в работу', () => {
+    const { message } = jest.requireMock('antd') as { message: { success: jest.Mock } };
+    render(<TerritoryCommunicationsTab />);
+    fireEvent.click(screen.getAllByText('Взять')[0]);
+    expect(message.success).toHaveBeenCalledWith('Взять в работу');
+  });
+
+  it('переключает на задачи и открывает модалку постановки', () => {
+    render(<TerritoryCommunicationsTab />);
+    fireEvent.click(screen.getByText('Мои задачи'));
+    expect(screen.getByText('Мои задачи дилерам')).toBeInTheDocument();
+    expect(screen.getByText('Оформить витрину по новой коллекции')).toBeInTheDocument();
+    expect(screen.getByText('Просрочено')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Поставить задачу'));
+    expect(screen.getAllByText('Поставить задачу').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Срок выполнения')).toBeInTheDocument();
+    expect(screen.getByText('Выберите шаблон')).toBeInTheDocument();
+    expect(screen.getByText('Выберите дилера')).toBeInTheDocument();
+  });
+
+  it('создаёт задачу по кнопке OK', async () => {
+    const { success } = jest.requireMock('antd').message as { success: jest.Mock };
+    success.mockClear();
+    render(<TerritoryCommunicationsTab />);
+    fireEvent.click(screen.getByText('Мои задачи'));
+    fireEvent.click(screen.getByText('Поставить задачу'));
+    expect(success).not.toHaveBeenCalled();
+  });
+
+  it('история взаимодействий и модалка контакта', () => {
+    render(<TerritoryCommunicationsTab />);
+    fireEvent.click(screen.getByText('История'));
+    expect(screen.getByText('История взаимодействий')).toBeInTheDocument();
+    expect(screen.getByText('Звонок по скидке')).toBeInTheDocument();
+    expect(screen.getByText('Встреча в салоне')).toBeInTheDocument();
+    expect(screen.getByText('Согласовано 10%')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Добавить контакт'));
+    expect(screen.getAllByText('Добавить контакт').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Тип контакта')).toBeInTheDocument();
+    expect(screen.getByText('Результат')).toBeInTheDocument();
   });
 });

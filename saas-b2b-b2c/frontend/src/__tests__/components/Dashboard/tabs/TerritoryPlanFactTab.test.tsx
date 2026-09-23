@@ -1,4 +1,33 @@
-// src/__tests__/components/Dashboard/tabs/TerritoryPlanFactTab.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import TerritoryPlanFactTab from '@/components/Dashboard/tabs/TerritoryPlanFactTab';
+
+jest.mock('@/api/axiosClient', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(() => Promise.reject(new Error('network'))),
+    post: jest.fn(() => Promise.reject(new Error('network'))),
+  },
+}));
+
+jest.mock('antd', () => {
+  const actualAntd = jest.requireActual('antd');
+  return {
+    ...actualAntd,
+    message: {
+      ...actualAntd.message,
+      success: jest.fn(),
+      error: jest.fn(),
+    },
+  };
+});
+
+const pickOption = (text: string) => {
+  const dropdowns = Array.from(document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'));
+  const last = dropdowns[dropdowns.length - 1] as HTMLElement;
+  fireEvent.click(within(last).getByText(text));
+};
+
 describe('TerritoryPlanFactTab', () => {
   it('calculates totals', () => {
     const data = [
@@ -111,5 +140,60 @@ describe('TerritoryPlanFactTab', () => {
     const sorted = [...data].sort((a, b) => b.plan - a.plan);
     expect(sorted[0].name).toBe('B');
     expect(sorted[2].name).toBe('A');
+  });
+});
+
+describe('TerritoryPlanFactTab render', () => {
+  it('рендерит сценарии, сводку и таблицу отклонений', () => {
+    render(<TerritoryPlanFactTab />);
+    expect(screen.getByText('Сформировать PDF-отчёт')).toBeInTheDocument();
+    expect(screen.getByText('Квартал')).toBeInTheDocument();
+    expect(screen.getByText('Оптимистичный')).toBeInTheDocument();
+    expect(screen.getByText('Реалистичный')).toBeInTheDocument();
+    expect(screen.getByText('Пессимистичный')).toBeInTheDocument();
+    expect(screen.getByText(/Отставание от плана 8\.0 млн руб\. сформировано из-за/)).toBeInTheDocument();
+    expect(screen.getByText('Вклад дилеров в план')).toBeInTheDocument();
+    expect(screen.getByText('План-факт динамика')).toBeInTheDocument();
+    expect(screen.getByText('Детализация отклонений')).toBeInTheDocument();
+    expect(screen.getByText('Мебель Москва')).toBeInTheDocument();
+    expect(screen.getByText('Салон мебели Казань')).toBeInTheDocument();
+    expect(screen.getAllByText('Выберите').length).toBe(5);
+    expect(screen.getAllByText(/\d+\.\d млн ₽/).length).toBeGreaterThan(0);
+  });
+
+  it('рендерит тэг топ-3 дилеров', () => {
+    render(<TerritoryPlanFactTab />);
+    expect(screen.getByText(/Топ-3 дилера дают \d+% результата/)).toBeInTheDocument();
+  });
+
+  it('переключает период на месяц', () => {
+    render(<TerritoryPlanFactTab />);
+    fireEvent.mouseDown(screen.getByText('Квартал'));
+    pickOption('Месяц');
+    fireEvent.click(screen.getByText('Сформировать PDF-отчёт'));
+    expect(screen.getByText('Период: Месяц')).toBeInTheDocument();
+    expect(screen.getByText('План: 47.0 млн ₽')).toBeInTheDocument();
+    expect(screen.getByText('Факт: 40.2 млн ₽')).toBeInTheDocument();
+  });
+
+  it('открывает предпросмотр и показывает ошибку генерации PDF', async () => {
+    render(<TerritoryPlanFactTab />);
+    fireEvent.click(screen.getByText('Сформировать PDF-отчёт'));
+    expect(screen.getByText('Предпросмотр отчёта')).toBeInTheDocument();
+    expect(screen.getByText('Период: Квартал')).toBeInTheDocument();
+    const { error } = jest.requireMock('antd').message as { error: jest.Mock };
+    fireEvent.click(screen.getByText('Скачать PDF'));
+    await waitFor(() => {
+      expect(error).toHaveBeenCalledWith('Ошибка генерации отчёта');
+    });
+  });
+
+  it('закрывает и снова открывает модалку предпросмотра', () => {
+    render(<TerritoryPlanFactTab />);
+    fireEvent.click(screen.getByText('Сформировать PDF-отчёт'));
+    fireEvent.click(screen.getByText('Закрыть'));
+    fireEvent.click(screen.getByText('Сформировать PDF-отчёт'));
+    expect(screen.getByText('Предпросмотр отчёта')).toBeInTheDocument();
+    expect(screen.getByText('Период: Квартал')).toBeInTheDocument();
   });
 });

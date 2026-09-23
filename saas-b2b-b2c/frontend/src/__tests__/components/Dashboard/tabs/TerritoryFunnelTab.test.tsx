@@ -1,4 +1,13 @@
-// src/__tests__/components/Dashboard/tabs/TerritoryFunnelTab.test.tsx
+import React from 'react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import TerritoryFunnelTab from '@/components/Dashboard/tabs/TerritoryFunnelTab';
+
+const pickOption = (text: string) => {
+  const dropdowns = Array.from(document.querySelectorAll('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'));
+  const last = dropdowns[dropdowns.length - 1] as HTMLElement;
+  fireEvent.click(within(last).getByText(text));
+};
+
 describe('TerritoryFunnelTab', () => {
   it('calculates conversion', () => {
     const leads = 1000;
@@ -72,5 +81,38 @@ describe('TerritoryFunnelTab', () => {
     ];
     const sorted = [...managers].sort((a, b) => b.conversion - a.conversion);
     expect(sorted[0].name).toBe('A');
+  });
+});
+
+describe('TerritoryFunnelTab render', () => {
+  it('рендерит контролы, заголовки и светофор аномалий', () => {
+    render(<TerritoryFunnelTab />);
+    expect(screen.getByText('Сравнение воронок дилеров')).toBeInTheDocument();
+    expect(screen.getByText('Светофор аномалий (5)')).toBeInTheDocument();
+    expect(screen.getByText('Абсолютные')).toBeInTheDocument();
+    expect(screen.getByText('Конверсия от трафика')).toBeInTheDocument();
+    expect(screen.getByText('Выберите дилера для детализации')).toBeInTheDocument();
+  });
+
+  it('разворачивает аномалии и показывает строки', () => {
+    render(<TerritoryFunnelTab />);
+    fireEvent.click(screen.getByText('Светофор аномалий (5)'));
+    expect(screen.getByText('Падение конверсии Замер→КП на 15%')).toBeInTheDocument();
+    expect(screen.getByText('Рост среднего чека при падении кол-ва продаж (+25%, -18%)')).toBeInTheDocument();
+    expect(screen.getByText('Падение трафика на 22%')).toBeInTheDocument();
+    expect(screen.getAllByText('Анализировать').length).toBe(5);
+  });
+
+  it('делает drill-down по дилеру до менеджеров салона', () => {
+    render(<TerritoryFunnelTab />);
+    fireEvent.mouseDown(screen.getByText('Выберите дилера'));
+    pickOption('Мебель Москва');
+    expect(screen.getByText('Воронка по салонам')).toBeInTheDocument();
+    expect(screen.getAllByText('Мебель Москва').length).toBeGreaterThanOrEqual(2);
+    fireEvent.mouseDown(screen.getByText('Выберите салон для детализации по менеджерам'));
+    pickOption('Салон 2');
+    expect(screen.getByText('Иванов А.А.')).toBeInTheDocument();
+    expect(screen.getByText('Петрова С.С.')).toBeInTheDocument();
+    expect(screen.getByText('Сидоров В.В.')).toBeInTheDocument();
   });
 });
