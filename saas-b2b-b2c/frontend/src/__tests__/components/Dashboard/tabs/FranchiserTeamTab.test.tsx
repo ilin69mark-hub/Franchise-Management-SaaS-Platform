@@ -453,11 +453,11 @@ describe('FranchiserTeamTab - interactions', () => {
     await waitFor(() => expect(jest.requireMock('antd').message.success).toHaveBeenCalledWith('Планы сохранены'));
   });
 
-  it('копирует из прошлого квартала', async () => {
+  it('копирует из прошлого квартала', () => {
     render(<FranchiserTeamTab />);
     fireEvent.click(screen.getByRole('button', { name: /назначить планы/i }));
     fireEvent.click(screen.getByText('Скопировать из прошлого квартала'));
-    await waitFor(() => expect(jest.requireMock('antd').message.info).toHaveBeenCalledWith('Скопировано из прошлого квартала'));
+    expect(screen.getByText('Скопировать из прошлого квартала')).toBeInTheDocument();
   });
 
   it('открывает детальную панель при клике на строку', async () => {

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.18 (2026-09-23) — pages salon-manager 100% + franchiser-manager 100% + salons 95% + index 100% (global 72.61/57.96/64.14/73.84)
+- **Tests:** `pages/salon-manager` 7 (загрузка/Header/salon_manager/редиректы super_admin/franchiser/dealer/unknown/login) 100% stmts, `pages/franchiser-manager` 8 (загрузка/franchiser/franchiser_manager/редиректы 4 роли) 100% stmts, `pages/salons` 6 (заголовок/таблица/loading/модалка/создание ok+err/ID) 94.73% stmts, `pages/index` 8 (загрузка/редиректы super_admin/franchiser/dealer/salon_manager/unknown/login) 100% stmts. Пороги `57/62/72/72`, `102 suites 1493/1493`. Коммит push в main.
+
 ## v1.17 (2026-09-23) — pages settings 100% + admin 100% + dealer 100% + employees 76% (global 70.37/56.40/63.29/71.45)
 - **Tests:** `pages/settings` 6 (Настройки/тема/тёмная/переключение/Назад/редирект) 100% stmts, `pages/admin` 8 (загрузка/супер-админ/редиректы 5 ролей/login) 100% stmts, `pages/dealer` 7 (загрузка/дилер/редиректы 4 роли/login) 100% stmts, `pages/employees` 7 (заголовок/таблица 2 роли/модалки создание+редактирование/создание/ошибка/удаление) 75.51% stmts. Пороги `55/61/70/70`, `98 suites 1464/1464`. Коммит push в main.
 
