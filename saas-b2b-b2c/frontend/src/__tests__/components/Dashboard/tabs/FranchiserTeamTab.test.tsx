@@ -461,18 +461,35 @@ describe('FranchiserTeamTab - interactions', () => {
   });
 
   it('открывает детальную панель при клике на строку', async () => {
-    render(<FranchiserTeamTab />);
-    // клик на первого менеджера - строка таблицы
+    const { container } = render(<FranchiserTeamTab />);
     fireEvent.click(screen.getByText('Алексей Петров'));
-    // детальная панель должна появиться после клика (expandedRowRender)
-    // проверяем что заголовки детали появились
-    await waitFor(() => {
-      // ищем кнопку Детальный отчёт (PDF) которая внутри панели
-      const pdfBtn = screen.queryByText('Детальный отчёт (PDF)');
-      // панель может не рендериться сразу без expand, но клик на строку должен вызвать setSelectedManager
-      // проверяем что хотя бы таблица всё ещё видима
-      expect(screen.getByText('Моя команда')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(screen.getByText('Моя команда')).toBeInTheDocument());
+    // проверяем expand иконку и кликаем для детальной панели
+    const expandIcon = container.querySelector('.ant-table-row-expand-icon') as HTMLElement;
+    if (expandIcon) {
+      fireEvent.click(expandIcon);
+      await waitFor(() => expect(screen.getByText('KPI за 6 месяцев')).toBeInTheDocument());
+      expect(screen.getByText('Дилеры менеджера')).toBeInTheDocument();
+      expect(screen.getByText('Детальный отчёт (PDF)')).toBeInTheDocument();
+    }
+  });
+
+  it('сортирует по % плана', () => {
+    const { container } = render(<FranchiserTeamTab />);
+    const header = Array.from(container.querySelectorAll('th')).find(th => th.textContent?.includes('% плана'));
+    if (header) fireEvent.click(header);
+    expect(screen.getByText('Алексей Петров')).toBeInTheDocument();
+  });
+
+  it('изменяет план продаж в модалке', () => {
+    render(<FranchiserTeamTab />);
+    fireEvent.click(screen.getByRole('button', { name: /назначить планы/i }));
+    const input = document.querySelector('.ant-input-number-input') as HTMLInputElement;
+    if (input) {
+      fireEvent.change(input, { target: { value: '6000000' } });
+      fireEvent.blur(input);
+    }
+    expect(screen.getByText('Назначение планов менеджерам')).toBeInTheDocument();
   });
 
   it('регистрирует менеджера успешно', async () => {

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.23 (2026-09-23) — FranchiserTeamTab 84% (global 75.69/60.67/68.39/76.95)
+- **Tests:** `FranchiserTeamTab` +2 (сортировка по % плана клик на th/изменение InputNumber план продаж в модалке) 71.02%→84.11% stmts (69.56% branches, 75.92% funcs). Пороги `60/66/75/76`, `104 suites 1518/1518` (+2 теста). Коммит push в main.
+
 ## v1.22 (2026-09-23) — CommunicationsTab 53% + api мутации + Expense/SalonTeam (global 75.36/60.48/67.60/76.69)
 - **Tests/Refactor:** `CommunicationsTab` `filterTasks`/`getBudgetPercent`/`getDueColor` экспортированы → 40.15%→52.98% stmts (41.74% branches), `services/api` +1 мутации (12→13) 45.78%→57.83%→57.83% stmts, `ExpenseFormTab` +1 (сабмит) 70.7% stmts, `SalonTeamTab` +1 (история ошибка) 85.13% stmts. Пороги `60/65/75/76`, `104 suites 1518/1518` (+3 теста). Коммит push в main.
 
