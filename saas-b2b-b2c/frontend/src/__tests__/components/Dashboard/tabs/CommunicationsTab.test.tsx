@@ -1,7 +1,7 @@
 // __tests__/components/Dashboard/tabs/CommunicationsTab.test.tsx
 import React from 'react';
 import { render } from '@testing-library/react';
-import CommunicationsTab, { filterTasks, getBudgetPercent, getDueColor } from '@/components/Dashboard/tabs/CommunicationsTab';
+import CommunicationsTab, { filterTasks, getBudgetPercent, getDueColor, statusMap, priorityMap } from '@/components/Dashboard/tabs/CommunicationsTab';
 import dayjs from 'dayjs';
 
 describe('CommunicationsTab', () => {
@@ -40,8 +40,10 @@ describe('CommunicationsTab helpers', () => {
     const past = dayjs().subtract(5, 'day').format('YYYY-MM-DD');
     const soon = dayjs().add(1, 'day').format('YYYY-MM-DD');
     const future = dayjs().add(10, 'day').format('YYYY-MM-DD');
+    const twoDays = dayjs().add(2, 'day').format('YYYY-MM-DD');
     expect(getDueColor(past)).toBe('#ff4d4f');
     expect(getDueColor(soon)).toBe('#fa8c16');
+    expect(getDueColor(twoDays)).toBe('#fa8c16');
     expect(getDueColor(future)).toBe('#52c41a');
   });
 });
@@ -122,5 +124,37 @@ describe('CommunicationsTab render', () => {
     expect(c2.textContent).toContain('Маркетинговый бюджет');
     const { container: c3 } = render(<CommunicationsTab interactions={interactions} initialTab="history" />);
     expect(c3.textContent).toContain('История взаимодействий');
+  });
+
+  it('покрывает все статусы и приоритеты', () => {
+    const tasks = [
+      { id: 't1', title: 't1', description: 'd1', dueDate: '2026-09-30', status: 'in_progress' as const, priority: 'medium' as const, createdAt: '2026-09-01' },
+      { id: 't2', title: 't2', description: 'd2', dueDate: '2026-09-30', status: 'done' as const, priority: 'low' as const, createdAt: '2026-09-01' },
+      { id: 't3', title: 't3', description: 'd3', dueDate: '2026-09-30', status: 'overdue' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+    ];
+    const { container } = render(<CommunicationsTab tasks={tasks} />);
+    expect(container.textContent).toContain('В работе');
+    expect(container.textContent).toContain('Готово');
+    expect(container.textContent).toContain('Просрочено');
+    expect(container.textContent).toContain('Средний');
+    expect(container.textContent).toContain('Низкий');
+  });
+
+  it('statusMap и priorityMap', () => {
+    expect(statusMap.new.text).toBe('Новая');
+    expect(statusMap.in_progress.color).toBe('orange');
+    expect(statusMap.done.text).toBe('Готово');
+    expect(statusMap.overdue.color).toBe('red');
+    expect(priorityMap.high.text).toBe('Высокий');
+    expect(priorityMap.medium.color).toBe('orange');
+    expect(priorityMap.low.text).toBe('Низкий');
+  });
+
+  it('отображает форматированную дату', () => {
+    const tasks = [
+      { id: 't1', title: 't1', description: 'd1', dueDate: '2026-09-30', status: 'new' as const, priority: 'high' as const, createdAt: '2026-09-01' },
+    ];
+    const { container } = render(<CommunicationsTab tasks={tasks} />);
+    expect(container.textContent).toContain('30.09.2026');
   });
 });

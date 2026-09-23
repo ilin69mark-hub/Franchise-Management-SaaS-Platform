@@ -107,6 +107,19 @@ export const getDueColor = (dueDate: string): string => {
   return '#52c41a';
 };
 
+export const statusMap: Record<string, { color: string; text: string }> = {
+  new: { color: 'blue', text: 'Новая' },
+  in_progress: { color: 'orange', text: 'В работе' },
+  done: { color: 'green', text: 'Готово' },
+  overdue: { color: 'red', text: 'Просрочено' },
+};
+
+export const priorityMap: Record<string, { color: string; text: string }> = {
+  high: { color: 'red', text: 'Высокий' },
+  medium: { color: 'orange', text: 'Средний' },
+  low: { color: 'default', text: 'Низкий' },
+};
+
 const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
   tasks: initialTasks = [],
   requests: initialRequests = [],
@@ -247,38 +260,21 @@ const CommunicationsTab: React.FC<CommunicationsTabProps> = ({
       dataIndex: 'dueDate',
       key: 'dueDate',
       width: 120,
-      render: (val: string) => {
-        return <Tag color={getDueColor(val)}>{dayjs(val).format('DD.MM.YYYY')}</Tag>;
-      },
+      render: (val: string) => <Tag color={getDueColor(val)}>{dayjs(val).format('DD.MM.YYYY')}</Tag>,
     },
     {
       title: 'Статус',
       dataIndex: 'status',
       key: 'status',
       width: 120,
-      render: (val: TaskStatus) => {
-        const statusMap: Record<TaskStatus, { color: string; text: string }> = {
-          new: { color: 'blue', text: 'Новая' },
-          in_progress: { color: 'orange', text: 'В работе' },
-          done: { color: 'green', text: 'Готово' },
-          overdue: { color: 'red', text: 'Просрочено' },
-        };
-        return <Tag color={statusMap[val].color}>{statusMap[val].text}</Tag>;
-      },
+      render: (val: TaskStatus) => <Tag color={statusMap[val].color}>{statusMap[val].text}</Tag>,
     },
     {
       title: 'Приоритет',
       dataIndex: 'priority',
       key: 'priority',
       width: 100,
-      render: (val: TaskPriority) => {
-        const priorityMap: Record<TaskPriority, { color: string; text: string }> = {
-          high: { color: 'red', text: 'Высокий' },
-          medium: { color: 'orange', text: 'Средний' },
-          low: { color: 'default', text: 'Низкий' },
-        };
-        return <Tag color={priorityMap[val].color}>{priorityMap[val].text}</Tag>;
-      },
+      render: (val: TaskPriority) => <Tag color={priorityMap[val].color}>{priorityMap[val].text}</Tag>,
     },
     {
       title: 'Действия',

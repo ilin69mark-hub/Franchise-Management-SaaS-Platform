@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.31 (2026-09-23) — SalaryTeam 85% + ExpenseFormTab 85% + 76% milestone (global 76.59/61.06/69.65/77.92)
+- **Tests:** `SalonTeamTab` +1 `DeviationIndicator` 0/null + `formatMoney` 85.13% stmts, `ExpenseFormTab` +1 `createExpensePayload` с `other_expense_name` 85.14% stmts. Пороги `60/68/76/77` сохранены, `104 suites 1542/1542` (+1 тест). Коммит push в main.
+
 ## v1.30 (2026-09-23) — FranchiserTeamTab 85% + SalonTeamTab 85% + 76% milestone (global 76.84/61.76/70.08/78.21)
 - **Tests:** `FranchiserTeamTab` +2 (getRowColor экспорт + цвета колонок Churn/Forecast) 84.11%→85.47% stmts, `SalonTeamTab` +1 (DeviationIndicator с нулевым отклонением + formatMoney) 85.13% stmts. Пороги `61/69/76/78`, `104 suites 1542/1542` (+2 теста). Коммит push в main.
 

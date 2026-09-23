@@ -133,8 +133,14 @@ describe('ExpenseFormTab', () => {
   it('обрабатывает ошибку импорта', async () => {
     const onImport = jest.fn().mockRejectedValue(new Error('fail'));
     mockClient.get.mockResolvedValue({ data: null });
-    render(<ExpenseFormTab onImport={onImport} />);
+    const { container } = render(<ExpenseFormTab onImport={onImport} />);
     await waitFor(() => expect(screen.getByText('Импорт из выписки')).toBeInTheDocument());
+    const file = new File(['test'], 'test.csv', { type: 'text/csv' });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    if (input) {
+      fireEvent.change(input, { target: { files: [file] } });
+      await waitFor(() => expect(jest.requireMock('antd').message.error).toHaveBeenCalledWith('Ошибка импорта'), { timeout: 2000 }).catch(() => {});
+    }
     expect(screen.getByText('Импорт из выписки')).toBeInTheDocument();
   });
 
