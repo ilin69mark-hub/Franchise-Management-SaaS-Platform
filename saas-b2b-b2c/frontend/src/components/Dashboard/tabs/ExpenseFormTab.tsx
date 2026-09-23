@@ -101,19 +101,6 @@ const ExpenseFormTab: React.FC<ExpenseFormTabProps> = ({ onSave, onImport }) => 
     setHasChanges(true);
   };
 
-  const calculateTax = (revenue: number) => {
-    switch (taxType) {
-      case 'usn':
-        return Math.round(revenue * 0.06);
-      case 'patent':
-        return 65000;
-      case 'ndfl':
-        return Math.round(revenue * 0.13);
-      default:
-        return 0;
-    }
-  };
-
   const handleCopyFromPrevMonth = () => {
     if (prevMonthData) {
       form.setFieldsValue({

@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.20 (2026-09-23) — FranchiserTeamTab 71% + ExpenseFormTab 63% (global 73.78/58.79/64.91/75.07)
+- **Tests/Refactor:** `FranchiserTeamTab` `calculateIntegralKpi`/`calculateBonus` экспортированы → 59.81%→71.02% stmts (60.86% branches), `ExpenseFormTab` удалён мёртвый `calculateTax` (12 строк) → 60.95%→62.62% stmts. Пороги `58/63/73/73` сохранены, `104 suites 1506/1506` (+1 тест). Коммит push в main.
+
 ## v1.19 (2026-09-23) — _app 100% + services/api 24% (global 73.42/58.48/64.74/74.72)
 - **Tests:** `pages/_app` 5 (рендер/диспатч auth с token+user/нет токена/ошибка парсинга/showChild) 100% stmts (90% branches), `services/api` 8 (reducerPath/tagTypes/хуки/prepareHeaders store+localStorage+parse error/login/createChecklist/getSalons) 24.09% stmts (3.61%→24%). Пороги `58/63/73/73`, `104 suites 1506/1506`. Коммит push в main.
 

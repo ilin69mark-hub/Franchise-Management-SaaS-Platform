@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import FranchiserTeamTab from '@/components/Dashboard/tabs/FranchiserTeamTab';
+import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus } from '@/components/Dashboard/tabs/FranchiserTeamTab';
 
 jest.mock('@/components/Dashboard/tabs/ManagerKpiChart', () => {
   return { __esModule: true, default: () => <div data-testid="kpi-chart">KPI Chart</div> };
@@ -505,5 +505,13 @@ describe('FranchiserTeamTab - interactions', () => {
     // Select квартала
     const select = screen.getByText('Q2 2026');
     expect(select).toBeInTheDocument();
+  });
+
+  it('экспортированные calculateIntegralKpi и calculateBonus покрыты', () => {
+    expect(exportedCalc({ planPercent: 92, redDealersPercent: 0, sla: 98, dealerGrowth: 2 } as never)).toBe(96);
+    expect(exportedCalc({ planPercent: 65, redDealersPercent: 30, sla: 72, dealerGrowth: -1 } as never)).toBe(58);
+    expect(exportedBonus(94)).toBe(75000);
+    expect(exportedBonus(58)).toBe(25000);
+    expect(exportedBonus(0)).toBe(0);
   });
 });

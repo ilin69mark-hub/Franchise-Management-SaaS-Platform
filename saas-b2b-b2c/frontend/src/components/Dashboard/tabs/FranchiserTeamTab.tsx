@@ -49,7 +49,7 @@ interface ManagerPlans {
   };
 }
 
-const calculateIntegralKpi = (m: Manager): number => {
+export const calculateIntegralKpi = (m: Manager): number => {
   const kpiPlan = m.planPercent * 0.40;
   const kpiRed = (100 - m.redDealersPercent) * 0.25;
   const kpiSla = m.sla * 0.20;
@@ -58,7 +58,7 @@ const calculateIntegralKpi = (m: Manager): number => {
   return Math.min(Math.round(kpiPlan + kpiRed + kpiSla + kpiGrowth + kpiReports), 100);
 };
 
-const calculateBonus = (kpi: number, baseBonus: number = 50000): number => {
+export const calculateBonus = (kpi: number, baseBonus: number = 50000): number => {
   if (kpi >= 90) return baseBonus * 1.5;
   if (kpi >= 75) return baseBonus;
   if (kpi >= 50) return baseBonus * 0.5;
