@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus, getRowColor as exportedRowColor, getPlanPercentColor, getRedDealersColor, getSlaColor } from '@/components/Dashboard/tabs/FranchiserTeamTab';
+import FranchiserTeamTab, { calculateIntegralKpi as exportedCalc, calculateBonus as exportedBonus, getRowColor as exportedRowColor, getPlanPercentColor, getRedDealersColor, getSlaColor, getChurnColor, getForecastColor } from '@/components/Dashboard/tabs/FranchiserTeamTab';
 
 jest.mock('@/components/Dashboard/tabs/ManagerKpiChart', () => {
   return { __esModule: true, default: () => <div data-testid="kpi-chart">KPI Chart</div> };
@@ -546,6 +546,12 @@ describe('FranchiserTeamTab - interactions', () => {
     expect(getSlaColor(95)).toBe('green');
     expect(getSlaColor(85)).toBe('orange');
     expect(getSlaColor(70)).toBe('red');
+    expect(getChurnColor(3)).toBe('green');
+    expect(getChurnColor(7)).toBe('orange');
+    expect(getChurnColor(12)).toBe('red');
+    expect(getForecastColor(96)).toBe('green');
+    expect(getForecastColor(90)).toBe('orange');
+    expect(getForecastColor(80)).toBe('red');
   });
 });
 

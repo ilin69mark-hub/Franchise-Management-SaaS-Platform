@@ -75,6 +75,9 @@ export const getPlanPercentColor = (v: number): string => (v >= 95 ? '#52c41a' :
 export const getRedDealersColor = (v: number): string => (v < 10 ? 'green' : v < 25 ? 'orange' : 'red');
 export const getSlaColor = (v: number): string => (v >= 95 ? 'green' : v >= 80 ? 'orange' : 'red');
 
+export const getChurnColor = (v: number): string => (v < 5 ? 'green' : v < 10 ? 'orange' : 'red');
+export const getForecastColor = (v: number): string => (v >= 95 ? 'green' : v >= 85 ? 'orange' : 'red');
+
 const mockManagers: Manager[] = [
   { 
     id: '1', name: 'Алексей Петров', territory: 'Север', planPercent: 92, redDealersPercent: 0, sla: 98, dealerGrowth: 2, churnRate: 5, forecastPercent: 95, integralKpi: 94, bonusForecast: 75000,
@@ -191,7 +194,7 @@ const FranchiserTeamTab: React.FC = () => {
       dataIndex: 'churnRate',
       key: 'churnRate',
       render: (v: number) => (
-        <Tag color={v < 5 ? 'green' : v < 10 ? 'orange' : 'red'}>
+        <Tag color={getChurnColor(v)}>
           {v}%
         </Tag>
       ),
@@ -201,7 +204,7 @@ const FranchiserTeamTab: React.FC = () => {
       dataIndex: 'forecastPercent',
       key: 'forecastPercent',
       render: (v: number) => (
-        <Tag color={v >= 95 ? 'green' : v >= 85 ? 'orange' : 'red'}>
+        <Tag color={getForecastColor(v)}>
           {v}%
         </Tag>
       ),

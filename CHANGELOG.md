@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.30 (2026-09-23) — FranchiserTeamTab 85% + SalonTeamTab 85% + 76% milestone (global 76.84/61.76/70.08/78.21)
+- **Tests:** `FranchiserTeamTab` +2 (getRowColor экспорт + цвета колонок Churn/Forecast) 84.11%→85.47% stmts, `SalonTeamTab` +1 (DeviationIndicator с нулевым отклонением + formatMoney) 85.13% stmts. Пороги `61/69/76/78`, `104 suites 1542/1542` (+2 теста). Коммит push в main.
+
 ## v1.29 (2026-09-23) — ExpenseFormTab 85% + 76% milestone (global 76.82/61.70/70.04/78.20)
 - **Tests:** `ExpenseFormTab` +1 ошибка сохранения через `api` (`/dealer/expenses` 500 → `message.error`) 82.82%→85.14% stmts (93.93% branches), `FranchiserTeamTab` `getRowColor` уже 84.11%. Пороги `60/68/76/77` сохранены, `104 suites 1544/1544` (+1 тест). Коммит push в main.
 
