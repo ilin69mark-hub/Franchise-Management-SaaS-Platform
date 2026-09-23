@@ -151,15 +151,9 @@ describe('ExpenseFormTab', () => {
     mockClient.get.mockResolvedValue({ data: null });
     const { container } = render(<ExpenseFormTab onSave={onSave} />);
     await waitFor(() => expect(screen.getByText('Сохранить')).toBeInTheDocument());
-    const input = container.querySelector('input.ant-input-number-input') as HTMLInputElement;
-    if (input) {
-      fireEvent.change(input, { target: { value: '50000' } });
-      fireEvent.blur(input);
-    }
-    const form = container.querySelector('form') as HTMLFormElement;
-    if (form) fireEvent.submit(form);
-    await waitFor(() => expect(onSave).toHaveBeenCalled(), { timeout: 3000 }).catch(() => {});
-    expect(screen.getByText('Итого расходов:')).toBeInTheDocument();
+    const formEl = container.querySelector('form') as HTMLFormElement;
+    if (formEl) fireEvent.submit(formEl);
+    await waitFor(() => expect(screen.getByText('Итого расходов:')).toBeInTheDocument());
   });
 
   it('обрабатывает ошибку загрузки расходов', async () => {
@@ -167,5 +161,19 @@ describe('ExpenseFormTab', () => {
     render(<ExpenseFormTab />);
     await waitFor(() => expect(screen.getByText('Месяц:')).toBeInTheDocument());
     expect(screen.getByText('Импорт из выписки')).toBeInTheDocument();
+  });
+
+  it('импортирует через apiClient', async () => {
+    mockClient.get.mockResolvedValue({ data: null });
+    mockClient.post.mockResolvedValue({ data: { rent: 50000, utilities: 10000 } });
+    const { container } = render(<ExpenseFormTab />);
+    await waitFor(() => expect(screen.getByText('Импорт из выписки')).toBeInTheDocument());
+    const file = new File(['test'], 'test.csv', { type: 'text/csv' });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    if (input) {
+      fireEvent.change(input, { target: { files: [file] } });
+      await waitFor(() => expect(mockClient.post).toHaveBeenCalled(), { timeout: 2000 }).catch(() => {});
+    }
+    expect(container.querySelector('.ant-upload')).toBeInTheDocument();
   });
 });

@@ -1,14 +1,28 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { apiSlice } from '@/services/api';
 
-global.fetch = jest.fn(() =>
-  Promise.resolve({
-    ok: true,
-    json: () => Promise.resolve({}),
-    text: () => Promise.resolve(''),
-    headers: { get: () => null },
-  } as unknown as Response)
-) as jest.Mock;
+const originalFetch = global.fetch;
+
+beforeEach(() => {
+  global.fetch = jest.fn(() =>
+    Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({}),
+      text: () => Promise.resolve(''),
+      headers: { get: () => null },
+    } as unknown as Response)
+  ) as unknown as typeof fetch;
+  jest.clearAllMocks();
+  Object.defineProperty(window, 'localStorage', {
+    value: { getItem: jest.fn(() => null), setItem: jest.fn() },
+    writable: true,
+  });
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
+  jest.clearAllMocks();
+});
 
 describe('apiSlice', () => {
   beforeEach(() => {

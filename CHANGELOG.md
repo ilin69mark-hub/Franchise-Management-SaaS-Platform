@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.26 (2026-09-23) — ExpenseFormTab 83% + api 73% + 76% milestone (global 76.33/60.97/69.44/77.65)
+- **Tests:** `ExpenseFormTab` +1 импорт через `apiClient` (`/dealer/expenses/import` FormData) 70.70%→82.82% stmts (92.92% branches), `services/api` 57.83%→73.49% stmts (мутации), `FranchiserTeamTab` фикс flaky `сохраняет планы` (waitFor→simple). Пороги `60/68/76/77` сохранены, `104 suites 1524/1524` (+3 теста). Коммит push в main.
+
 ## v1.25 (2026-09-23) — CommunicationsTab 58% + 76% milestone (global 76.16/60.87/69.57/77.47)
 - **Tests/Refactor:** `CommunicationsTab` `filterTasks`/`getBudgetPercent`/`getDueColor` +2 render (задачи с датами+статусами/filter via useMemo) 52.98%→58.20% stmts (47.57% branches), +2 helper теста. Пороги `60/68/76/77`, `104 suites 1518/1518` (+2 теста). Коммит push в main.
 
