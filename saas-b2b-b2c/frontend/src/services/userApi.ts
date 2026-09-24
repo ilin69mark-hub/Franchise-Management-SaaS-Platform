@@ -5,6 +5,7 @@ import { getCsrfToken, CSRF_HEADER } from '@/utils/csrf';
 export const userApi = createApi({
   reducerPath: 'userApi',
   baseQuery: fetchBaseQuery({
+    credentials: 'include', // RE-AUDIT: без этого cookie не уходят cross-origin → 401 вне nginx
     baseUrl: `${(process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? (()=>{throw new Error('NEXT_PUBLIC_API_URL must be set in production')})() : 'http://localhost:8080'))}/api/v1`,
     prepareHeaders: (headers) => {
       // F7: сессия в httpOnly cookie; CSRF double-submit для мутаций.

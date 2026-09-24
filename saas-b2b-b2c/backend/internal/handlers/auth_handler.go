@@ -133,6 +133,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked"})
 			return
 		}
+		if errors.Is(err, services.ErrTenantBlocked) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "tenant is blocked"})
+			return
+		}
 		// F9: lockout — 429 c Retry-After, без различия "нет юзера/неверный пароль".
 		if errors.Is(err, services.ErrTooManyAttempts) {
 			c.Header("Retry-After", "900")

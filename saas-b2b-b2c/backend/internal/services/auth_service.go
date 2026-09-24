@@ -30,6 +30,40 @@ var ErrUserBlocked = errors.New("account is blocked")
 // ErrTooManyAttempts - lockout после N неудачных входов (хендлер маппит в 429).
 var ErrTooManyAttempts = errors.New("too many login attempts, try again later")
 
+// ErrTenantBlocked - сеть заблокирована/приостановлена (хендлер маппит в 403).
+// RE-AUDIT: BlockTenant раньше был надписью в админке — auth-путь статус
+// сети не смотрел, неплательщик работал дальше.
+var ErrTenantBlocked = errors.New("tenant is blocked")
+
+// tenantAccessDenied — статусы сети, закрывающие вход и refresh.
+// churned сознательно пропускаем (graceful wind-down бывшим клиентам).
+func tenantAccessDenied(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "blocked", "suspended":
+		return true
+	}
+	return false
+}
+
+// checkTenantAccess — сеть пользователя активна? super_admin и пользователи
+// без сети (nil) — вне проверки. Ошибка БД — fail-closed (deny).
+func (s *AuthService) checkTenantAccess(ctx context.Context, user *models.User) error {
+	if user.Role == models.RoleSuperAdmin || user.TenantID == nil {
+		return nil
+	}
+	if s.tenantRepo == nil {
+		return errors.New("tenant check unavailable")
+	}
+	tenant, err := s.tenantRepo.FindByID(ctx, *user.TenantID)
+	if err != nil || tenant == nil {
+		return ErrTenantBlocked
+	}
+	if tenantAccessDenied(tenant.Status) {
+		return ErrTenantBlocked
+	}
+	return nil
+}
+
 // ErrEmailTaken — email уже зарегистрирован (маппится в 409, без текста SQL).
 var ErrEmailTaken = errors.New("email already registered")
 
@@ -355,6 +389,10 @@ func (s *AuthService) Authenticate(ctx context.Context, email, password, clientI
 		return nil, ErrUserBlocked
 	}
 
+	if err := s.checkTenantAccess(ctx, freshUser); err != nil {
+		return nil, err
+	}
+
 	// Успех — сбрасываем счётчик неудач.
 	cache.ResetLimit(ctx, failKey)
 	return freshUser, nil
@@ -507,6 +545,11 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 		// Одноразово гасим предъявленный токен, чтобы не оставлять валидным.
 		_ = cache.RevokeRefreshToken(context.Background(), tokenID)
 		return "", "", ErrUserBlocked
+	}
+
+	if err := s.checkTenantAccess(context.Background(), user); err != nil {
+		_ = cache.RevokeRefreshToken(context.Background(), tokenID)
+		return "", "", err
 	}
 
 	return s.generateTokensWithChain(user.ID, user.Email, user.Role, user.TenantID, user.SalonID, chainID)

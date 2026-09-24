@@ -522,3 +522,59 @@ func TestAuthService_RefreshTokens_ParallelRaceSingleWinner(t *testing.T) {
 	close(wins)
 	require.Len(t, wins, 1, "ровно один победитель гонки")
 }
+
+// RE-AUDIT: вход при заблокированной сети запрещён (раньше BlockTenant был надписью).
+func TestAuthService_Authenticate_BlockedTenantDenied(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
+	require.NoError(t, err)
+	user := &models.User{ID: uuid.New(), Email: "tblocked@test.com", PasswordHash: string(hash), Status: "active", Role: models.RoleDealer, TenantID: &tenantID}
+
+	userRepo := mocks.NewMockUserRepository()
+	userRepo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	userRepo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
+	tenantRepo := mocks.NewMockTenantRepository()
+	tenantRepo.On("FindByID", mock.Anything, tenantID).Return(&models.Tenant{ID: tenantID, Status: "blocked"}, nil)
+	svc := NewAuthServiceWithInterface(userRepo, tenantRepo)
+
+	_, err = svc.Authenticate(ctx, user.Email, "correct-password-12", "10.20.30.40")
+	require.ErrorIs(t, err, ErrTenantBlocked)
+}
+
+// RE-AUDIT: refresh при заблокированной сети запрещён.
+func TestAuthService_RefreshTokens_BlockedTenantDenied(t *testing.T) {
+	const secret = "tenant-refresh-secret"
+	viper.Set("jwt_secret", secret)
+	defer viper.Set("jwt_secret", "")
+
+	tenantID := uuid.New()
+	user := &models.User{ID: uuid.New(), Email: "tblocked-r@test.com", Role: models.RoleDealer, Status: "active", TenantID: &tenantID}
+	userRepo := mocks.NewMockUserRepository()
+	userRepo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
+	tenantRepo := mocks.NewMockTenantRepository()
+	tenantRepo.On("FindByID", mock.Anything, tenantID).Return(&models.Tenant{ID: tenantID, Status: "suspended"}, nil)
+	svc := NewAuthServiceWithInterface(userRepo, tenantRepo)
+
+	_, refresh, err := svc.GenerateTokens(user.ID, user.Email, user.Role, &tenantID, nil)
+	require.NoError(t, err)
+	_, _, err = svc.RefreshTokens(refresh)
+	require.ErrorIs(t, err, ErrTenantBlocked)
+}
+
+// RE-AUDIT: super_admin без сети — вне tenant-проверки.
+func TestAuthService_Authenticate_SuperAdminNoTenantBypass(t *testing.T) {
+	ctx := context.Background()
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
+	require.NoError(t, err)
+	user := &models.User{ID: uuid.New(), Email: "sa@test.com", PasswordHash: string(hash), Status: "active", Role: models.RoleSuperAdmin}
+
+	userRepo := mocks.NewMockUserRepository()
+	userRepo.On("GetUserByEmail", mock.Anything, user.Email).Return(user, nil)
+	userRepo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
+	svc := NewAuthServiceWithInterface(userRepo, nil)
+
+	got, err := svc.Authenticate(ctx, user.Email, "correct-password-12", "10.20.30.41")
+	require.NoError(t, err)
+	require.Equal(t, user.ID, got.ID)
+}

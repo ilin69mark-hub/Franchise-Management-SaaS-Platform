@@ -106,6 +106,23 @@ func (h *PlanHandler) List(c *gin.Context) {
 	sort := c.DefaultQuery("sort", "created_at")
 	desc := c.DefaultQuery("desc", "false") == "true"
 
+	// RE-AUDIT: sort уходил сырой строкой в SQL ORDER BY (инъекция через
+	// CASE WHEN), size — без потолка (full-scan DoS). Whitelist + cap.
+	switch sort {
+	case "name", "price", "max_salons", "max_users", "created_at", "updated_at":
+	default:
+		sort = "created_at"
+	}
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 20
+	}
+	if size > 100 {
+		size = 100
+	}
+
 	offset := (page - 1) * size
 	opts := repository.ListOptions{
 		Search:  search,
