@@ -21,10 +21,10 @@ func TestNotificationRepository_Create_Postgres(t *testing.T) {
 	repo := NewNotificationRepository(db)
 
 	notification := &models.Notification{
-		ID:        uuid.New(),
-		TenantID:  uuid.New(),
-		Message:   "Test notification",
-		IsRead:    false,
+		ID:       uuid.New(),
+		TenantID: uuid.New(),
+		Message:  "Test notification",
+		IsRead:   false,
 	}
 
 	err := repo.Create(context.Background(), notification)
@@ -72,10 +72,10 @@ func TestNotificationRepository_MarkAsRead_Postgres(t *testing.T) {
 	repo := NewNotificationRepository(db)
 
 	notification := models.Notification{
-		ID:        uuid.New(),
-		TenantID:  uuid.New(),
-		Message:   "Test",
-		IsRead:    false,
+		ID:       uuid.New(),
+		TenantID: uuid.New(),
+		Message:  "Test",
+		IsRead:   false,
 	}
 
 	err := repo.Create(context.Background(), &notification)

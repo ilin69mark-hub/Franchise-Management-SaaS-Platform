@@ -11,10 +11,10 @@ import (
 )
 
 type MockNotification struct {
-	ID        string `json:"id"`
-	TenantID  string `json:"tenant_id"`
-	Message   string `json:"message"`
-	IsRead    bool   `json:"is_read"`
+	ID       string `json:"id"`
+	TenantID string `json:"tenant_id"`
+	Message  string `json:"message"`
+	IsRead   bool   `json:"is_read"`
 }
 
 type MockNotificationService struct {

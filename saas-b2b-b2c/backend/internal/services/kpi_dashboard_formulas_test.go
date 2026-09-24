@@ -58,7 +58,7 @@ func TestDealerFinanceFormulas(t *testing.T) {
 
 	t.Run("full net profit calculation", func(t *testing.T) {
 		revenue := 2000000.0
-		cogs := revenue * 0.65  // 1300000
+		cogs := revenue * 0.65 // 1300000
 		rent := 430000.0
 		utilities := 45000.0
 		payroll := 650000.0
@@ -75,7 +75,7 @@ func TestDealerFinanceFormulas(t *testing.T) {
 
 	t.Run("net profit with bonus", func(t *testing.T) {
 		revenue := 2000000.0
-		cogs := revenue * 0.65  // 1,300,000
+		cogs := revenue * 0.65                                               // 1,300,000
 		expenses := 430000 + 45000 + 650000 + 180000 + 95000 + 60000 + 35000 // 1,495,000
 		bonus := 100000.0
 		netProfit := revenue - cogs - float64(expenses) - bonus
@@ -466,10 +466,10 @@ func TestFranchiserAvgConversionNoDealers(t *testing.T) {
 
 func TestFranchiserNetworkOverviewPlanPercent(t *testing.T) {
 	tests := []struct {
-		name         string
-		totalFact    float64
-		totalPlan    float64
-		expectedMax  int
+		name        string
+		totalFact   float64
+		totalPlan   float64
+		expectedMax int
 	}{
 		{"100% plan", 1000000, 1000000, 100},
 		{"Over plan caps at 100", 1200000, 1000000, 100},

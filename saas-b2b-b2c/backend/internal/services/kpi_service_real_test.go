@@ -72,17 +72,17 @@ func (m *MockScheduleRepositoryForTest) DeleteEvent(ctx context.Context, eventID
 func TestKPIService_SetGoal_WithRealService(t *testing.T) {
 	mockKpi := new(MockKPIRepositoryForTest)
 	mockSched := new(MockScheduleRepositoryForTest)
-	
+
 	// Используем nil для DB - сервис будет работать без него
 	service := NewKPIService(nil, mockKpi, mockSched)
 
 	goal := &models.DailyGoal{
-		UserID:      ptrToUUIDPtr(uuid.New()),
-		SalesPlan:   100000,
-		LeadsPlan:   20,
-		CallsPlan:   50,
+		UserID:       ptrToUUIDPtr(uuid.New()),
+		SalesPlan:    100000,
+		LeadsPlan:    20,
+		CallsPlan:    50,
 		MeetingsPlan: 10,
-		TargetDate:  time.Now(),
+		TargetDate:   time.Now(),
 	}
 
 	mockKpi.On("UpsertGoal", mock.Anything, goal).Return(nil)
@@ -96,13 +96,13 @@ func TestKPIService_SetGoal_WithRealService(t *testing.T) {
 func TestKPIService_SetGoal_Error(t *testing.T) {
 	mockKpi := new(MockKPIRepositoryForTest)
 	mockSched := new(MockScheduleRepositoryForTest)
-	
+
 	service := NewKPIService(nil, mockKpi, mockSched)
 
 	goal := &models.DailyGoal{
-		UserID:      ptrToUUIDPtr(uuid.New()),
-		SalesPlan:   100000,
-		TargetDate:  time.Now(),
+		UserID:     ptrToUUIDPtr(uuid.New()),
+		SalesPlan:  100000,
+		TargetDate: time.Now(),
 	}
 
 	mockKpi.On("UpsertGoal", mock.Anything, mock.Anything).Return(assert.AnError)

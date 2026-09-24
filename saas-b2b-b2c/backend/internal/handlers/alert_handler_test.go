@@ -53,8 +53,8 @@ func TestAlertTypeTrafficDrop(t *testing.T) {
 
 func TestAlertSeverityColors(t *testing.T) {
 	tests := []struct {
-		severity  string
-		expected  string
+		severity string
+		expected string
 	}{
 		{"critical", "#ff4d4f"},
 		{"warning", "#faad14"},

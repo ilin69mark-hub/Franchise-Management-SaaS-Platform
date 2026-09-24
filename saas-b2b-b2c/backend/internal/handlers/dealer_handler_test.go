@@ -173,22 +173,22 @@ func TestGetTerritoryBenchmarks_Unauthorized(t *testing.T) {
 
 func TestDealerRLS_PreventCrossTenant(t *testing.T) {
 	tests := []struct {
-		name      string
+		name            string
 		managerTenantID string
-		dataTenantID string
-		shouldAllow bool
+		dataTenantID    string
+		shouldAllow     bool
 	}{
 		{
 			name:            "Same tenant - allowed",
 			managerTenantID: "tenant-1",
 			dataTenantID:    "tenant-1",
-			shouldAllow:   true,
+			shouldAllow:     true,
 		},
 		{
 			name:            "Different tenant - denied",
 			managerTenantID: "tenant-1",
 			dataTenantID:    "tenant-2",
-			shouldAllow:   false,
+			shouldAllow:     false,
 		},
 	}
 
@@ -206,22 +206,22 @@ func TestDealerRLS_PreventCrossTenant(t *testing.T) {
 
 func TestDealerRLS_SalonAccess(t *testing.T) {
 	tests := []struct {
-		name          string
+		name           string
 		dealerSalons   []string
 		requestedSalon string
-		shouldAllow bool
+		shouldAllow    bool
 	}{
 		{
-			name:          "Access own salon",
+			name:           "Access own salon",
 			dealerSalons:   []string{"salon-1", "salon-2"},
 			requestedSalon: "salon-1",
-			shouldAllow:   true,
+			shouldAllow:    true,
 		},
 		{
-			name:          "Access another dealer's salon",
+			name:           "Access another dealer's salon",
 			dealerSalons:   []string{"salon-1", "salon-2"},
 			requestedSalon: "salon-3",
-			shouldAllow:   false,
+			shouldAllow:    false,
 		},
 	}
 
@@ -242,22 +242,22 @@ func TestDealerRLS_SalonAccess(t *testing.T) {
 
 func TestFranchiserRLS_DealerAccess(t *testing.T) {
 	tests := []struct {
-		name            string
+		name              string
 		franchiserDealers []string
-		requestedDealer  string
-		shouldAllow     bool
+		requestedDealer   string
+		shouldAllow       bool
 	}{
 		{
-			name:            "Access own dealer",
+			name:              "Access own dealer",
 			franchiserDealers: []string{"dealer-1", "dealer-2"},
-			requestedDealer:  "dealer-1",
-			shouldAllow:    true,
+			requestedDealer:   "dealer-1",
+			shouldAllow:       true,
 		},
 		{
-			name:            "Access another franchiser's dealer",
+			name:              "Access another franchiser's dealer",
 			franchiserDealers: []string{"dealer-1", "dealer-2"},
-			requestedDealer:  "dealer-3",
-			shouldAllow:    false,
+			requestedDealer:   "dealer-3",
+			shouldAllow:       false,
 		},
 	}
 
@@ -278,22 +278,22 @@ func TestFranchiserRLS_DealerAccess(t *testing.T) {
 
 func TestTerritoryManagerRLS_DealerAccess(t *testing.T) {
 	tests := []struct {
-		name          string
-		managerDealers []string
+		name            string
+		managerDealers  []string
 		requestedDealer string
-		shouldAllow  bool
+		shouldAllow     bool
 	}{
 		{
-			name:          "Access own dealers",
-			managerDealers: []string{"dealer-1", "dealer-2", "dealer-3"},
+			name:            "Access own dealers",
+			managerDealers:  []string{"dealer-1", "dealer-2", "dealer-3"},
 			requestedDealer: "dealer-2",
-			shouldAllow:  true,
+			shouldAllow:     true,
 		},
 		{
-			name:          "Cannot access other manager's dealers",
-			managerDealers: []string{"dealer-1", "dealer-2"},
+			name:            "Cannot access other manager's dealers",
+			managerDealers:  []string{"dealer-1", "dealer-2"},
 			requestedDealer: "dealer-5",
-			shouldAllow:  false,
+			shouldAllow:     false,
 		},
 	}
 

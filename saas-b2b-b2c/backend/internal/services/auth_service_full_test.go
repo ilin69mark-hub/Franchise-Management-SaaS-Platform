@@ -229,10 +229,10 @@ func TestAuthService_CreateUser_ValidationErrors(t *testing.T) {
 	svc := NewAuthServiceTestable()
 
 	tests := []struct {
-		name        string
-		email       string
-		password    string
-		wantErr     string
+		name     string
+		email    string
+		password string
+		wantErr  string
 	}{
 		{"empty email", "", "password123", "email is required"},
 		{"empty password", "test@test.com", "", "password is required"},
@@ -255,9 +255,9 @@ func TestAuthService_Authenticate_Success(t *testing.T) {
 
 	userID := uuid.New()
 	user := &models.User{
-		ID:             userID,
-		Email:          "login@test.com",
-		PasswordHash:   "hashed_password123",
+		ID:           userID,
+		Email:        "login@test.com",
+		PasswordHash: "hashed_password123",
 	}
 	svc.userRepo.users[user.Email] = user
 	svc.userRepo.byID[user.ID] = user
@@ -272,17 +272,17 @@ func TestAuthService_Authenticate_Failures(t *testing.T) {
 	svc := NewAuthServiceTestable()
 
 	user := &models.User{
-		Email:     "existing@test.com",
+		Email:        "existing@test.com",
 		PasswordHash: "hashed_correctpass",
 	}
 	svc.userRepo.users[user.Email] = user
 	svc.userRepo.byID[user.ID] = user
 
 	tests := []struct {
-		name      string
-		email     string
-		password  string
-		wantErr   string
+		name     string
+		email    string
+		password string
+		wantErr  string
 	}{
 		{"user not found", "nonexistent@test.com", "password", "invalid credentials"},
 		{"wrong password", "existing@test.com", "wrongpass", "invalid credentials"},
@@ -348,10 +348,10 @@ func TestAuthService_GenerateTokens(t *testing.T) {
 	email := "token@test.com"
 
 	tests := []struct {
-		name    string
-		userID  uuid.UUID
-		email   string
-		role    models.Role
+		name   string
+		userID uuid.UUID
+		email  string
+		role   models.Role
 	}{
 		{"dealer token", userID, email, models.RoleDealer},
 		{"franchiser token", uuid.New(), "boss@test.com", models.RoleFranchisor},
@@ -445,4 +445,3 @@ func TestAuthService_RoleBasedAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, franchiserID, *dealerUser.ManagedBy)
 }
-

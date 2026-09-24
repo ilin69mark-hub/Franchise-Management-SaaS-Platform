@@ -13,11 +13,11 @@ import (
 )
 
 type MockPlan struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
 	Price     float64 `json:"price"`
-	MaxSalons int `json:"max_salons"`
-	MaxUsers  int `json:"max_users"`
+	MaxSalons int     `json:"max_salons"`
+	MaxUsers  int     `json:"max_users"`
 }
 
 type MockPlanService struct {
@@ -156,10 +156,10 @@ func TestPlanHandler_Create_ValidRequest(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	body := map[string]interface{}{
-		"name":      "Basic Plan",
-		"price":     29.99,
+		"name":       "Basic Plan",
+		"price":      29.99,
 		"max_salons": 1,
-		"max_users": 5,
+		"max_users":  5,
 	}
 	jsonBody, _ := json.Marshal(body)
 
@@ -175,8 +175,8 @@ func TestPlanHandler_Create_MissingName(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	body := map[string]interface{}{
-		"name":      "",
-		"price":     29.99,
+		"name":       "",
+		"price":      29.99,
 		"max_salons": 1,
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -204,10 +204,10 @@ func TestPlanHandler_Get_Success(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	createBody := map[string]interface{}{
-		"name":      "Test Plan",
-		"price":     49.99,
+		"name":       "Test Plan",
+		"price":      49.99,
 		"max_salons": 2,
-		"max_users": 10,
+		"max_users":  10,
 	}
 	jsonCreate, _ := json.Marshal(createBody)
 	createReq, _ := http.NewRequest("POST", "/api/v1/plans", bytes.NewBuffer(jsonCreate))
@@ -240,10 +240,10 @@ func TestPlanHandler_List_Success(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	body := map[string]interface{}{
-		"name":      "Plan 1",
-		"price":     10.0,
+		"name":       "Plan 1",
+		"price":      10.0,
 		"max_salons": 1,
-		"max_users": 5,
+		"max_users":  5,
 	}
 	jsonBody, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", "/api/v1/plans", bytes.NewBuffer(jsonBody))
@@ -262,10 +262,10 @@ func TestPlanHandler_Update_Success(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	createBody := map[string]interface{}{
-		"name":      "Original Plan",
-		"price":     10.0,
+		"name":       "Original Plan",
+		"price":      10.0,
 		"max_salons": 1,
-		"max_users": 5,
+		"max_users":  5,
 	}
 	jsonCreate, _ := json.Marshal(createBody)
 	createReq, _ := http.NewRequest("POST", "/api/v1/plans", bytes.NewBuffer(jsonCreate))
@@ -278,8 +278,8 @@ func TestPlanHandler_Update_Success(t *testing.T) {
 	planID := created["id"].(string)
 
 	updateBody := map[string]interface{}{
-		"name":      "Updated Plan",
-		"price":     19.99,
+		"name":  "Updated Plan",
+		"price": 19.99,
 	}
 	jsonUpdate, _ := json.Marshal(updateBody)
 	req, _ := http.NewRequest("PATCH", "/api/v1/plans/"+planID, bytes.NewBuffer(jsonUpdate))
@@ -310,10 +310,10 @@ func TestPlanHandler_Delete_Success(t *testing.T) {
 	router := setupPlanTestRouter()
 
 	createBody := map[string]interface{}{
-		"name":      "To Delete",
-		"price":     10.0,
+		"name":       "To Delete",
+		"price":      10.0,
 		"max_salons": 1,
-		"max_users": 5,
+		"max_users":  5,
 	}
 	jsonCreate, _ := json.Marshal(createBody)
 	createReq, _ := http.NewRequest("POST", "/api/v1/plans", bytes.NewBuffer(jsonCreate))

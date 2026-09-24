@@ -174,10 +174,10 @@ func TestRBAC_DealerList_AccessByRole(t *testing.T) {
 
 func TestRLS_DealerAccessByUser(t *testing.T) {
 	handler := NewRBACTestHandler()
-	
+
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	
+
 	authMiddleware := func() gin.HandlerFunc {
 		return func(c *gin.Context) {
 			roleHeader := c.GetHeader("X-Test-Role")
@@ -191,7 +191,7 @@ func TestRLS_DealerAccessByUser(t *testing.T) {
 			c.Next()
 		}
 	}
-	
+
 	r.GET("/api/v1/dealers/:id", authMiddleware(), handler.GetDealerByID)
 
 	router := r
@@ -203,12 +203,12 @@ func TestRLS_DealerAccessByUser(t *testing.T) {
 	handler.dealers[dealerID1] = models.Dealer{
 		ID:     dealerID1,
 		UserID: userID,
-		Name:  "My Dealer",
+		Name:   "My Dealer",
 	}
 	handler.dealers[dealerID2] = models.Dealer{
 		ID:     dealerID2,
 		UserID: uuid.New(),
-		Name:  "Other Dealer",
+		Name:   "Other Dealer",
 	}
 
 	tests := []struct {

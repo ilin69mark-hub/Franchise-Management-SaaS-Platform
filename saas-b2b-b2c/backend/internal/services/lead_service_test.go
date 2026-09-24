@@ -60,7 +60,7 @@ func TestLeadService_CreateLead_Success(t *testing.T) {
 	service := NewLeadService(mockRepo)
 
 	user := &models.User{
-		ID:     uuid.New(),
+		ID:      uuid.New(),
 		SalonID: ptrToUUID(uuid.New()),
 	}
 	req := models.CreateLeadRequest{
@@ -86,7 +86,7 @@ func TestLeadService_CreateLead_NoSalonID(t *testing.T) {
 	service := NewLeadService(mockRepo)
 
 	user := &models.User{
-		ID:     uuid.New(),
+		ID:      uuid.New(),
 		SalonID: nil,
 	}
 	req := models.CreateLeadRequest{
@@ -106,7 +106,7 @@ func TestLeadService_CreateLead_RepoError(t *testing.T) {
 	service := NewLeadService(mockRepo)
 
 	user := &models.User{
-		ID:     uuid.New(),
+		ID:      uuid.New(),
 		SalonID: ptrToUUID(uuid.New()),
 	}
 	req := models.CreateLeadRequest{

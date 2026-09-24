@@ -95,12 +95,12 @@ func TestKPIService_SetGoal(t *testing.T) {
 		service := NewKPIServiceTestable(kpiRepo, schedRepo)
 
 		goal := &models.DailyGoal{
-			UserID:      ptrUUID(uuid.New()),
-			SalesPlan:   100000,
-			LeadsPlan:   20,
-			CallsPlan:   50,
+			UserID:       ptrUUID(uuid.New()),
+			SalesPlan:    100000,
+			LeadsPlan:    20,
+			CallsPlan:    50,
 			MeetingsPlan: 10,
-			TargetDate:  time.Now(),
+			TargetDate:   time.Now(),
 		}
 		kpiRepo.On("UpsertGoal", mock.Anything, goal).Return(nil)
 
@@ -118,8 +118,8 @@ func TestKPIService_SetGoal(t *testing.T) {
 		existingGoal := &models.DailyGoal{
 			ID:         uuid.New(),
 			UserID:     ptrUUID(uuid.New()),
-			SalesPlan:   100000,
-			LeadsPlan:   20,
+			SalesPlan:  100000,
+			LeadsPlan:  20,
 			TargetDate: time.Now(),
 		}
 		kpiRepo.On("UpsertGoal", mock.Anything, mock.Anything).Return(nil)
@@ -136,7 +136,7 @@ func TestKPIService_SetGoal(t *testing.T) {
 		service := NewKPIServiceTestable(kpiRepo, schedRepo)
 
 		goal := &models.DailyGoal{
-			UserID:      ptrUUID(uuid.New()),
+			UserID:     ptrUUID(uuid.New()),
 			TargetDate: time.Now(),
 		}
 		kpiRepo.On("UpsertGoal", mock.Anything, goal).Return(errors.New("db error"))
@@ -154,9 +154,9 @@ func TestKPIService_SetGoal(t *testing.T) {
 		service := NewKPIServiceTestable(kpiRepo, schedRepo)
 
 		goal := &models.DailyGoal{
-			SalonID:     ptrUUID(uuid.New()),
-			SalesPlan:   500000,
-			LeadsPlan:   50,
+			SalonID:    ptrUUID(uuid.New()),
+			SalesPlan:  500000,
+			LeadsPlan:  50,
 			TargetDate: time.Now(),
 		}
 		kpiRepo.On("UpsertGoal", mock.Anything, mock.MatchedBy(func(g *models.DailyGoal) bool {

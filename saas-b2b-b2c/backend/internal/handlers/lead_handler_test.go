@@ -37,11 +37,11 @@ func setupLeadTestRouter() *gin.Engine {
 			return
 		}
 		lead := &models.Lead{
-			ID:        uuid.New(),
-			FullName:  req.FullName,
-			Phone:     req.Phone,
-			Email:     req.Email,
-			Status:    "new",
+			ID:       uuid.New(),
+			FullName: req.FullName,
+			Phone:    req.Phone,
+			Email:    req.Email,
+			Status:   "new",
 		}
 		c.JSON(http.StatusCreated, lead)
 	})

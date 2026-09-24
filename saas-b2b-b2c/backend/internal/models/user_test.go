@@ -74,10 +74,10 @@ func TestUser_Fields(t *testing.T) {
 
 func TestUserLoginRequest_Validation(t *testing.T) {
 	tests := []struct {
-		name    string
-		email   string
+		name     string
+		email    string
 		password string
-		valid   bool
+		valid    bool
 	}{
 		{"valid", "test@example.com", "password123", true},
 		{"empty email", "", "password123", false},
@@ -91,7 +91,7 @@ func TestUserLoginRequest_Validation(t *testing.T) {
 				Email:    tt.email,
 				Password: tt.password,
 			}
-			
+
 			if tt.valid {
 				assert.NotEmpty(t, req.Email)
 				assert.NotEmpty(t, req.Password)
@@ -153,7 +153,7 @@ func TestAuthResponse(t *testing.T) {
 
 func TestCreateEmployeeRequest(t *testing.T) {
 	tenantID := uuid.New()
-	
+
 	req := CreateEmployeeRequest{
 		Email:     "employee@example.com",
 		Password:  "password123",
@@ -173,7 +173,7 @@ func TestCreateEmployeeRequest(t *testing.T) {
 
 func TestUpdateEmployeeRequest(t *testing.T) {
 	managedByID := uuid.New()
-	
+
 	req := UpdateEmployeeRequest{
 		FirstName: "NewFirstName",
 		LastName:  "NewLastName",
@@ -189,7 +189,7 @@ func TestUpdateEmployeeRequest(t *testing.T) {
 
 func TestUser_Timestamps(t *testing.T) {
 	now := time.Now()
-	
+
 	user := User{
 		ID:        uuid.New(),
 		Email:     "time@test.com",
@@ -212,9 +212,9 @@ func TestUser_RoleConstants(t *testing.T) {
 
 func TestUser_StatusDefault(t *testing.T) {
 	user := User{
-		ID:   uuid.New(),
+		ID:    uuid.New(),
 		Email: "status@test.com",
-		Role: RoleDealer,
+		Role:  RoleDealer,
 	}
 
 	// Default status should be empty or "active" based on model definition
@@ -224,28 +224,28 @@ func TestUser_StatusDefault(t *testing.T) {
 
 func TestUser_SoftDelete(t *testing.T) {
 	user := User{
-		ID:        uuid.New(),
-		Email:     "delete@test.com",
-		Role:      RoleDealer,
+		ID:    uuid.New(),
+		Email: "delete@test.com",
+		Role:  RoleDealer,
 	}
 
 	// Verify DeletedAt field exists - check it's initially zero
 	// DeletedAt is gorm.DeletedAt which wraps sql.NullTime
 	// Check it's zero by checking Valid field
 	_ = user.DeletedAt.Valid // This should compile
-	
+
 	// Just verify the field exists
 	assert.NotNil(t, user.DeletedAt)
 }
 
 func TestUser_TenantAssociation(t *testing.T) {
 	tenantID := uuid.New()
-	
+
 	user := User{
-		ID:        uuid.New(),
-		Email:     "tenant@test.com",
-		Role:      RoleFranchisor,
-		TenantID:  &tenantID,
+		ID:       uuid.New(),
+		Email:    "tenant@test.com",
+		Role:     RoleFranchisor,
+		TenantID: &tenantID,
 	}
 
 	assert.NotNil(t, user.TenantID)
@@ -255,7 +255,7 @@ func TestUser_TenantAssociation(t *testing.T) {
 func TestUser_SalonAssociation(t *testing.T) {
 	salonID := uuid.New()
 	tenantID := uuid.New()
-	
+
 	user := User{
 		ID:        uuid.New(),
 		Email:     "salon@test.com",
@@ -272,7 +272,7 @@ func TestUser_SalonAssociation(t *testing.T) {
 func TestUser_ManagerHierarchy(t *testing.T) {
 	franchiserID := uuid.New()
 	dealerID := uuid.New()
-	
+
 	dealer := User{
 		ID:        dealerID,
 		Email:     "dealer@test.com",

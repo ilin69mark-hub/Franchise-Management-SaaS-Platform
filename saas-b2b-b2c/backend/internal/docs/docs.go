@@ -8,14 +8,14 @@ import (
 
 type SwaggerInfo struct {
 	Swagger string `json:"swagger"`
-	Info   struct {
+	Info    struct {
 		Description string `json:"description"`
 		Title       string `json:"title"`
 		Version     string `json:"version"`
 	} `json:"info"`
-	Host    string   `json:"host"`
-	BasePath string `json:"basePath"`
-	Paths   map[string]map[string]interface{} `json:"paths"`
+	Host     string                            `json:"host"`
+	BasePath string                            `json:"basePath"`
+	Paths    map[string]map[string]interface{} `json:"paths"`
 }
 
 func GetSwaggerSpec() SwaggerInfo {
@@ -50,11 +50,11 @@ func GetSwaggerSpec() SwaggerInfo {
 				"summary": "Get profile",
 			}},
 			"/users": {
-				"get": map[string]interface{}{"tags": []string{"Users"}, "summary": "List employees"},
+				"get":  map[string]interface{}{"tags": []string{"Users"}, "summary": "List employees"},
 				"post": map[string]interface{}{"tags": []string{"Users"}, "summary": "Create employee"},
 			},
 			"/leads": {
-				"get": map[string]interface{}{"tags": []string{"CRM"}, "summary": "List leads"},
+				"get":  map[string]interface{}{"tags": []string{"CRM"}, "summary": "List leads"},
 				"post": map[string]interface{}{"tags": []string{"CRM"}, "summary": "Create lead"},
 			},
 			"/checklists": {"get": map[string]interface{}{
@@ -62,7 +62,7 @@ func GetSwaggerSpec() SwaggerInfo {
 				"summary": "List checklists",
 			}},
 			"/goals": {
-				"get": map[string]interface{}{"tags": []string{"Goals"}, "summary": "List goals"},
+				"get":  map[string]interface{}{"tags": []string{"Goals"}, "summary": "List goals"},
 				"post": map[string]interface{}{"tags": []string{"Goals"}, "summary": "Set goal"},
 			},
 			"/schedule": {"get": map[string]interface{}{

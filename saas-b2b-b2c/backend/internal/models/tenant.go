@@ -1,36 +1,36 @@
 package models
 
 import (
-    "time"
+	"time"
 
-    "github.com/google/uuid"
-    "gorm.io/gorm"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type Tenant struct {
-    ID     uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-    Name   string    `json:"name" gorm:"not null"`
-    PlanID *uuid.UUID `json:"plan_id" gorm:"type:uuid"`
-    Status string    `json:"status" gorm:"default:'active'"`
-    
-    // Реквизиты
-    LegalEntity string `json:"legal_entity"`
-    INN         string `json:"inn"`
-    
-    // Лимиты
-    MaxUsers int `json:"max_users" gorm:"default:10"`
-    
-    // Биллинг
-    PaidUntil       *time.Time `json:"paid_until"`
-    GracePeriodDays int        `json:"grace_period_days" gorm:"default:7"`
+	ID     uuid.UUID  `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	Name   string     `json:"name" gorm:"not null"`
+	PlanID *uuid.UUID `json:"plan_id" gorm:"type:uuid"`
+	Status string     `json:"status" gorm:"default:'active'"`
 
-    // Soft Delete (для аналитики Churn)
-    DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+	// Реквизиты
+	LegalEntity string `json:"legal_entity"`
+	INN         string `json:"inn"`
 
-    CreatedAt time.Time `json:"created_at"`
-    UpdatedAt time.Time `json:"updated_at"`
+	// Лимиты
+	MaxUsers int `json:"max_users" gorm:"default:10"`
+
+	// Биллинг
+	PaidUntil       *time.Time `json:"paid_until"`
+	GracePeriodDays int        `json:"grace_period_days" gorm:"default:7"`
+
+	// Soft Delete (для аналитики Churn)
+	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (Tenant) TableName() string {
-    return "tenants"
+	return "tenants"
 }

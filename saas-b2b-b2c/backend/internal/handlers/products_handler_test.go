@@ -12,10 +12,10 @@ import (
 
 func TestProductsCalculation(t *testing.T) {
 	tests := []struct {
-		name          string
-		totalRevenue  float64
+		name           string
+		totalRevenue   float64
 		productRevenue float64
-		expectedShare float64
+		expectedShare  float64
 	}{
 		{"100% share", 1000000, 1000000, 100},
 		{"50% share", 1000000, 500000, 50},
@@ -36,8 +36,8 @@ func TestProductsCalculation(t *testing.T) {
 
 func TestStockTurnover(t *testing.T) {
 	tests := []struct {
-		name        string
-		days        int
+		name         string
+		days         int
 		isSlowMoving bool
 	}{
 		{"Fast moving", 30, false},
@@ -78,7 +78,7 @@ func TestLostSalesThreshold(t *testing.T) {
 
 func TestProductsSortByRevenue(t *testing.T) {
 	products := []struct {
-		Name   string
+		Name    string
 		Revenue float64
 	}{
 		{"Product A", 500000},
@@ -102,7 +102,7 @@ func TestProductsSortByRevenue(t *testing.T) {
 
 func TestProductsSortByQuantity(t *testing.T) {
 	products := []struct {
-		Name    string
+		Name     string
 		Quantity int
 	}{
 		{"Product A", 10},
