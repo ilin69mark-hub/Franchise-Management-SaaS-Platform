@@ -10,35 +10,15 @@ title = "Franchise-Management-SaaS-Platform gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Локальные dev-placeholders и тест-константы — НЕ прод-секреты"
+description = "Только точные dev-placeholders — НЕ прод-секреты (сужено после аудита)"
 regexes = [
-  # JWT dev-fallback'и (безопасные плейсхолдеры, задаются в .env на проде)
-  '''default_secret_key_for_development_change_me_in_production''',
-  '''my_strong_and_fixed_secret_key_development_change_in_production''',
-  '''unsafe-default-jwt-secret-change-me''',
-  '''CHANGE_ME_JWT_SECRET''',
-  '''CHANGE_ME_JWT_SECRET_KEY''',
-  # Docker-/compose-фолбэки (узко: только dev-postgres, не любой postgres)
-  '''unsafe-default-dev-db-password-change-me''',
-  '''CHANGE_ME_DB_PASSWORD''',
-  '''POSTGRES_PASSWORD\s*=\s*postgres''',
-  '''POSTGRES_USER\s*=\s*postgres''',
-  '''DB_PASSWORD\s*=\s*postgres''',
-  '''DB_USER\s*=\s*postgres''',
-  '''\$\{DB_PASSWORD:-postgres\}''',
-  '''\$\{DB_USER:-postgres\}''',
-  # Старые литералы, которые filter-repo УЖЕ заменил на плейсхолдеры — просто чтобы
-  # CI не падал, если кто-то случайно вернёт их в dev-config. В прод НЕ идут.
-  '''supersecretkeyfordevelopment''',
-  '''default_secret_key_for_development''',
-  '''default_secret_key''',
-  '''default_secret''',
-  # Husky/.env-блок
-  '''\.env(\.example)?$''',
-  # JWT-ПРИМЕРЫ в README (формат Bearer <token>, оборвано на "...") — НЕ реальные токены
+  # JWT dev-fallback — точные литералы
+  '''^unsafe-default-jwt-secret-change-me$''',
+  '''^CHANGE_ME_JWT_SECRET$''',
+  '''^CHANGE_ME_JWT_SECRET_KEY$''',
+  # Docker dev — только точные дефолты для локального docker-compose.yml (не prod)
+  '''^POSTGRES_PASSWORD=postgres$''',
+  '''^POSTGRES_USER=postgres$''',
+  # JWT пример в README с обрывом — не реальный токен
   '''eyJhbGciOiJIUzI1NiIs[A-Za-z0-9_+/]*\.\.\.''',
-  # Docs примеры с test-заглушками (DEPLOY.md) — не прод-секреты
-  '''JWT_SECRET=test''',
-  '''DB_PASSWORD=test''',
-  '''test1234567890''',
 ]
