@@ -22,6 +22,11 @@ func TestLoggingMiddleware_WritesUserLog(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// :memory: + пул = каждая новая коннекция видит пустую БД.
+	// Без этого тест флапает (поймано CI, локально везло).
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	// PG-теги модели (uuid/gen_random_uuid) sqlite не понимает — DDL вручную.
 	require.NoError(t, db.Exec(`CREATE TABLE user_logs (
 		id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

@@ -127,6 +127,9 @@ func TestSecurity_CalcPercentVal_Negative(t *testing.T) {
 func TestSecurity_CreateEmployee_DealerCannotCreateFranchiserManager(t *testing.T) {
 	mockRepo := new(MockUserRepoSec)
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if sqlDB, _ := db.DB(); sqlDB != nil {
+		sqlDB.SetMaxOpenConns(1) // :memory: иначе вторая коннекция видит пустую БД (flake, поймано CI)
+	}
 	svc := NewUserServiceWithInterface(mockRepo, db)
 	req := models.CreateEmployeeRequest{Email: "x@evil.com", Password: "123456", Role: models.RoleFranchisorManager, FirstName: "a"}
 	tenant := uuid.New()
@@ -137,6 +140,9 @@ func TestSecurity_CreateEmployee_DealerCannotCreateFranchiserManager(t *testing.
 
 func TestSecurity_CreateInvoice_NegativeRejected(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if sqlDB, _ := db.DB(); sqlDB != nil {
+		sqlDB.SetMaxOpenConns(1) // :memory: иначе вторая коннекция видит пустую БД (flake, поймано CI)
+	}
 	_ = db.Exec(`CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, tenant_id TEXT, amount REAL, description TEXT, status TEXT, due_date DATETIME, paid_at DATETIME, created_at DATETIME, updated_at DATETIME)`)
 	svc := NewAdminService(db)
 	_, err := svc.CreateInvoice(uuid.New(), -100, "evil", time.Now())
@@ -145,6 +151,9 @@ func TestSecurity_CreateInvoice_NegativeRejected(t *testing.T) {
 
 func TestSecurity_MarkInvoicePaid_Idempotent(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if sqlDB, _ := db.DB(); sqlDB != nil {
+		sqlDB.SetMaxOpenConns(1) // :memory: иначе вторая коннекция видит пустую БД (flake, поймано CI)
+	}
 	_ = db.Exec(`CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, tenant_id TEXT, amount REAL, description TEXT, status TEXT, due_date DATETIME, paid_at DATETIME, created_at DATETIME, updated_at DATETIME)`)
 	svc := NewAdminService(db)
 	tenant := uuid.New()
@@ -170,6 +179,9 @@ func TestSecurity_MarkInvoicePaid_Idempotent(t *testing.T) {
 
 func TestSecurity_CreateInvoice_AmountTooLargeRejected(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if sqlDB, _ := db.DB(); sqlDB != nil {
+		sqlDB.SetMaxOpenConns(1) // :memory: иначе вторая коннекция видит пустую БД (flake, поймано CI)
+	}
 	_ = db.Exec(`CREATE TABLE IF NOT EXISTS invoices (id TEXT PRIMARY KEY, tenant_id TEXT, amount REAL, description TEXT, status TEXT, due_date DATETIME, paid_at DATETIME, created_at DATETIME, updated_at DATETIME)`)
 	svc := NewAdminService(db)
 	_, err := svc.CreateInvoice(uuid.New(), 2e12, "evil", time.Now())
@@ -178,6 +190,9 @@ func TestSecurity_CreateInvoice_AmountTooLargeRejected(t *testing.T) {
 
 func TestSecurity_TZ_GetDashboardMainUsesUTC(t *testing.T) {
 	db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if sqlDB, _ := db.DB(); sqlDB != nil {
+		sqlDB.SetMaxOpenConns(1) // :memory: иначе вторая коннекция видит пустую БД (flake, поймано CI)
+	}
 	_ = db.AutoMigrate(&models.User{}, &models.Salon{}, &models.Goal{}, &models.Lead{}, &models.Order{}, &models.Contract{})
 	svc := NewKPIService(db, nil, nil)
 	uid := uuid.New()

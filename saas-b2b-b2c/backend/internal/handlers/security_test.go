@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,6 +114,15 @@ func TestSecurity_AuthMiddleware_TrimSpaceBearer(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code, "bearer with extra spaces must be trimmed")
 }
 
+// testClientIP — уникальный IP на запуск: глобальный in-memory лимитер общий
+// на процесс, фиксированный IP флапает при повторах.
+var testClientIPSeq int64
+
+func nextTestClientIP() string {
+	n := atomic.AddInt64(&testClientIPSeq, 1)
+	return fmt.Sprintf("10.%d.%d.1:1234", (n/250)%250+1, n%250+1)
+}
+
 func TestSecurity_RateLimit_6thRequest429(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -119,10 +130,11 @@ func TestSecurity_RateLimit_6thRequest429(t *testing.T) {
 	r.Use(middleware.RateLimit(5, time.Minute))
 	r.GET("/", func(c *gin.Context) { c.Status(200) })
 	var lastCode int
+	clientIP := nextTestClientIP()
 	for i := 0; i < 6; i++ {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
-		req.RemoteAddr = "10.0.0.1:1234"
+		req.RemoteAddr = clientIP
 		r.ServeHTTP(w, req)
 		lastCode = w.Code
 	}
@@ -136,11 +148,14 @@ func TestSecurity_RateLimit_XFFIgnoredWhenTrusted(t *testing.T) {
 	r.Use(middleware.RateLimit(5, time.Minute))
 	r.GET("/", func(c *gin.Context) { c.Status(200) })
 	// attacker tries XFF random
+	clientIP := nextTestClientIP()
+	// Ключ лимитера здесь — сам XFF (прокси доверенные): уникален на прогон.
+	xff := nextTestClientIP()
 	for i := 0; i < 6; i++ {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/", nil)
-		req.RemoteAddr = "10.0.0.1:1234"
-		req.Header.Set("X-Forwarded-For", "9.9.9.9")
+		req.RemoteAddr = clientIP
+		req.Header.Set("X-Forwarded-For", xff)
 		r.ServeHTTP(w, req)
 		if i < 5 {
 			require.Equal(t, http.StatusOK, w.Code)
