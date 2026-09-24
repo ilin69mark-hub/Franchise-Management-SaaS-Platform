@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -59,41 +60,106 @@ const hibpTimeout = 2 * time.Second
 // RE-AUDIT: пункт чеклиста «проверка на утечки». Fail-open при недоступности API:
 // недоступность внешней сети не должна класть регистрацию (событие — в лог).
 // Возвращает (exposed, checked): checked=false — API недоступно, решение за политикой выше.
+// fetchHIBPSuffixes — сырой список суффиксов префикса (для сверки и кэширования).
+func fetchHIBPSuffixes(prefix string) ([]string, bool) {
+	client := &http.Client{Timeout: hibpTimeout}
+	resp, err := client.Get(hibpBaseURL + "/range/" + prefix)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, false
+	}
+	var out []string
+	for _, line := range strings.Split(string(body), "\n") {
+		parts := strings.Split(strings.TrimSpace(line), ":")
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) != "" {
+			out = append(out, strings.TrimSpace(parts[0]))
+		}
+	}
+	return out, true
+}
+
 func checkHIBP(password string) (exposed bool, checked bool) {
 	sum := sha1.Sum([]byte(password))
 	hex := strings.ToUpper(hex.EncodeToString(sum[:]))
 	prefix, suffix := hex[:5], hex[5:]
 
-	client := &http.Client{Timeout: hibpTimeout}
-	resp, err := client.Get(hibpBaseURL + "/range/" + prefix)
-	if err != nil {
+	suffixes, ok := fetchHIBPSuffixes(prefix)
+	if !ok {
 		return false, false
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return false, false
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return false, false
-	}
-	for _, line := range strings.Split(string(body), "\n") {
-		parts := strings.Split(strings.TrimSpace(line), ":")
-		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), suffix) {
+	for _, s := range suffixes {
+		if strings.EqualFold(s, suffix) {
 			return true, true
 		}
 	}
 	return false, true
 }
 
+// hibpCacheTTL — кэш ответов range-API: префикс редко меняется, режем latency/нагрузку.
+const hibpCacheTTL = 24 * time.Hour
+
+// hibpCachedSuffixes — префикс -> множество суффиксов из прошлого ответа (только чтение API).
+func hibpCachedSuffixes(ctx context.Context, prefix string) (map[string]bool, bool) {
+	if cache.Client == nil {
+		return nil, false
+	}
+	raw, err := cache.Client.HGetAll(ctx, "hibp:"+prefix).Result()
+	if err != nil || len(raw) == 0 {
+		return nil, false
+	}
+	out := make(map[string]bool, len(raw))
+	for k := range raw {
+		out[strings.ToUpper(k)] = true
+	}
+	return out, true
+}
+
+func hibpStoreSuffixes(ctx context.Context, prefix string, suffixes []string) {
+	if cache.Client == nil || len(suffixes) == 0 {
+		return
+	}
+	pipe := cache.Client.Pipeline()
+	key := "hibp:" + prefix
+	for _, s := range suffixes {
+		pipe.HSet(ctx, key, strings.ToUpper(strings.TrimSpace(s)), "1")
+	}
+	pipe.Expire(ctx, key, hibpCacheTTL)
+	_, _ = pipe.Exec(ctx)
+}
+
 // rejectPwnedPassword — отклоняет засвеченные пароли; недоступность API — лог, не блок.
+// RE-AUDIT: ответы кэшируются (префикс→суффиксы, 24ч) — каждый register больше
+// не держит воркер до 2с; пропуск при outage виден в логах (hibp_unchecked).
 func rejectPwnedPassword(password string) error {
-	exposed, checked := checkHIBP(password)
-	if !checked {
+	sum := sha1.Sum([]byte(password))
+	hex := strings.ToUpper(hex.EncodeToString(sum[:]))
+	prefix, suffix := hex[:5], hex[5:]
+	ctx := context.Background()
+
+	if cached, ok := hibpCachedSuffixes(ctx, prefix); ok {
+		if cached[suffix] {
+			return errors.New("password has been exposed in data breaches, choose another")
+		}
 		return nil
 	}
-	if exposed {
-		return errors.New("password has been exposed in data breaches, choose another")
+
+	suffixes, ok := fetchHIBPSuffixes(prefix)
+	if !ok {
+		log.Printf("hibp_unchecked: password breach check skipped (API unavailable)")
+		return nil
+	}
+	hibpStoreSuffixes(ctx, prefix, suffixes)
+	for _, s := range suffixes {
+		if strings.EqualFold(s, suffix) {
+			return errors.New("password has been exposed in data breaches, choose another")
+		}
 	}
 	return nil
 }
@@ -243,14 +309,19 @@ func (s *AuthService) CreateUser(user *models.User, password string) (*models.Us
 }
 
 // Authenticate - Проверка логина/пароля
-// loginFailKey — ключ счётчика неудач (нормализован: регистр/пробелы не обходят).
-func loginFailKey(email string) string {
-	return "loginfail:" + strings.ToLower(strings.TrimSpace(email))
+// loginFailKey — ключ счётчика неудач: IP+email (RE-AUDIT: ключ только по email
+// позволял любому лочить чужой аккаунт 10 запросами; CAPTCHA — следующим шагом,
+// пока изоляция по IP клиента).
+func loginFailKey(clientIP, email string) string {
+	clientIP = strings.TrimSpace(clientIP)
+	if clientIP == "" {
+		clientIP = "unknown-ip"
+	}
+	return "loginfail:" + clientIP + ":" + strings.ToLower(strings.TrimSpace(email))
 }
 
-func (s *AuthService) Authenticate(email, password string) (*models.User, error) {
-	ctx := context.Background()
-	failKey := loginFailKey(email)
+func (s *AuthService) Authenticate(ctx context.Context, email, password, clientIP string) (*models.User, error) {
+	failKey := loginFailKey(clientIP, email)
 
 	// F9: сначала lockout (до обращения к БД — не даём перебирать и не течём таймингом).
 	if cache.PeekLimit(ctx, failKey) >= maxLoginAttempts {

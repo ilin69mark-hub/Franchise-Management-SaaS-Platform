@@ -127,7 +127,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.Authenticate(req.Email, req.Password)
+	user, err := h.service.Authenticate(c.Request.Context(), req.Email, req.Password, c.ClientIP())
 	if err != nil {
 		if errors.Is(err, services.ErrUserBlocked) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked"})

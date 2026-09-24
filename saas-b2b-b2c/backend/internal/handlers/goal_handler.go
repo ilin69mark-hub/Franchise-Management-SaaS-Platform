@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -32,6 +33,10 @@ func (h *GoalHandler) SetGoal(c *gin.Context) {
 	ctx := context.WithValue(c.Request.Context(), "role", userRole)
 	goal, err := h.svc.CreateGoal(ctx, dto, assignerID.(string), tenantID.(string))
 	if err != nil {
+		if errors.Is(err, services.ErrGoalExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": "goal already exists"})
+			return
+		}
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}

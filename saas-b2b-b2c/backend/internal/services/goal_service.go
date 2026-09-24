@@ -22,6 +22,9 @@ type GoalService interface {
 // errForbidden — владелец/tenant не совпал (маппится в 403, а не 500).
 var errGoalForbidden = errors.New("forbidden: goal not in your scope")
 
+// ErrGoalExists — дубль при параллельном повторе (маппится в 409, а не 500).
+var ErrGoalExists = errors.New("goal already exists")
+
 // sameTenant — оба tenant заданы и равны; если у цели tenant нет — требуем assigner.
 func sameGoalTenant(goalTenant *uuid.UUID, callerTenant string) bool {
 	if goalTenant == nil {
@@ -178,6 +181,11 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 		goal.TenantID = &tid
 	}
 	if err := s.repo.Create(ctx, goal); err != nil {
+		// RE-AUDIT: гонка двойного POST — вторая вставка упирается в
+		// idx_goals_assignee_period_dates: 409 вместо 500, дублей нет.
+		if isDuplicateKeyErr(err) {
+			return nil, ErrGoalExists
+		}
 		return nil, err
 	}
 	return goal, nil

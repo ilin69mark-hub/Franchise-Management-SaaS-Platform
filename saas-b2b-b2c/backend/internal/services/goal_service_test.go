@@ -428,3 +428,29 @@ func TestGoalService_CreateGoal_UnknownAssigneeRejected(t *testing.T) {
 	require.Nil(t, goal)
 	mockRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 }
+
+func TestGoalService_CreateGoal_DuplicateMaps409(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	tenant := uuid.New()
+	assignee := uuid.New().String()
+	dto := CreateGoalDTO{
+		AssigneeID: assignee,
+		Role:       string(models.RoleDealer),
+		SalesPlan:  500.0,
+		Period:     "month",
+		StartDate:  "2024-03-01",
+		EndDate:    "2024-03-31",
+	}
+
+	ctx := context.WithValue(context.Background(), "role", string(models.RoleFranchisorManager))
+
+	mockRepo.On("GetUserTenant", mock.Anything, assignee).Return(tenant, nil)
+	mockRepo.On("Create", mock.Anything, mock.Anything).Return(errors.New(`duplicate key value violates unique constraint "idx_goals_assignee_period_dates"`))
+
+	goal, err := service.CreateGoal(ctx, dto, uuid.New().String(), tenant.String())
+
+	require.ErrorIs(t, err, ErrGoalExists)
+	require.Nil(t, goal)
+}

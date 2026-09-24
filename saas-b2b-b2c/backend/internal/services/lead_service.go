@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt" // Добавлен импорт для форматирования ошибок
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
@@ -63,6 +64,10 @@ func (s *LeadService) UpdateStatus(ctx context.Context, managerID, leadID uuid.U
 }
 
 func (s *LeadService) AddActivity(ctx context.Context, userID, leadID uuid.UUID, req models.AddLeadActivityRequest) error {
+	// RE-AUDIT: заметки только в свои лиды (раньше — запись в лид чужой сети).
+	if _, err := s.repo.GetLeadByID(ctx, leadID, userID); err != nil {
+		return errors.New("lead not found or access denied")
+	}
 	activity := &models.LeadActivity{
 		LeadID:      leadID,
 		UserID:      userID,

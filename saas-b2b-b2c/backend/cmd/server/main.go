@@ -4,7 +4,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -127,15 +126,12 @@ func main() {
 	r.Use(middleware.CORS())
 
 	r.GET("/health", func(c *gin.Context) {
-		var m runtime.MemStats
-		runtime.ReadMemStats(&m)
+		// RE-AUDIT: минимум для неаутентифицированного эндпоинта —
+		// memory_mb/version светили внутренности для recon.
 		status := "OK"
 		code := http.StatusOK
 		dbStatus := "ok"
 		redisStatus := "ok"
-		if m.Alloc > 500*1024*1024 {
-			status = "WARNING"
-		}
 		if err := db.Exec("SELECT 1").Error; err != nil {
 			dbStatus = "down"
 			status = "degraded"
@@ -155,7 +151,6 @@ func main() {
 			"status":    status,
 			"timestamp": time.Now().Format(time.RFC3339),
 			"version":   "1.0.0-stage1",
-			"memory_mb": m.Alloc / 1024 / 1024,
 			"db":        dbStatus,
 			"redis":     redisStatus,
 		})

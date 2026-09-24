@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
@@ -82,7 +83,7 @@ func TestAuthService_Authenticate_BlockedUser(t *testing.T) {
 	repo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
 
 	svc := NewAuthServiceWithInterface(repo, nil)
-	_, err = svc.Authenticate("blocked@test.com", "password123")
+	_, err = svc.Authenticate(context.Background(), "blocked@test.com", "password123", "10.9.9.8")
 
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrUserBlocked))
@@ -107,7 +108,7 @@ func TestAuthService_Authenticate_ActiveUser(t *testing.T) {
 	repo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
 
 	svc := NewAuthServiceWithInterface(repo, nil)
-	got, err := svc.Authenticate("active@test.com", "password123")
+	got, err := svc.Authenticate(context.Background(), "active@test.com", "password123", "10.9.9.7")
 
 	require.NoError(t, err)
 	assert.Equal(t, user.ID, got.ID)
@@ -288,6 +289,8 @@ func TestAuthService_CreateUser_RaceDuplicateMapped(t *testing.T) {
 // TestAuthService_Authenticate_LockoutAfter10Fails: F9 — 11-я попытка с неверным
 // паролем даёт ErrTooManyAttempts (раньше можно было перебирать бесконечно).
 func TestAuthService_Authenticate_LockoutAfter10Fails(t *testing.T) {
+	ctx := context.Background()
+	lockIP := "10.10.10.10"
 	email := "lockout-" + uuid.New().String() + "@test.com"
 	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
 	require.NoError(t, err)
@@ -299,16 +302,18 @@ func TestAuthService_Authenticate_LockoutAfter10Fails(t *testing.T) {
 	svc := NewAuthServiceWithInterface(repo, nil)
 
 	for i := 0; i < 10; i++ {
-		_, err := svc.Authenticate(email, "wrong-password-12")
+		_, err := svc.Authenticate(ctx, email, "wrong-password-12", lockIP)
 		require.Error(t, err)
 		require.NotContains(t, err.Error(), "too many", "первые 10 попыток — invalid credentials")
 	}
-	_, err = svc.Authenticate(email, "wrong-password-12")
+	_, err = svc.Authenticate(ctx, email, "wrong-password-12", lockIP)
 	require.ErrorIs(t, err, ErrTooManyAttempts)
 }
 
 // TestAuthService_Authenticate_SuccessResetsCounter: F9 — успех сбрасывает счётчик.
 func TestAuthService_Authenticate_SuccessResetsCounter(t *testing.T) {
+	ctx := context.Background()
+	resetIP := "10.10.10.11"
 	email := "reset-" + uuid.New().String() + "@test.com"
 	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
 	require.NoError(t, err)
@@ -320,15 +325,41 @@ func TestAuthService_Authenticate_SuccessResetsCounter(t *testing.T) {
 	svc := NewAuthServiceWithInterface(repo, nil)
 
 	for i := 0; i < 3; i++ {
-		_, _ = svc.Authenticate(email, "wrong-password-12")
+		_, _ = svc.Authenticate(ctx, email, "wrong-password-12", resetIP)
 	}
-	_, err = svc.Authenticate(email, "correct-password-12")
+	_, err = svc.Authenticate(ctx, email, "correct-password-12", resetIP)
 	require.NoError(t, err)
 	// После успеха счётчик сброшен — ещё 9 неудач не должны лочить.
 	for i := 0; i < 9; i++ {
-		_, err := svc.Authenticate(email, "wrong-password-12")
+		_, err := svc.Authenticate(ctx, email, "wrong-password-12", resetIP)
 		require.NotContains(t, err.Error(), "too many")
 	}
+}
+
+// RE-AUDIT: lockout изолирован по IP — злоумышленник не лочит чужой вход.
+func TestAuthService_Authenticate_LockoutIsolatedByIP(t *testing.T) {
+	ctx := context.Background()
+	attackerIP, victimIP := "10.10.10.12", "10.10.10.13"
+	email := "victim-" + uuid.New().String() + "@test.com"
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
+	require.NoError(t, err)
+	user := &models.User{ID: uuid.New(), Email: email, PasswordHash: string(hash), Status: "active"}
+
+	repo := mocks.NewMockUserRepository()
+	repo.On("GetUserByEmail", mock.Anything, email).Return(user, nil)
+	repo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
+	svc := NewAuthServiceWithInterface(repo, nil)
+
+	for i := 0; i < 10; i++ {
+		_, _ = svc.Authenticate(ctx, email, "wrong-password-12", attackerIP)
+	}
+	_, err = svc.Authenticate(ctx, email, "wrong-password-12", attackerIP)
+	require.ErrorIs(t, err, ErrTooManyAttempts)
+
+	// Тот же email с другого IP — не залочен (только invalid credentials).
+	_, err = svc.Authenticate(ctx, email, "wrong-password-12", victimIP)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "too many")
 }
 
 // RE-AUDIT: заблокированный пользователь не продлевает сессию через refresh.

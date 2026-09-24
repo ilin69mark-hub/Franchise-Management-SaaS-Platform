@@ -56,7 +56,6 @@ jobs:
         run: go test -short ./... -count=1
       - name: go test -race (быстрый)
         run: go test -short -race ./... -count=1 -run Test -timeout 60s
-        continue-on-error: true
       - name: gofmt
         run: |
           out=$(gofmt -l .)

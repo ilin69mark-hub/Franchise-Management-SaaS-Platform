@@ -728,6 +728,12 @@ func migrateGoals(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE goals ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'`)
 	db.Exec(`ALTER TABLE goals ALTER COLUMN assigner_id DROP NOT NULL`)
 	db.Exec(`ALTER TABLE goals ALTER COLUMN assignee_id DROP NOT NULL`)
+	// RE-AUDIT: параллельный двойной POST давал дубликаты и 500.
+	// Естественный ключ (получатель, период, даты): повтор упирается в 409.
+	// NULLS NOT DISTINCT — сырые NULL в датах тоже конфликтуют, а не плодятся.
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_goals_assignee_period_dates ON goals(assignee_id, period, start_date, end_date) NULLS NOT DISTINCT`).Error; err != nil {
+		return err
+	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_goals_assignee_date ON goals(assignee_id, target_date)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_goals_assigner ON goals(assigner_id)`)
 	return nil

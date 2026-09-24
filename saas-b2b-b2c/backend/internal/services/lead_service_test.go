@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type MockLeadRepository struct {
@@ -233,6 +234,7 @@ func TestLeadService_AddActivity_Success(t *testing.T) {
 		Description: "Initial call",
 	}
 
+	mockRepo.On("GetLeadByID", mock.Anything, leadID, userID).Return(&models.Lead{}, nil)
 	mockRepo.On("AddActivity", mock.Anything, mock.MatchedBy(func(a *models.LeadActivity) bool {
 		return a.LeadID == leadID && a.UserID == userID && a.Type == "call"
 	})).Return(nil)
@@ -254,6 +256,7 @@ func TestLeadService_AddActivity_RepoError(t *testing.T) {
 		Description: "Initial call",
 	}
 
+	mockRepo.On("GetLeadByID", mock.Anything, leadID, userID).Return(&models.Lead{}, nil)
 	mockRepo.On("AddActivity", mock.Anything, mock.Anything).Return(errors.New("database error"))
 
 	err := service.AddActivity(context.Background(), userID, leadID, req)
@@ -323,4 +326,21 @@ func TestLeadService_GetLeadDetails_ActivitiesError(t *testing.T) {
 
 func ptrToUUID(id uuid.UUID) *uuid.UUID {
 	return &id
+}
+
+func TestLeadService_AddActivity_ForeignLeadDenied(t *testing.T) {
+	mockRepo := new(MockLeadRepository)
+	service := NewLeadService(mockRepo)
+
+	userID := uuid.New()
+	leadID := uuid.New()
+	req := models.AddLeadActivityRequest{Type: "call", Description: "x"}
+
+	mockRepo.On("GetLeadByID", mock.Anything, leadID, userID).Return(nil, errors.New("not found"))
+
+	err := service.AddActivity(context.Background(), userID, leadID, req)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "access denied")
+	mockRepo.AssertNotCalled(t, "AddActivity", mock.Anything, mock.Anything)
 }
