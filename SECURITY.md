@@ -7,6 +7,9 @@ Found a security issue? Email `security@example.com` (replace) — do not open p
 - `.env` never committed (`.gitignore`), use `.env.example` as template.
 - Prod secrets fail-closed: `docker-compose.prod.yml` uses `${VAR:?must be set}` for `DB_PASSWORD`, `JWT_SECRET`, `NEXT_PUBLIC_API_URL`.
 - `gitleaks` scans every push (`--log-opts=--all`, `.gitleaks.toml` allowlist only for `unsafe-default-*` placeholders).
+- Local pre-commit: `make hooks-install` → `.githooks/pre-commit` runs
+  `gitleaks protect --staged` + `gofmt` on staged `.go` (fast, <5s).
+  Bypass only deliberately: `git commit --no-verify`.
 
 ## Auth
 - JWT `HS256`, `JWT_SECRET` required in prod (`config.go` fallback only for dev).

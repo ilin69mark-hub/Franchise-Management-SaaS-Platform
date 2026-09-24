@@ -27,8 +27,11 @@ const RegisterPage: React.FC = () => {
       company_name: values.companyName,
       role: 'franchiser' as const,
     };
-    await (dispatch as unknown as (a: unknown) => Promise<unknown>)(register(payload));
-    router.push('/login');
+    // RE-AUDIT: редирект только при успехе (раньше — даже при провале).
+    const res = await (dispatch as unknown as (a: unknown) => Promise<{ meta: { requestStatus: string } }>)(register(payload));
+    if (res?.meta?.requestStatus === 'fulfilled') {
+      router.push('/login');
+    }
   };
 
   return (
@@ -47,7 +50,7 @@ const RegisterPage: React.FC = () => {
           <Form.Item name="lastName" label="Фамилия" rules={[{ required: true }]}><Input prefix={<UserOutlined />} /></Form.Item>
           <Form.Item name="companyName" label="Название компании" rules={[{ required: true }]}><Input prefix={<ShopOutlined />} /></Form.Item>
           <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}><Input prefix={<MailOutlined />} /></Form.Item>
-          <Form.Item name="password" label="Пароль" rules={[{ required: true, min: 8 }]}><Input.Password prefix={<LockOutlined />} /></Form.Item>
+          <Form.Item name="password" label="Пароль" rules={[{ required: true, min: 12, max: 72 }]}><Input.Password prefix={<LockOutlined />} /></Form.Item>
           <Button type="primary" htmlType="submit" block loading={loading}>Зарегистрироваться</Button>
         </Form>
         <div style={{ textAlign: 'center', marginTop: 16 }}>

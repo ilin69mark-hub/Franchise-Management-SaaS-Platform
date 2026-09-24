@@ -15,20 +15,33 @@ data:
   REDIS_ADDR: "redis.cache.svc.cluster.local:6379"
   CORS_ALLOWED_ORIGINS: "https://yourdomain.com"
 ---
-apiVersion: v1
-kind: Secret
+# RE-AUDIT(E11): inline-Secret удалён — три одинаковых CHANGE_ME-плейсхолдера
+# приглашали к копипасту в прод. Секреты тянет ESO из Vault/AWS SM.
+# Человек: поставить ESO, завести SecretStore + записи, проверить
+# (kubectl -n franchise get secret franchise-secrets), см. .audit-exceptions.yml E11.
+# AUDIT-EXCEPTION(E11): owner-key, см. .audit-exceptions.yml
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
 metadata:
   name: franchise-secrets
   namespace: franchise
-type: Opaque
-stringData:
-  # NOTE: Values below are NON-SECRET placeholders and must NOT be used in production.
-  # Set real secrets via CI/CD (kubectl apply -f) or recommend ExternalSecrets (ESO) with a
-  # SecretStore backed by Vault/AWS Secrets Manager, then drop this inline Secret.
-  DB_USER: "postgres"
-  DB_PASSWORD: "CHANGE_ME_JWT_SECRET"
-  JWT_SECRET: "CHANGE_ME_JWT_SECRET"
-  REDIS_PASSWORD: "CHANGE_ME_JWT_SECRET"
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: franchise-vault # заменить на свой SecretStore (Vault/AWS SM)
+  target:
+    name: franchise-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: DB_USER
+      remoteRef: { key: franchise/prod, property: DB_USER }
+    - secretKey: DB_PASSWORD
+      remoteRef: { key: franchise/prod, property: DB_PASSWORD }
+    - secretKey: JWT_SECRET
+      remoteRef: { key: franchise/prod, property: JWT_SECRET }
+    - secretKey: REDIS_PASSWORD
+      remoteRef: { key: franchise/prod, property: REDIS_PASSWORD }
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

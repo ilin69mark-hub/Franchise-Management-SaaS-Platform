@@ -155,8 +155,9 @@ func TestFranchiserAssignAlert_NoBody(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Params = []gin.Param{{Key: "id", Value: "550e8400-e29b-41d4-a716-446655440000"}}
 	kpiHandler := &KPIHandler{}
+	// RE-AUDIT: auth идёт первым (раньше заглушка парсила тело до сессии).
 	kpiHandler.AssignAlert(c)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestFranchiserGetAlertSettings_Unauthorized(t *testing.T) {
@@ -260,10 +261,10 @@ func TestFranchiserDealerStatusCalculation(t *testing.T) {
 
 func TestFranchiserDealerPlanPercentFormula(t *testing.T) {
 	tests := []struct {
-		name        string
-		totalSales  float64
-		plan        float64
-		expected    int
+		name       string
+		totalSales float64
+		plan       float64
+		expected   int
 	}{
 		{"100% plan", 100000, 100000, 100},
 		{"80% plan", 80000, 100000, 80},
@@ -310,18 +311,18 @@ func TestFranchiserDealerSalesQuery(t *testing.T) {
 
 func TestFranchiserReportDataBlocks(t *testing.T) {
 	blocks := []string{"executive_summary", "plan_fact_dynamics", "network_growth", "sales_structure", "territory_rating", "risks"}
-	
+
 	assert.Equal(t, 6, len(blocks))
-	
+
 	validBlocks := map[string]bool{
-		"executive_summary":   true,
-		"plan_fact_dynamics":  true,
-		"network_growth":       true,
-		"sales_structure":     true,
-		"territory_rating":    true,
+		"executive_summary":  true,
+		"plan_fact_dynamics": true,
+		"network_growth":     true,
+		"sales_structure":    true,
+		"territory_rating":   true,
 		"risks":              true,
 	}
-	
+
 	for _, block := range blocks {
 		assert.True(t, validBlocks[block], "Block %s should be valid", block)
 	}
@@ -370,10 +371,10 @@ func TestFranchiserReportHistory(t *testing.T) {
 
 func TestFranchiserPDFGeneration(t *testing.T) {
 	tests := []struct {
-		name         string
-		blocks       []string
-		comment      string
-		expectedPDF  bool
+		name        string
+		blocks      []string
+		comment     string
+		expectedPDF bool
 	}{
 		{"Valid generation", []string{"executive_summary"}, "Monthly report", true},
 		{"Empty blocks", []string{}, "No blocks", true},
@@ -390,10 +391,10 @@ func TestFranchiserPDFGeneration(t *testing.T) {
 
 func TestFranchiserMarketingROI(t *testing.T) {
 	tests := []struct {
-		name          string
+		name           string
 		marketingSpent float64
-		revenue       float64
-		expectedROI   float64
+		revenue        float64
+		expectedROI    float64
 	}{
 		{"10% marketing of revenue", 200000, 2000000, 10.0},
 		{"Zero marketing", 0, 1000000, 0.0},
@@ -417,10 +418,16 @@ func TestFranchiserGeographyData(t *testing.T) {
 		}
 		expectedRegions int
 	}{
-		{"Multi region", []struct{region string; salons int}{
+		{"Multi region", []struct {
+			region string
+			salons int
+		}{
 			{"Moscow", 5}, {"SPb", 3}, {"Kazan", 2},
 		}, 3},
-		{"Single region", []struct{region string; salons int}{
+		{"Single region", []struct {
+			region string
+			salons int
+		}{
 			{"Moscow", 10},
 		}, 1},
 	}
@@ -442,11 +449,11 @@ func TestFranchiserDealerMigration(t *testing.T) {
 		migrations    []struct{ from, to string }
 		expectedCount int
 	}{
-		{"One migration", []struct{from, to string}{{from: "A", to: "B"}}, 1},
-		{"Multiple migrations", []struct{from, to string}{
+		{"One migration", []struct{ from, to string }{{from: "A", to: "B"}}, 1},
+		{"Multiple migrations", []struct{ from, to string }{
 			{from: "A", to: "B"}, {from: "C", to: "D"}, {from: "E", to: "F"},
 		}, 3},
-		{"No migrations", []struct{from, to string}{}, 0},
+		{"No migrations", []struct{ from, to string }{}, 0},
 	}
 
 	for _, tt := range tests {
@@ -458,9 +465,9 @@ func TestFranchiserDealerMigration(t *testing.T) {
 
 func TestFranchiserSystemIssues(t *testing.T) {
 	tests := []struct {
-		name        string
-		status      string
-		expected    int
+		name     string
+		status   string
+		expected int
 	}{
 		{"Open issues", "open", 5},
 		{"Resolved issues", "resolved", 3},
@@ -506,13 +513,21 @@ func TestFranchiserAlertThresholds(t *testing.T) {
 
 func TestFranchiserManagerPlansValidation(t *testing.T) {
 	tests := []struct {
-		name         string
-		plans        []struct{ ManagerID string; PlanAmount float64; TargetDealers int }
+		name  string
+		plans []struct {
+			ManagerID     string
+			PlanAmount    float64
+			TargetDealers int
+		}
 		expectedValid bool
 	}{
 		{
 			"Valid plans",
-			[]struct{ManagerID string; PlanAmount float64; TargetDealers int}{
+			[]struct {
+				ManagerID     string
+				PlanAmount    float64
+				TargetDealers int
+			}{
 				{ManagerID: "m1", PlanAmount: 1000000, TargetDealers: 5},
 				{ManagerID: "m2", PlanAmount: 800000, TargetDealers: 3},
 			},
@@ -520,12 +535,20 @@ func TestFranchiserManagerPlansValidation(t *testing.T) {
 		},
 		{
 			"Empty plans",
-			[]struct{ManagerID string; PlanAmount float64; TargetDealers int}{},
+			[]struct {
+				ManagerID     string
+				PlanAmount    float64
+				TargetDealers int
+			}{},
 			true,
 		},
 		{
 			"Zero plan amount",
-			[]struct{ManagerID string; PlanAmount float64; TargetDealers int}{
+			[]struct {
+				ManagerID     string
+				PlanAmount    float64
+				TargetDealers int
+			}{
 				{ManagerID: "m1", PlanAmount: 0, TargetDealers: 5},
 			},
 			true,
@@ -548,8 +571,8 @@ func TestFranchiserManagerPlansValidation(t *testing.T) {
 func TestFranchiserReportRecipientValidation(t *testing.T) {
 	tests := []struct {
 		name       string
-		recipients  []string
-		isValid     bool
+		recipients []string
+		isValid    bool
 	}{
 		{"Valid emails", []string{"manager1@mail.ru", "manager2@mail.ru"}, true},
 		{"Single recipient", []string{"manager@mail.ru"}, true},

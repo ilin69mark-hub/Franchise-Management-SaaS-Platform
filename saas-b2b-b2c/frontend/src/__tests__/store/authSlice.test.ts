@@ -9,6 +9,7 @@ jest.mock('@/api/axiosClient', () => ({
 
 const mockApiClient = apiClient as jest.Mocked<typeof apiClient>;
 
+// F7: сессия в httpOnly cookie, токенов в сторе/localStorage/теле больше нет.
 describe('authSlice', () => {
   let store: ReturnType<typeof configureStore>;
 
@@ -27,12 +28,10 @@ describe('authSlice', () => {
       expect(store.getState().auth.user).toBeNull();
     });
 
-    it('has accessToken as null', () => {
-      expect(store.getState().auth.accessToken).toBeNull();
-    });
-
-    it('has refreshToken as null', () => {
-      expect(store.getState().auth.refreshToken).toBeNull();
+    it('has no token fields (F7 regression)', () => {
+      const state = store.getState().auth as Record<string, unknown>;
+      expect('accessToken' in state).toBe(false);
+      expect('refreshToken' in state).toBe(false);
     });
 
     it('has isAuthenticated as false', () => {
@@ -54,16 +53,6 @@ describe('authSlice', () => {
       expect(store.getState().auth.user).toBeNull();
     });
 
-    it('clears accessToken', () => {
-      store.dispatch(logout());
-      expect(store.getState().auth.accessToken).toBeNull();
-    });
-
-    it('clears refreshToken', () => {
-      store.dispatch(logout());
-      expect(store.getState().auth.refreshToken).toBeNull();
-    });
-
     it('sets isAuthenticated to false', () => {
       store.dispatch(logout());
       expect(store.getState().auth.isAuthenticated).toBe(false);
@@ -74,8 +63,9 @@ describe('authSlice', () => {
       expect(store.getState().auth.error).toBeNull();
     });
 
-    it('clears localStorage items', () => {
+    it('clears cached user and legacy token keys', () => {
       localStorage.setItem('accessToken', 'test-token');
+      localStorage.setItem('refreshToken', 'test-refresh');
       localStorage.setItem('user', '{"id": "1"}');
       localStorage.setItem('id', '1');
       localStorage.setItem('role', 'admin');
@@ -83,6 +73,7 @@ describe('authSlice', () => {
       store.dispatch(logout());
 
       expect(localStorage.getItem('accessToken')).toBeNull();
+      expect(localStorage.getItem('refreshToken')).toBeNull();
       expect(localStorage.getItem('user')).toBeNull();
       expect(localStorage.getItem('id')).toBeNull();
       expect(localStorage.getItem('role')).toBeNull();
@@ -90,38 +81,29 @@ describe('authSlice', () => {
   });
 
   describe('setAuthFromStorage action', () => {
-    it('restores auth from localStorage when token exists', () => {
+    it('restores auth from cached user without any token', () => {
       const mockUser = { id: 'user-1', email: 'test@example.com', role: 'admin' };
-      localStorage.setItem('accessToken', 'stored-token');
       localStorage.setItem('user', JSON.stringify(mockUser));
-      localStorage.setItem('id', 'user-1');
-      localStorage.setItem('role', 'admin');
 
       store.dispatch(setAuthFromStorage());
 
-      expect(store.getState().auth.accessToken).toBe('stored-token');
+      expect(store.getState().auth.user).toEqual(mockUser);
       expect(store.getState().auth.isAuthenticated).toBe(true);
     });
 
-    it('does not restore when no token in localStorage', () => {
+    it('does not restore when no cached user', () => {
       store.dispatch(setAuthFromStorage());
 
-      expect(store.getState().auth.accessToken).toBeNull();
+      expect(store.getState().auth.user).toBeNull();
       expect(store.getState().auth.isAuthenticated).toBe(false);
     });
 
-    it('restores user with id and role from localStorage', () => {
-      const mockUser = { email: 'test@example.com' };
-      localStorage.setItem('accessToken', 'stored-token');
-      localStorage.setItem('user', JSON.stringify(mockUser));
-      localStorage.setItem('id', 'user-123');
-      localStorage.setItem('role', 'dealer');
+    it('does not restore user without id/role', () => {
+      localStorage.setItem('user', JSON.stringify({ email: 'test@example.com' }));
 
       store.dispatch(setAuthFromStorage());
 
-      const user = store.getState().auth.user as any;
-      expect(user.id).toBe('user-123');
-      expect(user.role).toBe('dealer');
+      expect(store.getState().auth.isAuthenticated).toBe(false);
     });
   });
 
@@ -134,12 +116,6 @@ describe('authSlice', () => {
       role: 'dealer',
     };
 
-    const mockResponse = {
-      Token: 'access-token-123',
-      RefreshToken: 'refresh-token-456',
-      user: mockUser,
-    };
-
     it('sets loading = true on pending', async () => {
       mockApiClient.post.mockImplementation(() => new Promise(() => {}));
 
@@ -149,61 +125,26 @@ describe('authSlice', () => {
       expect(store.getState().auth.error).toBeNull();
     });
 
-    it('sets user, token, isAuthenticated = true on fulfilled', async () => {
-      mockApiClient.post.mockResolvedValue({ data: mockResponse });
+    it('sets user and isAuthenticated = true on fulfilled with {user} only', async () => {
+      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
 
       await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
 
       expect(mockApiClient.post).toHaveBeenCalledWith('/auth/login', { email: 'test@example.com', password: 'password' });
       expect(store.getState().auth.loading).toBe(false);
       expect(store.getState().auth.isAuthenticated).toBe(true);
-      expect(store.getState().auth.accessToken).toBe('access-token-123');
-      expect(store.getState().auth.refreshToken).toBe('refresh-token-456');
       expect(store.getState().auth.user).toEqual(mockUser);
     });
 
-    it('saves to localStorage on successful login', async () => {
-      mockApiClient.post.mockResolvedValue({ data: mockResponse });
+    it('caches user but never tokens on successful login', async () => {
+      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
 
       await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
 
-      expect(localStorage.getItem('accessToken')).toBe('access-token-123');
+      expect(localStorage.getItem('accessToken')).toBeNull();
       expect(localStorage.getItem('user')).toContain('test@example.com');
-    });
-
-    it('saves user id and role to localStorage', async () => {
-      mockApiClient.post.mockResolvedValue({ data: mockResponse });
-
-      await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
-
       expect(localStorage.getItem('id')).toBe('user-1');
       expect(localStorage.getItem('role')).toBe('dealer');
-    });
-
-    it('handles different token formats (accessToken)', async () => {
-      const responseWithAccessToken = {
-        accessToken: 'access-token-via-accessToken',
-        refreshToken: 'refresh-token-via-refreshToken',
-        user: mockUser,
-      };
-      mockApiClient.post.mockResolvedValue({ data: responseWithAccessToken });
-
-      await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
-
-      expect(store.getState().auth.accessToken).toBe('access-token-via-accessToken');
-    });
-
-    it('handles different token formats (token)', async () => {
-      const responseWithToken = {
-        token: 'access-token-via-token',
-        refresh_token: 'refresh-token-via-underscore',
-        user: mockUser,
-      };
-      mockApiClient.post.mockResolvedValue({ data: responseWithToken });
-
-      await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
-
-      expect(store.getState().auth.accessToken).toBe('access-token-via-token');
     });
 
     it('sets error message on rejected', async () => {
@@ -226,13 +167,13 @@ describe('authSlice', () => {
       expect(store.getState().auth.error).toBe('Ошибка входа');
     });
 
-    it('sets isAuthenticated = false when token not in response', async () => {
-      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
+    it('sets isAuthenticated = false when user missing in response', async () => {
+      mockApiClient.post.mockResolvedValue({ data: {} });
 
       await store.dispatch(login({ email: 'test@example.com', password: 'password' }));
 
       expect(store.getState().auth.isAuthenticated).toBe(false);
-      expect(store.getState().auth.error).toBe('Ошибка авторизации: токен не получен');
+      expect(store.getState().auth.error).toBe('Ошибка авторизации: профиль не получен');
     });
   });
 
@@ -245,12 +186,6 @@ describe('authSlice', () => {
       role: 'dealer',
     };
 
-    const mockRegisterResponse = {
-      Token: 'new-access-token',
-      RefreshToken: 'new-refresh-token',
-      user: mockUser,
-    };
-
     it('sets loading = true on pending', async () => {
       mockApiClient.post.mockImplementation(() => new Promise(() => {}));
 
@@ -259,24 +194,25 @@ describe('authSlice', () => {
       expect(store.getState().auth.loading).toBe(true);
     });
 
-    it('sets user, token, isAuthenticated = true on fulfilled', async () => {
-      mockApiClient.post.mockResolvedValue({ data: mockRegisterResponse });
+    it('sets user and isAuthenticated = true on fulfilled with {user} only', async () => {
+      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
 
       await store.dispatch(register({ email: 'new@example.com', password: 'password123' }));
 
       expect(mockApiClient.post).toHaveBeenCalledWith('/auth/register', { email: 'new@example.com', password: 'password123' });
       expect(store.getState().auth.loading).toBe(false);
       expect(store.getState().auth.isAuthenticated).toBe(true);
-      expect(store.getState().auth.accessToken).toBe('new-access-token');
       expect(store.getState().auth.user).toEqual(mockUser);
     });
 
-    it('saves to localStorage on successful registration', async () => {
-      mockApiClient.post.mockResolvedValue({ data: mockRegisterResponse });
+    it('never stores tokens on successful registration', async () => {
+      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
 
       await store.dispatch(register({ email: 'new@example.com', password: 'password123' }));
 
-      expect(localStorage.getItem('accessToken')).toBe('new-access-token');
+      expect(localStorage.getItem('accessToken')).toBeNull();
+      const state = store.getState().auth as Record<string, unknown>;
+      expect('accessToken' in state).toBe(false);
     });
 
     it('sets error message on rejected', async () => {
@@ -290,13 +226,13 @@ describe('authSlice', () => {
       expect(store.getState().auth.error).toBe('Email already exists');
     });
 
-    it('sets isAuthenticated = false when token not in response', async () => {
-      mockApiClient.post.mockResolvedValue({ data: { user: mockUser } });
+    it('sets isAuthenticated = false when user missing in response', async () => {
+      mockApiClient.post.mockResolvedValue({ data: {} });
 
       await store.dispatch(register({ email: 'new@example.com', password: 'password' }));
 
       expect(store.getState().auth.isAuthenticated).toBe(false);
-      expect(store.getState().auth.error).toBe('Ошибка регистрации: токен не получен');
+      expect(store.getState().auth.error).toBe('Ошибка регистрации: профиль не получен');
     });
   });
 });
@@ -306,8 +242,6 @@ describe('authSlice selectors', () => {
     const preloadedState = {
       auth: {
         user: { id: 'user-1', email: 'test@example.com', role: 'admin' },
-        accessToken: 'token-123',
-        refreshToken: null,
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -327,8 +261,6 @@ describe('authSlice selectors', () => {
     const preloadedState = {
       auth: {
         user: { id: 'user-1', email: 'test@example.com' },
-        accessToken: 'token-123',
-        refreshToken: 'refresh-123',
         isAuthenticated: true,
         loading: false,
         error: null,
@@ -344,33 +276,12 @@ describe('authSlice selectors', () => {
     expect(selectIsAuthenticated(store.getState())).toBe(true);
   });
 
-  it('selectToken returns accessToken from state', () => {
-    const preloadedState = {
-      auth: {
-        user: { id: 'user-1', email: 'test@example.com' },
-        accessToken: 'token-123',
-        refreshToken: 'refresh-456',
-        isAuthenticated: true,
-        loading: false,
-        error: null,
-      },
-    };
-
-    const store = configureStore({
-      reducer: { auth: authReducer },
-      preloadedState: preloadedState as any,
-    });
-
-    const selectToken = (state: any) => state.auth.accessToken;
-    expect(selectToken(store.getState())).toBe('token-123');
-  });
-
-  it('selectToken returns null when not authenticated', () => {
+  it('has no token selector — tokens do not exist in state (F7)', () => {
     const store = configureStore({
       reducer: { auth: authReducer },
     });
 
-    const selectToken = (state: any) => state.auth.accessToken;
-    expect(selectToken(store.getState())).toBeNull();
+    expect((store.getState().auth as any).accessToken).toBeUndefined();
+    expect((store.getState().auth as any).refreshToken).toBeUndefined();
   });
 });

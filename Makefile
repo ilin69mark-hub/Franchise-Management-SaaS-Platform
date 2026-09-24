@@ -28,7 +28,7 @@ FRONTEND := $(MAKE) -C saas-b2b-b2c/frontend
 .PHONY: help dev up down ps logs prod-up prod-ps \
 	backend backend-test backend-test-pg backend-test-all backend-lint \
 	frontend frontend-test frontend-typecheck frontend-lint frontend-build \
-	test lint build clean audit
+	test lint build clean audit audit-exceptions hooks-install
 
 ## ---------------------------------------------------------------------------
 ## Docker: dev-стек (PG + Redis + backend + frontend)
@@ -130,6 +130,15 @@ clean: ## Остановить стек и почистить артефакты
 	$(BACKEND) clean
 	$(FRONTEND) clean
 
+hooks-install: ## Установить git pre-commit hook (gitleaks staged + gofmt)
+	@mkdir -p .git/hooks
+	@ln -sf ../../.githooks/pre-commit .git/hooks/pre-commit
+	@chmod +x .githooks/pre-commit
+	@printf '\n\033[1;32m✔ pre-commit hook установлен (.git/hooks/pre-commit)\033[0m\n'
+	@printf '  Проверка: gitleaks protect --staged + gofmt staged .go\n'
+	@printf '  Обход (осознанно): git commit --no-verify\n\n'
+
+# AUDIT-EXCEPTION(E10): owner-key, см. .audit-exceptions.yml
 backup: ## Бэкап БД (pg_dump) + volume в ./backups
 	@mkdir -p backups
 	$(COMPOSE) $(COMPOSE_PROD) exec -T postgres pg_dump -U postgres franchise_db | gzip > backups/backup_$(shell date +%F_%H%M).sql.gz
@@ -140,18 +149,23 @@ restore: ## Восстановление из последнего бэкапа 
 	@ls backups/backup_*.sql.gz 2>/dev/null | tail -1 | xargs -I {} sh -c 'gunzip < {} | $(COMPOSE) $(COMPOSE_PROD) exec -T postgres psql -U postgres franchise_db && echo "✔ Восстановлено из {}"'
 
 audit: ## gitleaks-скан секретов во всей истории + полный регресс (CI-дубликат)
-	@printf '\n\033[1;33m[1/5] Gitleaks-скан (история + HEAD)...\033[0m\n'
+	@printf '\n\033[1;33m[0/6] Реестр исключений (маркеры ↔ .audit-exceptions.yml)...\033[0m\n'
+	bash scripts/check-audit-exceptions.sh
+	@printf '\n\033[1;33m[1/6] Gitleaks-скан (история + HEAD)...\033[0m\n'
 	gitleaks detect --source . --redact --log-opts='--all'
-	@printf '\n\033[1;33m[2/5] Backend: build + vet + unit-тесты...\033[0m\n'
+	@printf '\n\033[1;33m[2/6] Backend: build + vet + unit-тесты...\033[0m\n'
 	$(BACKEND) test
-	@printf '\n\033[1;33m[3/5] Backend lint...\033[0m\n'
+	@printf '\n\033[1;33m[3/6] Backend lint...\033[0m\n'
 	$(BACKEND) lint
-	@printf '\n\033[1;33m[4/5] Frontend: lint + typecheck...\033[0m\n'
+	@printf '\n\033[1;33m[4/6] Frontend: lint + typecheck...\033[0m\n'
 	$(FRONTEND) lint
 	$(FRONTEND) typecheck
-	@printf '\n\033[1;33m[5/5] Frontend: jest...\033[0m\n'
+	@printf '\n\033[1;33m[5/6] Frontend: jest...\033[0m\n'
 	$(FRONTEND) test
 	@printf '\n\033[1;32m✔ Аудит пройден: секретов нет, регресс зелёный\033[0m\n'
+
+audit-exceptions: ## Проверка парности маркеров AUDIT-EXCEPTION и реестра (CI-дубликат)
+	bash scripts/check-audit-exceptions.sh
 
 ## ---------------------------------------------------------------------------
 ## Справка

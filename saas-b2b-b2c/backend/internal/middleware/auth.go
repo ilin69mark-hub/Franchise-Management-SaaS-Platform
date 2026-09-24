@@ -62,16 +62,21 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-			// revocation check via jti
-			if jti, ok := claims["jti"].(string); ok && jti != "" {
-				ctx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
-				revoked := cache.IsTokenRevoked(ctx, jti)
-				cancel()
-				if revoked {
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "Token revoked"})
-					c.Abort()
-					return
-				}
+			// F12: jti обязателен — токены без jti нельзя отозвать (бессмертные).
+			jti, _ := claims["jti"].(string)
+			if jti == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing jti"})
+				c.Abort()
+				return
+			}
+			// revocation check via jti (Redis + instance-local fallback)
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
+			revoked := cache.IsTokenRevoked(ctx, jti)
+			cancel()
+			if revoked {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token revoked"})
+				c.Abort()
+				return
 			}
 			userID, ok := claims["user_id"].(string)
 			if !ok {
@@ -90,9 +95,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Set("email", userEmail)
 			c.Set("role", userRole)
 			c.Set("tenantID", tenantID)
-			if jti, ok := claims["jti"].(string); ok {
-				c.Set("jti", jti)
-			}
+			c.Set("jti", jti)
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
 			c.Abort()

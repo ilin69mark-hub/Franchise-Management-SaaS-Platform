@@ -18,7 +18,7 @@ type Config struct {
 	JWTExpires  time.Duration
 	RedisURL    string
 	Debug       bool
-	
+
 	DBHost     string
 	DBPort     string
 	DBUser     string
@@ -42,7 +42,7 @@ func LoadConfig() *Config {
 		JWTSecret:  viper.GetString("JWT_SECRET"),
 		RedisURL:   viper.GetString("REDIS_URL"),
 		Debug:      viper.GetBool("DEBUG"),
-		
+
 		DBHost:     viper.GetString("DB_HOST"),
 		DBPort:     viper.GetString("DB_PORT"),
 		DBUser:     viper.GetString("DB_USER"),
@@ -55,30 +55,34 @@ func LoadConfig() *Config {
 		config.ServerPort = "8080"
 	}
 
+	// AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml
 	if config.JWTSecret == "" {
 		log.Fatal("JWT_SECRET must be set — refusing to start with unsafe default (set JWT_SECRET env var)")
 	}
-	
+
 	if config.RedisURL == "" {
 		config.RedisURL = "redis://localhost:6379"
 	}
-	
+
 	if config.DBHost == "" {
 		config.DBHost = "localhost"
 	}
-	
+
 	if config.DBPort == "" {
 		config.DBPort = "5432"
 	}
-	
+
 	if config.DBUser == "" {
 		config.DBUser = "postgres"
 	}
-	
+
+	// F14: пароль БД по умолчанию — дыра (dev-compose задаёт явно,
+	// prod-compose требует через :? — код тоже обязан падать, а не подставлять).
+	// AUDIT-EXCEPTION(E02): owner-key, см. .audit-exceptions.yml
 	if config.DBPassword == "" {
-		config.DBPassword = "postgres"
+		log.Fatal("DB_PASSWORD must be set — refusing to start with default password (set DB_PASSWORD env var)")
 	}
-	
+
 	if config.DBName == "" {
 		config.DBName = "franchise_db"
 	}
@@ -100,7 +104,7 @@ func LoadConfig() *Config {
 	if jwtExpiresStr == "" {
 		jwtExpiresStr = "24h"
 	}
-	
+
 	jwtExpires, err := time.ParseDuration(jwtExpiresStr)
 	if err != nil {
 		jwtExpires = 24 * time.Hour // значение по умолчанию

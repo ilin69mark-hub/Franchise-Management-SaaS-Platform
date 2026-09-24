@@ -9,6 +9,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 
+	"franchise-saas-backend/config"
 	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/database"
 	"franchise-saas-backend/internal/docs"
@@ -20,21 +21,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
+	"gorm.io/gorm"
 )
 
-func main() {
-	viper.SetConfigFile("config.yaml")
-	if err := viper.ReadInConfig(); err != nil {
-		log.Printf("Warning: config.yaml not found, using env vars")
+// isProdEnv — прод-режим: GIN_MODE=release или APP_ENV=production.
+// Сиды, дефолты и прочий демо-мусор в проде запрещены.
+func isProdEnv() bool {
+	if gin.Mode() == gin.ReleaseMode {
+		return true
 	}
-	viper.AutomaticEnv()
+	return os.Getenv("APP_ENV") == "production"
+}
 
-	db, err := database.ConnectDB()
-	if err != nil {
-		log.Fatalf("Database connection failed: %v", err)
-	}
-
-	// Seed data
+// seedDemoData — демо-данные для dev/stage (никогда в проде, см. выше).
+func seedDemoData(db *gorm.DB) {
 	if err := database.SeedUsers(db); err != nil {
 		log.Printf("Seed users error: %v", err)
 	}
@@ -49,6 +49,32 @@ func main() {
 	}
 	if err := database.SeedProductsAnalytics(db); err != nil {
 		log.Printf("Seed products analytics error: %v", err)
+	}
+}
+
+func main() {
+	viper.SetConfigFile("config.yaml")
+	if err := viper.ReadInConfig(); err != nil {
+		log.Printf("Warning: config.yaml not found, using env vars")
+	}
+	viper.AutomaticEnv()
+
+	// F5/F14: fail-closed на старте — без JWT_SECRET и DB_PASSWORD процесс
+	// не слушает порт (раньше стартовал и отдавал /health 200 OK без секретов).
+	_ = config.LoadConfig()
+
+	db, err := database.ConnectDB()
+	if err != nil {
+		log.Fatalf("Database connection failed: %v", err)
+	}
+
+	// RE-AUDIT: сиды демо-аккаунтов (включая super_admin) — только вне прода.
+	// Раньше выполнялись при каждом старте везде, а сгенерированный пароль
+	// печатался в stderr (credential в логах).
+	if isProdEnv() {
+		log.Printf("prod mode: skipping demo seeds")
+	} else {
+		seedDemoData(db)
 	}
 
 	_, err = cache.ConnectRedis()
@@ -145,14 +171,15 @@ func main() {
 		})
 		api.POST("/auth/refresh", authHandler.RefreshToken)
 	}
-	// Строгий лимит на auth: защита от брутфорса (P3-5)
+	// Строгий лимит на auth: защита от брутфорса (F9: Redis-first, общий на
+	// все реплики; in-memory RateLimit здесь врал при масштабировании).
 	authLimited := api.Group("/auth")
-	authLimited.Use(middleware.RateLimit(10, time.Minute))
+	authLimited.Use(middleware.RateLimitAuth(10, time.Minute))
 	{
 		authLimited.POST("/register", authHandler.Register)
 	}
 	authLoginLimited := api.Group("/auth")
-	authLoginLimited.Use(middleware.RateLimit(5, time.Minute))
+	authLoginLimited.Use(middleware.RateLimitAuth(5, time.Minute))
 	{
 		authLoginLimited.POST("/login", authHandler.Login)
 	}
@@ -163,13 +190,18 @@ func main() {
 		c.Next()
 	})
 	protected.Use(middleware.AuthMiddleware())
+	// F7: double-submit CSRF для cookie-сессий (Bearer-запросы exempt внутри).
+	protected.Use(middleware.CSRF())
 	protected.Use(middleware.LoggingMiddleware(userRepo))
 	{
 		// Роли для дашбордов дилера/салон-менеджера (общие для /dealer, /dashboard, /salon-manager).
 		dealerDashRoles := middleware.RequireRole("dealer", "salon_manager", "franchiser", "franchiser_manager", "super_admin")
 		// Роли для франшизных разделов.
 		franchiserRoles := middleware.RequireRole("franchiser", "franchiser_manager", "super_admin")
+		// HR/салоны: salon_manager никого не создаёт/не удаляет (см. F3/F4).
+		hrRoles := middleware.RequireRole("franchiser", "franchiser_manager", "dealer", "super_admin")
 
+		protected.GET("/auth/csrf", authHandler.GetCSRF)
 		protected.GET("/auth/me", userHandler.GetProfile)
 		protected.PUT("/auth/me", userHandler.UpdateProfile)
 		protected.POST("/auth/change-password", userHandler.ChangePassword)
@@ -297,10 +329,14 @@ func main() {
 		protected.POST("/notifications/:id/read", notifHandler.MarkAsRead)
 		protected.POST("/notifications/read-all", notifHandler.MarkAllAsRead)
 
-		protected.GET("/users", userHandler.GetEmployees)
-		protected.POST("/users", userHandler.CreateEmployee)
-		protected.PUT("/users/:id", userHandler.UpdateEmployee)
-		protected.DELETE("/users/:id", userHandler.DeleteEmployee)
+		usersGroup := protected.Group("/users")
+		usersGroup.Use(hrRoles)
+		{
+			usersGroup.GET("", userHandler.GetEmployees)
+			usersGroup.POST("", userHandler.CreateEmployee)
+			usersGroup.PUT("/:id", userHandler.UpdateEmployee)
+			usersGroup.DELETE("/:id", userHandler.DeleteEmployee)
+		}
 		protected.GET("/users/me", userHandler.GetProfile)
 		protected.PUT("/users/me", userHandler.UpdateProfile)
 
@@ -310,11 +346,15 @@ func main() {
 		protected.PUT("/leads/:id/status", leadHandler.UpdateLeadStatus)
 		protected.POST("/leads/:id/activities", leadHandler.AddActivity)
 
-		protected.POST("/salons", userHandler.CreateSalon)
-		protected.GET("/salons", userHandler.GetMySalons)
-		protected.POST("/salons/assign", userHandler.AssignManager)
-		protected.PUT("/salons/:id", userHandler.UpdateSalon)
-		protected.DELETE("/salons/:id", userHandler.DeleteSalon)
+		salonsGroup := protected.Group("/salons")
+		salonsGroup.Use(hrRoles)
+		{
+			salonsGroup.POST("", userHandler.CreateSalon)
+			salonsGroup.GET("", userHandler.GetMySalons)
+			salonsGroup.POST("/assign", userHandler.AssignManager)
+			salonsGroup.PUT("/:id", userHandler.UpdateSalon)
+			salonsGroup.DELETE("/:id", userHandler.DeleteSalon)
+		}
 
 		handlers.NewPlanHandler(protected, planService)
 	}
@@ -322,6 +362,7 @@ func main() {
 	admin := api.Group("/admin")
 	admin.Use(func(c *gin.Context) { c.Set("db", db); c.Next() })
 	admin.Use(middleware.AuthMiddleware())
+	admin.Use(middleware.CSRF())
 	admin.Use(middleware.SuperAdminMiddleware())
 	{
 		admin.GET("/stats", adminHandler.GetDashboardStats)

@@ -19,6 +19,9 @@ type GoalRepository interface {
 	Create(ctx context.Context, g *models.Goal) error
 	Update(ctx context.Context, g *models.Goal) error
 	GetByID(ctx context.Context, id string) (*models.Goal, error)
+	// GetUserTenant — tenant владельца для scope-проверок (RE-AUDIT:
+	// цели нельзя назначать юзерам чужой сети).
+	GetUserTenant(ctx context.Context, userID string) (*uuid.UUID, error)
 	GetByAssigneeAndDate(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error)
 	ListVisibleForUser(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error)
 	Delete(ctx context.Context, id string) error
@@ -39,6 +42,21 @@ func (r *goalRepo) Create(ctx context.Context, g *models.Goal) error {
 
 func (r *goalRepo) Update(ctx context.Context, g *models.Goal) error {
 	return r.db.WithContext(ctx).Save(g).Error
+}
+
+func (r *goalRepo) GetUserTenant(ctx context.Context, userID string) (*uuid.UUID, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	var tenantID *uuid.UUID
+	if err := r.db.WithContext(ctx).Table("users").Select("tenant_id").Where("id = ?", uid).Scan(&tenantID).Error; err != nil {
+		return nil, err
+	}
+	if tenantID == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return tenantID, nil
 }
 
 func (r *goalRepo) GetByID(ctx context.Context, id string) (*models.Goal, error) {

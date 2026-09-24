@@ -18,9 +18,11 @@ services:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=${DB_USER:?DB_USER must be set}
+      # AUDIT-EXCEPTION(E02): owner-key, см. .audit-exceptions.yml
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
       - DB_NAME=${DB_NAME:?DB_NAME must be set}
       - DB_SSLMODE=require
+      # AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - REDIS_URL=redis://redis:6379
     read_only: true
@@ -81,6 +83,7 @@ services:
     environment:
       - POSTGRES_DB=${DB_NAME:-franchise_db}
       - POSTGRES_USER=${DB_USER:-postgres}
+      # AUDIT-EXCEPTION(E02): owner-key, см. .audit-exceptions.yml
       - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - postgres_data:/var/lib/postgresql/data

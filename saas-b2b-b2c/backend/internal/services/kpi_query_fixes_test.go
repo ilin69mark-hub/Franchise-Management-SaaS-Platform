@@ -179,3 +179,163 @@ func TestKPIService_GetDealerMarketingBudget_MissingTableReturnsError(t *testing
 	_, err := svc.GetDealerMarketingBudget(context.Background(), uuid.New(), "Q1-2026")
 	require.Error(t, err)
 }
+
+func setupUsersTableForScopeTest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec(`CREATE TABLE users (
+		id TEXT PRIMARY KEY, tenant_id TEXT, role TEXT, managed_by TEXT,
+		first_name TEXT, last_name TEXT, salon_id TEXT, deleted_at DATETIME)`).Error)
+}
+
+func setupDealerRequestsTableForScopeTest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec(`CREATE TABLE dealer_requests (
+		id TEXT PRIMARY KEY, dealer_id TEXT, type TEXT, description TEXT,
+		amount REAL, status TEXT, created_at DATETIME, updated_at DATETIME)`).Error)
+}
+
+func TestKPIService_GetManagerDealers_CrossTenantForbidden(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+
+	caller, tenantA, tenantB, mgrB := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		caller.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		mgrB.String(), tenantB.String(), string(models.RoleFranchisorManager)).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	_, err := svc.GetManagerDealers(context.Background(), caller.String(), mgrB.String())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "forbidden")
+}
+
+func TestKPIService_GetManagerDealers_SameTenantFranchiserAllowed(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+
+	caller, tenantA, mgrA := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		caller.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		mgrA.String(), tenantA.String(), string(models.RoleFranchisorManager)).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	resp, err := svc.GetManagerDealers(context.Background(), caller.String(), mgrA.String())
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+}
+
+func TestKPIService_GetManagerDealers_PeerDealerDenied(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+
+	// Дилер из той же сети запрашивает чужого менеджера — не руководитель, не franchiser.
+	peer, tenantA, mgrA := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		peer.String(), tenantA.String(), string(models.RoleDealer)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		mgrA.String(), tenantA.String(), string(models.RoleFranchisorManager)).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	_, err := svc.GetManagerDealers(context.Background(), peer.String(), mgrA.String())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "forbidden")
+}
+
+func TestKPIService_GetFranchiserRequests_TenantIsolation(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	setupDealerRequestsTableForScopeTest(t, db)
+	now := time.Now()
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	callerA, dealerA, dealerB := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		callerA.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, first_name) VALUES (?, ?, ?, ?)`,
+		dealerA.String(), tenantA.String(), string(models.RoleDealer), "DealerA").Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, first_name) VALUES (?, ?, ?, ?)`,
+		dealerB.String(), tenantB.String(), string(models.RoleDealer), "DealerB").Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO dealer_requests (id, dealer_id, type, description, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), dealerA.String(), "promo", "a", 100.0, "pending", now, now).Error)
+	require.NoError(t, db.Exec(
+		`INSERT INTO dealer_requests (id, dealer_id, type, description, amount, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		uuid.New().String(), dealerB.String(), "promo", "b", 200.0, "pending", now, now).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	resp, err := svc.GetFranchiserRequests(context.Background(), callerA, "all")
+	require.NoError(t, err)
+	require.Len(t, resp.Requests, 1, "franchiser сети A не должен видеть запросы сети B")
+	require.Equal(t, dealerA, resp.Requests[0].DealerID)
+}
+
+func setupNotificationsTableForAssignTest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec(`CREATE TABLE notifications (
+		id TEXT PRIMARY KEY, tenant_id TEXT, user_id TEXT, type TEXT,
+		title TEXT, message TEXT, is_read INTEGER, data TEXT, created_at DATETIME)`).Error)
+}
+
+func TestKPIService_AssignAlert_SameTenantAssigns(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	setupNotificationsTableForAssignTest(t, db)
+
+	tenantA := uuid.New()
+	caller, target, alert := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		caller.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		target.String(), tenantA.String(), string(models.RoleDealer)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO notifications (id, tenant_id, type, title) VALUES (?, ?, ?, ?)`,
+		alert.String(), tenantA.String(), "info", "t").Error)
+
+	svc := NewKPIService(db, nil, nil)
+	require.NoError(t, svc.AssignAlert(context.Background(), caller, alert, target))
+
+	var got string
+	require.NoError(t, db.Table("notifications").Select("user_id").Where("id = ?", alert.String()).Scan(&got).Error)
+	require.Equal(t, target.String(), got)
+}
+
+func TestKPIService_AssignAlert_CrossTenantAlertForbidden(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	setupNotificationsTableForAssignTest(t, db)
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	caller, target, alert := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		caller.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		target.String(), tenantA.String(), string(models.RoleDealer)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO notifications (id, tenant_id, type, title) VALUES (?, ?, ?, ?)`,
+		alert.String(), tenantB.String(), "info", "t").Error)
+
+	svc := NewKPIService(db, nil, nil)
+	err := svc.AssignAlert(context.Background(), caller, alert, target)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "forbidden")
+}
+
+func TestKPIService_AssignAlert_CrossTenantTargetForbidden(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	setupNotificationsTableForAssignTest(t, db)
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	caller, target, alert := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		caller.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		target.String(), tenantB.String(), string(models.RoleDealer)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO notifications (id, tenant_id, type, title) VALUES (?, ?, ?, ?)`,
+		alert.String(), tenantA.String(), "info", "t").Error)
+
+	svc := NewKPIService(db, nil, nil)
+	err := svc.AssignAlert(context.Background(), caller, alert, target)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "forbidden")
+}

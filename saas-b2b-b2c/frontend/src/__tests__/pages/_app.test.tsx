@@ -27,7 +27,7 @@ describe('_app', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null), setItem: jest.fn() },
+      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn() },
       writable: true,
     });
   });
@@ -37,19 +37,23 @@ describe('_app', () => {
     await waitFor(() => expect(screen.getByText('Test Page')).toBeInTheDocument());
   });
 
-  it('диспатчит auth из localStorage когда есть токен и user', async () => {
+  it('диспатчит auth из кэша user безо всякого токена (F7)', async () => {
     const userStr = JSON.stringify({ role: 'dealer', id: '1' });
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn((key: string) => (key === 'accessToken' ? 'token123' : key === 'user' ? userStr : null)) },
+      value: {
+        getItem: jest.fn((key: string) => (key === 'user' ? userStr : null)),
+        setItem: jest.fn(),
+        removeItem: jest.fn(),
+      },
       writable: true,
     });
     render(<MyApp Component={TestComponent} pageProps={{}} router={{} as never} />);
     await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith({ type: 'auth/setAuthFromStorage' }));
   });
 
-  it('не диспатчит когда нет токена', async () => {
+  it('не диспатчит когда нет кэшированного user', async () => {
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn(() => null) },
+      value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn() },
       writable: true,
     });
     render(<MyApp Component={TestComponent} pageProps={{}} router={{} as never} />);
@@ -59,7 +63,7 @@ describe('_app', () => {
 
   it('обрабатывает ошибку парсинга user', async () => {
     Object.defineProperty(window, 'localStorage', {
-      value: { getItem: jest.fn((key: string) => (key === 'accessToken' ? 'token' : key === 'user' ? 'invalid-json' : null)) },
+      value: { getItem: jest.fn((key: string) => (key === 'user' ? 'invalid-json' : null)), setItem: jest.fn(), removeItem: jest.fn() },
       writable: true,
     });
     const { logger } = jest.requireMock('@/utils/logger').default ? { logger: jest.requireMock('@/utils/logger').default } : { logger: { error: jest.fn() } };

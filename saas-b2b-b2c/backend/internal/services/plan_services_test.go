@@ -59,7 +59,7 @@ func TestPlanService_CreatePlan_Success(t *testing.T) {
 	}
 
 	mockRepo.On("Create", mock.Anything, mock.MatchedBy(func(p *models.Plan) bool {
-		return p.Name == "Premium" && p.Price == 100.0
+		return p.Name == "Premium" && p.Price.InexactFloat64() == 100.0
 	})).Return(nil)
 
 	plan, err := service.CreatePlan(context.Background(), dto)

@@ -962,7 +962,7 @@ func (h *KPIHandler) CreateDealerRequest(c *gin.Context) {
 	var req struct {
 		Type        string  `json:"type" binding:"required"`
 		Description string  `json:"description" binding:"required"`
-		Amount      float64 `json:"amount"`
+		Amount      float64 `json:"amount" binding:"gte=0,lte=1000000000000"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1145,6 +1145,11 @@ func (h *KPIHandler) GetManagerDealers(c *gin.Context) {
 	managerID := c.Param("id")
 	data, err := h.kpiSvc.GetManagerDealers(c.Request.Context(), user.ID.String(), managerID)
 	if err != nil {
+		// F8: чужой менеджер — 403, а не 500 (не светим наличие/структуру).
+		if err.Error() == "forbidden: manager not in your network" || err.Error() == "forbidden: manager not in your scope" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -1342,6 +1347,11 @@ func (h *KPIHandler) MarkAllFranchiserAlertsRead(c *gin.Context) {
 
 // AssignAlert - назначить ответственного за алерт
 func (h *KPIHandler) AssignAlert(c *gin.Context) {
+	caller, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 	alertIDStr := c.Param("id")
 	alertID, err := uuid.Parse(alertIDStr)
 	if err != nil {
@@ -1353,6 +1363,24 @@ func (h *KPIHandler) AssignAlert(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	targetID, err := uuid.Parse(req.AssignTo)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid assign_to"})
+		return
+	}
+	// RE-AUDIT: раньше — фантомный 200 без записи и без проверок.
+	if err := h.kpiSvc.AssignAlert(c.Request.Context(), caller.ID, alertID, targetID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "alert or user not found"})
+			return
+		}
+		if err.Error() == "forbidden: alert not in your network" || err.Error() == "forbidden: user not in your network" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Alert assigned", "alert_id": alertID})

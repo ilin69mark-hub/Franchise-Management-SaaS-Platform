@@ -1,0 +1,170 @@
+# ============================================================================
+# РЕЕСТР ИСКЛЮЧЕНИЙ БЕЗОПАСНОСТИ — единственный источник правды.
+#
+# ## Что это (md-шапка для людей)
+# Список A: задачи, которые ТРЕБУЮТ ключей/человека. Их нельзя закрыть
+# кодом — только выдачей секрета, командой на VPS или решением владельца.
+# У каждой записи: ID, место (файл:строка), риск, почему исключение,
+# кто принял + дата, условие снятия. Срока давности нет, но есть явное
+# правило: ПРОД БЕЗ ЭТОГО НЕ ЗАПУСКАТЬ (код падает fail-closed там,
+# где это проверяется автоматически).
+#
+# ## Как пользоваться
+# - В коде рядом с местом — только короткий маркер:
+#     // AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml   (Go)
+#     #  AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml   (yaml/env/sh)
+#     <!-- AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml --> (md)
+#   Решение живёт ТОЛЬКО здесь, маркер — указатель.
+# - Будущий аудит (человек или скрипт): сначала читает этот файл и
+#   пропускает совпавшие файл+ID (+pattern рядом с маркером, ±3 строки);
+#   остальное проверяет как обычно.
+# - CI (`scripts/check-audit-exceptions.sh`, job audit-exceptions):
+#   1) каждый маркер в репо обязан иметь парный ID в реестре, иначе fail;
+#   2) каждая запись обязана иметь маркер в указанном файле, иначе fail;
+#   3) pattern обязан быть рядом с маркером (±3 строки), иначе fail
+#      (нельзя тихо перетащить маркер на чужой код; строку обновить —
+#      можно, вместе с этим файлом в том же коммите).
+#
+# ## Строгий формат (для скрипта — не менять структуру!)
+# version: 1
+# entries: список, каждая запись РОВНО с ключами:
+#   id, file, line, pattern, title, risk, reason, accepted_by, accepted_at,
+#   remove_when, no_expiry. Поле pattern — уникальная подстрока рядом
+#   с маркером (проверяется grep -F).
+# ============================================================================
+version: 1
+owner: owner
+updated_at: "2026-09-24"
+entries:
+  - id: "E01"
+    file: "saas-b2b-b2c/backend/config/config.go"
+    line: 58
+    pattern: "JWT_SECRET must be set"
+    title: "JWT_SECRET выдаёт человек"
+    risk: "Critical"
+    reason: "Подпись HS256-токенов. Дефолта нет и быть не должно: любой дефолт = подделка сессий. Проверяется fail-closed (log.Fatal на старте, :? в compose)."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "никогда (permanent): прод без заданного JWT_SECRET не запускать"
+    no_expiry: true
+  - id: "E02"
+    file: "saas-b2b-b2c/backend/config/config.go"
+    line: 81
+    pattern: "DB_PASSWORD must be set"
+    title: "DB_PASSWORD (Postgres) выдаёт человек"
+    risk: "Critical"
+    reason: "Пароль БД. Дефолт postgres убран из кода: дефолтный пароль = открытый доступ к данным франшиз. Проверяется fail-closed (log.Fatal на старте, :? в compose)."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "никогда (permanent): прод без заданного DB_PASSWORD не запускать"
+    no_expiry: true
+  - id: "E03"
+    file: "saas-b2b-b2c/.env.example"
+    line: 40
+    pattern: "TG_BOT_TOKEN"
+    title: "TG_BOT_TOKEN выдаёт человек"
+    risk: "High"
+    reason: "Токен Telegram-бота (@BotFather). Кода, читающего его, пока нет — якорь на плейсхолдер .env и чеклист DEPLOY. Утечка = захват бота и рассылка от его имени."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда бот заведён и токен лежит только в .env на VPS (в репо — только плейсхолдер)"
+    no_expiry: true
+  - id: "E04"
+    file: "saas-b2b-b2c/.env.example"
+    line: 43
+    pattern: "STARS_PROVIDER_TOKEN"
+    title: "Telegram Stars / платёжный провайдер выдаёт человек"
+    risk: "High"
+    reason: "Токен платёжного провайдера (подключается в @BotFather). Деньги: утечка/подмена = финансовые потери. Кода пока нет — якорь на плейсхолдер и DEPLOY."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда провайдер подключён и токен только в .env на VPS"
+    no_expiry: true
+  - id: "E05"
+    file: "saas-b2b-b2c/.env.example"
+    line: 46
+    pattern: "VAPID_PUBLIC_KEY"
+    title: "VAPID-ключи Web Push выдаёт человек"
+    risk: "Medium"
+    reason: "Пара генерируется владельцем (npx web-push generate-vapid-keys). Приватный ключ подписывает пуши: утечка = рассылка от имени сервиса. Кода пока нет — якорь на плейсхолдер и DEPLOY."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда ключи сгенерированы и лежат только в .env на VPS"
+    no_expiry: true
+  - id: "E06"
+    file: "saas-b2b-b2c/.env.example"
+    line: 50
+    pattern: "ADMIN_TOKEN"
+    title: "ADMIN_TOKEN (bootstrap super-admin) выдаёт человек"
+    risk: "High"
+    reason: "Одноразовый токен владельца для первой настройки. После bootstrap обязан быть удалён из .env: вечный admin-токен = полный захват."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда bootstrap выполнен и токен удалён из .env на VPS"
+    no_expiry: true
+  - id: "E07"
+    file: "saas-b2b-b2c/.env.example"
+    line: 53
+    pattern: "ADMIN_TG_IDS"
+    title: "ADMIN_TG_IDS (получатели алертов) выдаёт человек"
+    risk: "Medium"
+    reason: "Telegram id владельцев для критических алертов. Без них инцидент (падение, брутфорс, переполнение) никто не увидит. Значения узнаются у @userinfobot."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда id вписаны в .env на VPS и тестовый алерт доставлен"
+    no_expiry: true
+  - id: "E08"
+    file: "DEPLOY.md"
+    line: 20
+    pattern: "ufw allow 22,80,443"
+    title: "UFW на VPS настраивает человек"
+    risk: "High"
+    reason: "Файрвол не кодифицируется: БД/Redis на 127.0.0.1 заданы в compose, но снаружи их должен резать UFW. Без него ошибка деплоя = открытые порты."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда на VPS выполнен ufw enable с правилами 22,80,443 и проверено сканированием"
+    no_expiry: true
+  - id: "E09"
+    file: "saas-b2b-b2c/nginx.conf"
+    line: 15
+    pattern: "listen 80;"
+    title: "TLS/HSTS/certbot выпускает человек"
+    risk: "High"
+    reason: "Сертификат и 443-блок может включить только человек с доступом к DNS/VPS (certbot --nginx). Без этого HSTS-заголовок игнорируется браузерами, Bearer/cookie идут открытым текстом."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда certbot выпущен, 443-блок включён, http->https редирект проверен curl"
+    no_expiry: true
+  - id: "E10"
+    file: "Makefile"
+    line: 141
+    pattern: "backup:"
+    title: "GPG-ключ шифрования бэкапов выдаёт человек"
+    risk: "High"
+    reason: "make backup сейчас пишет нешифрованный pg_dump: утекший архив = вся БД франшиз. Публичный GPG-ключ владельца импортируется на VPS вручную; шифрование — до выноса архива с машины."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда бэкапы шифруются на ключ владельца и restore из шифрованного архива протестирован"
+    no_expiry: true
+  - id: "E11"
+    file: "saas-b2b-b2c/k8s/ingress.yaml"
+    line: 22
+    pattern: "kind: ExternalSecret"
+    title: "k8s-секреты через ESO выдаёт человек"
+    risk: "High"
+    reason: "Inline-Secret с тремя одинаковыми CHANGE_ME удалён из манифеста. ESO + SecretStore (Vault/AWS SM) и сами записи заводит человек с доступом к кластеру и хранилищу. Без этого apply даст пустой franchise-secrets и прод не стартует."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда ESO установлено, SecretStore заведён и kubectl get secret franchise-secrets показывает ключи"
+    no_expiry: true
+  - id: "E12"
+    file: "DEPLOY.md"
+    line: 22
+    pattern: "PermitRootLogin no"
+    title: "SSH-харднинг VPS делает человек"
+    risk: "High"
+    reason: "Ключи, запрет паролей и root-логина, нестандартный порт — только руками на машине. Автоматике тут нечего проверять, кроме чеклиста."
+    accepted_by: "owner"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда на VPS закрыта парольная аутентификация и проверен отказ password-ssh"
+    no_expiry: true

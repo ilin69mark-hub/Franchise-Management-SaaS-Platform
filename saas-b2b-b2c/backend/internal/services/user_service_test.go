@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
 
@@ -281,7 +282,7 @@ func TestUserService_ChangePassword(t *testing.T) {
 			mockRepo.ExpectedCalls = nil
 			tt.setupMock()
 
-			err := service.ChangePassword(tt.userID, "oldpass", "newpass")
+			err := service.ChangePassword(tt.userID, "oldpass-is-long-1", "newpass-is-long-12")
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -311,9 +312,9 @@ func TestUserService_CreateEmployee(t *testing.T) {
 		{
 			name: "success - employee created by super_admin",
 			req: models.CreateEmployeeRequest{
-				Email:    "newemployee@example.com",
-				Password: "secure123",
-				Role:     models.RoleDealer,
+				Email:     "newemployee@example.com",
+				Password:  "secure-password-12",
+				Role:      models.RoleDealer,
 				FirstName: "New",
 				LastName:  "Employee",
 			},
@@ -329,7 +330,7 @@ func TestUserService_CreateEmployee(t *testing.T) {
 			name: "failure - permission denied - creating franchiser",
 			req: models.CreateEmployeeRequest{
 				Email:    "franchiser@example.com",
-				Password: "secure123",
+				Password: "secure-password-12",
 				Role:     models.RoleFranchisor,
 			},
 			tenantID:    uuid.New(),
@@ -343,7 +344,7 @@ func TestUserService_CreateEmployee(t *testing.T) {
 			name: "failure - franchiser role requires tenant_id",
 			req: models.CreateEmployeeRequest{
 				Email:    "franchiser@example.com",
-				Password: "secure123",
+				Password: "secure-password-12",
 				Role:     models.RoleFranchisor,
 			},
 			tenantID:    uuid.Nil,
@@ -386,11 +387,11 @@ func TestUserService_UpdateEmployee_Success(t *testing.T) {
 		Role:      models.RoleDealerManager,
 	}
 
-	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealerManager}, nil)
 	mockRepo.On("UpdateUserFields", mock.Anything, userID, mock.Anything).Return(nil)
 	mockRepo.On("GetUserByID", mock.Anything, userID).Return(&models.User{ID: userID, FirstName: "John"}, nil)
 
-	user, err := service.UpdateEmployee(userID, tenantID, req)
+	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleDealer))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
@@ -407,7 +408,7 @@ func TestUserService_UpdateEmployee_NotFound(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
 
-	user, err := service.UpdateEmployee(userID, tenantID, req)
+	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleFranchisor))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -425,7 +426,7 @@ func TestUserService_UpdateEmployee_InvalidRole(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
 
-	user, err := service.UpdateEmployee(userID, tenantID, req)
+	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleSuperAdmin))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid role")
@@ -440,10 +441,10 @@ func TestUserService_DeleteEmployee_Success(t *testing.T) {
 	userID := uuid.New()
 	tenantID := uuid.New()
 
-	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealer}, nil)
 	mockRepo.On("DeleteUser", mock.Anything, userID).Return(nil)
 
-	err := service.DeleteEmployee(userID, tenantID)
+	err := service.DeleteEmployee(userID, tenantID, string(models.RoleFranchisor))
 
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -458,10 +459,53 @@ func TestUserService_DeleteEmployee_NotFound(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
 
-	err := service.DeleteEmployee(userID, tenantID)
+	err := service.DeleteEmployee(userID, tenantID, string(models.RoleFranchisor))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 	mockRepo.AssertExpectations(t)
 }
 
+func TestUserService_UpdateEmployee_EscalationDenied(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	req := models.UpdateEmployeeRequest{Role: models.RoleFranchisorManager}
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealerManager}, nil)
+
+	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleDealer))
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "permission denied")
+	assert.Nil(t, user)
+	mockRepo.AssertNotCalled(t, "UpdateUserFields", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestUserService_DeleteEmployee_EscalationDenied(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+
+	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealer}, nil)
+
+	err := service.DeleteEmployee(userID, tenantID, string(models.RoleDealerManager))
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "permission denied")
+	mockRepo.AssertNotCalled(t, "DeleteUser", mock.Anything, mock.Anything)
+}
+
+func TestUserService_ChangePassword_ShortRejected(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	err := service.ChangePassword(uuid.New(), "oldpass-is-long-1", "short")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "12..72")
+	mockRepo.AssertNotCalled(t, "GetUserByID", mock.Anything, mock.Anything)
+}

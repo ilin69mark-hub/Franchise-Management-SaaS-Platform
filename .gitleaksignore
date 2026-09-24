@@ -1,0 +1,10 @@
+# .gitleaksignore — зафиксированные решения по историческим находкам
+# Формат: по одному Fingerprint на строку (вывод gitleaks --verbose).
+# Решение 2026-09-24 (подтверждено владельцем): проект на стадии разработки,
+# все секреты в истории — тестовые dummy-значения, в проде никогда не использовались.
+# Историю git не переписывали сознательно (avoid force-push после публикации).
+# Поэтому исторический лик помечен как accepted / false-positive, а не ротацией.
+#
+# cca0ad4 DEPLOY.md:12 — DB_PASSWORD=test JWT_SECRET=<redacted-test-value> (generic-api-key)
+# Текущий DEPLOY.md уже исправлен на CHANGE_ME_* (коммит 5d7d8ce), это только история.
+cca0ad43fb92aad8fe340cb5f7f462b269a80008:DEPLOY.md:generic-api-key:12

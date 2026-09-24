@@ -112,7 +112,7 @@ func TestSecurity_UpdateGoal_NegativeRejected(t *testing.T) {
 	existing := &models.Goal{SalesPlan: 1000}
 	mockRepo.On("GetByID", mock.Anything, "gid").Return(existing, nil)
 	dto := UpdateGoalDTO{SalesPlan: -1}
-	_, err := svc.UpdateGoal(context.Background(), "gid", dto, "assigner", "tenant")
+	_, err := svc.UpdateGoal(context.Background(), "gid", dto, "assigner", "tenant", "super_admin")
 	assert.Error(t, err)
 }
 

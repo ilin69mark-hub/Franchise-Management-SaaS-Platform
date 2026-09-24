@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
@@ -17,15 +18,17 @@ type PlanService interface {
 }
 
 // ---------- DTO ----------
+// На границе API принимаем float (фронт шлёт number), внутри конвертим
+// в decimal через MoneyFromFloat (Round 2) — см. money.go.
 type CreatePlanDTO struct {
 	Name      string  `json:"name" binding:"required"`
-	Price     float64 `json:"price" binding:"required,gte=0"`
+	Price     float64 `json:"price" binding:"required,gte=0,lte=1000000000000"`
 	MaxSalons int     `json:"max_salons" binding:"required,gte=0"`
 	MaxUsers  int     `json:"max_users" binding:"required,gte=0"`
 }
 type UpdatePlanDTO struct {
 	Name      *string  `json:"name,omitempty"`
-	Price     *float64 `json:"price,omitempty"`
+	Price     *float64 `json:"price,omitempty" binding:"omitempty,gte=0,lte=1000000000000"`
 	MaxSalons *int     `json:"max_salons,omitempty"`
 	MaxUsers  *int     `json:"max_users,omitempty"`
 }
@@ -36,9 +39,12 @@ type planService struct{ repo repository.PlanRepository }
 func NewPlanService(r repository.PlanRepository) PlanService { return &planService{repo: r} }
 
 func (s *planService) CreatePlan(ctx context.Context, dto CreatePlanDTO) (*models.Plan, error) {
+	if dto.Price < 0 || dto.Price > 1e12 {
+		return nil, fmt.Errorf("price out of range")
+	}
 	p := &models.Plan{
 		Name:      dto.Name,
-		Price:     dto.Price,
+		Price:     MoneyFromFloat(dto.Price),
 		MaxSalons: dto.MaxSalons,
 		MaxUsers:  dto.MaxUsers,
 	}
@@ -62,7 +68,10 @@ func (s *planService) UpdatePlan(ctx context.Context, id string, dto UpdatePlanD
 		existing.Name = *dto.Name
 	}
 	if dto.Price != nil {
-		existing.Price = *dto.Price
+		if *dto.Price < 0 || *dto.Price > 1e12 {
+			return nil, fmt.Errorf("price out of range")
+		}
+		existing.Price = MoneyFromFloat(*dto.Price)
 	}
 	if dto.MaxSalons != nil {
 		existing.MaxSalons = *dto.MaxSalons

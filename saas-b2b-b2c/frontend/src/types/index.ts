@@ -30,9 +30,11 @@ export interface RegisterRequest {
 }
 
 /* ---------- Ответ после логина/регистрации ---------- */
+// F7: бэкенд возвращает только {user} (сессия в httpOnly cookie).
+// Поля токенов оставлены опциональными для совместимости типов.
 export interface AuthResponse {
   user: User;
-  token: string;
+  token?: string;
   refresh_token?: string;
 }
 

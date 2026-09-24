@@ -97,6 +97,10 @@ func (s *UserService) UpdateProfile(userID uuid.UUID, req models.UserUpdateReque
 }
 
 func (s *UserService) ChangePassword(userID uuid.UUID, oldPassword, newPassword string) error {
+	// F6: смена на "123" запрещена — та же политика, что при регистрации.
+	if len(newPassword) < 12 || len(newPassword) > 128 {
+		return errors.New("password must be 12..72 characters")
+	}
 	user, err := s.userRepo.GetUserByID(context.Background(), userID)
 	if err != nil {
 		return err
@@ -172,7 +176,10 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 		}
 	}
 
-	// 3. Подготовка данных
+	// 3. Подготовка данных (F6: HR-пароли — та же политика, binding-валидацию можно обойти прямым вызовом)
+	if len(req.Password) < 12 || len(req.Password) > 128 {
+		return nil, errors.New("password must be 12..72 characters")
+	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -200,10 +207,32 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 	return &user, nil
 }
 
-func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.UpdateEmployeeRequest) (*models.User, error) {
-	_, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+// allowedManage — кого какой создатель вправе вести (F4: тот же whitelist,
+// что и на создании; на обновлении/удалении его не было — дыра эскалации).
+var allowedManage = map[string]map[models.Role]bool{
+	string(models.RoleSuperAdmin): {
+		models.RoleFranchisor: true, models.RoleFranchisorManager: true,
+		models.RoleDealer: true, models.RoleDealerManager: true,
+	},
+	string(models.RoleFranchisor): {
+		models.RoleFranchisorManager: true, models.RoleDealer: true,
+	},
+	string(models.RoleFranchisorManager): {
+		models.RoleDealer: true,
+	},
+	string(models.RoleDealer): {
+		models.RoleDealerManager: true,
+	},
+}
+
+func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.UpdateEmployeeRequest, callerRole string) (*models.User, error) {
+	target, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
 	if err != nil {
 		return nil, errors.New("employee not found in your network")
+	}
+	// super_admin трогает только super_admin
+	if target.Role == models.RoleSuperAdmin && callerRole != string(models.RoleSuperAdmin) {
+		return nil, errors.New("permission denied: cannot manage super_admin")
 	}
 	updateData := map[string]interface{}{"updated_at": time.Now()}
 	if req.FirstName != "" {
@@ -219,9 +248,30 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 		if req.Role == models.RoleSuperAdmin || req.Role == models.RoleFranchisor {
 			return nil, errors.New("invalid role assignment")
 		}
+		// F4: роль менять можно только в пределах своего whitelist
+		if callerRole == "" {
+			return nil, errors.New("permission denied: cannot change role")
+		}
+		if allowed, ok := allowedManage[callerRole]; !ok || !allowed[req.Role] {
+			return nil, errors.New("permission denied: cannot assign this role")
+		}
 		updateData["role"] = req.Role
 	}
 	if req.ManagedBy != nil {
+		// F4: ManagedBy — только из того же tenant (как на создании)
+		if callerRole == "" {
+			return nil, errors.New("permission denied: cannot reassign manager")
+		}
+		mgr, err := s.userRepo.GetUserByID(context.Background(), *req.ManagedBy)
+		if err != nil {
+			return nil, errors.New("managed_by user not found")
+		}
+		if tenantID != uuid.Nil && mgr.TenantID != nil && *mgr.TenantID != tenantID {
+			return nil, errors.New("managed_by must be in same tenant")
+		}
+		if tenantID != uuid.Nil && mgr.TenantID == nil {
+			return nil, errors.New("managed_by must be in same tenant")
+		}
 		updateData["managed_by"] = req.ManagedBy
 	}
 
@@ -231,10 +281,20 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 	return s.userRepo.GetUserByID(context.Background(), userID)
 }
 
-func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID) error {
-	_, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID, callerRole string) error {
+	target, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
 	if err != nil {
 		return errors.New("employee not found in your network")
+	}
+	// super_admin удаляет только super_admin; остальные — только роли из своего whitelist
+	if target.Role == models.RoleSuperAdmin && callerRole != string(models.RoleSuperAdmin) {
+		return errors.New("permission denied: cannot manage super_admin")
+	}
+	if callerRole == "" {
+		return errors.New("permission denied")
+	}
+	if allowed, ok := allowedManage[callerRole]; !ok || !allowed[target.Role] {
+		return errors.New("permission denied: cannot delete user with this role")
 	}
 	return s.userRepo.DeleteUser(context.Background(), userID)
 }

@@ -427,7 +427,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 		Where("salon_id = ? AND status = ? AND created_at BETWEEN ? AND ?", salonID, "sale", firstOfMonth, targetDate).
 		Count(&dealsCount)
 	if dealsCount > 0 {
-		resp.AvgCheck = monthFact / float64(dealsCount)
+		resp.AvgCheck = MoneyDiv(monthFact, dealsCount)
 	}
 
 	// ====================
@@ -520,7 +520,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 		resp.PendingPayments = append(resp.PendingPayments, models.PendingPayment{
 			ContractID:  c.ID,
 			ClientName:  c.ClientName,
-			Amount:      c.RemainAmount,
+			Amount:      c.RemainAmount.InexactFloat64(),
 			Status:      c.PaymentStatus,
 			PaymentDate: today,
 		})
@@ -570,7 +570,7 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 			var status string
 			var count int64
 			var sum float64
-_ = rows.Scan(&status, &count, &sum)
+			_ = rows.Scan(&status, &count, &sum)
 			statusCounts[status] = count
 			statusSums[status] = sum
 		}
@@ -621,7 +621,7 @@ _ = rows.Scan(&status, &count, &sum)
 			ID:          lead.ID,
 			ClientName:  lead.FullName,
 			Phone:       lead.Phone,
-			Amount:      lead.Budget,
+			Amount:      lead.Budget.InexactFloat64(),
 			CreatedAt:   lead.UpdatedAt.Format("2006-01-02"),
 			DaysStalled: daysStalled,
 			ManagerID:   lead.ManagerID,
@@ -947,7 +947,7 @@ func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID,
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var ps productStats
-_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
+			_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
 			if ps.Name != "" {
 				productStatsList = append(productStatsList, ps)
 			}
@@ -1384,7 +1384,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var exp Expense
-_ = rows.Scan(&exp.Category, &exp.Amount)
+			_ = rows.Scan(&exp.Category, &exp.Amount)
 			expenses = append(expenses, exp)
 		}
 		// Маппинг расходов по категориям
@@ -1688,7 +1688,7 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var ps productStats
-_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
+			_ = rows.Scan(&ps.Name, &ps.Revenue, &ps.Quantity)
 			if ps.Name != "" {
 				products = append(products, ps)
 			}
@@ -1993,7 +1993,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 	daysPassed := targetDate.Sub(startDate).Hours() / 24
 	if daysPassed > 0 {
 		m := int(targetDate.Month())
-		qm := time.Month(((m - 1) / 3) * 3 + 1)
+		qm := time.Month(((m-1)/3)*3 + 1)
 		qStart := time.Date(targetDate.Year(), qm, 1, 0, 0, 0, 0, targetDate.Location())
 		qEnd := qStart.AddDate(0, 3, 0)
 		daysInQuarter := qEnd.Sub(qStart).Hours() / 24
@@ -2489,7 +2489,7 @@ func (s *KPIService) GetDealerTasks(ctx context.Context, userID uuid.UUID) (*mod
 	now := time.Now()
 	for rows.Next() {
 		var t DealerTask
-_ = rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.CreatedAt)
+		_ = rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.CreatedAt)
 
 		// Определяем статус просрочки
 		isOverdue := t.DueDate != nil && t.DueDate.Before(now) && t.Status != "done"
@@ -2542,7 +2542,6 @@ func isMissingTableErr(err error) bool {
 func (s *KPIService) GetDealerRequests(ctx context.Context, userID uuid.UUID, statusFilter string) (*models.DealerRequestsResponse, error) {
 	resp := &models.DealerRequestsResponse{}
 
-	
 	query := "SELECT id, type, description, amount, status, created_at FROM dealer_requests WHERE dealer_id = ?"
 	args := []interface{}{userID.String()}
 
@@ -2563,13 +2562,13 @@ func (s *KPIService) GetDealerRequests(ctx context.Context, userID uuid.UUID, st
 
 	for rows.Next() {
 		var r models.DealerRequest
-_ = rows.Scan(&r.ID, &r.Type, &r.Description, &r.Amount, &r.Status, &r.CreatedAt)
+		_ = rows.Scan(&r.ID, &r.Type, &r.Description, &r.Amount, &r.Status, &r.CreatedAt)
 		resp.Requests = append(resp.Requests, models.DealerRequestItem{
 			ID:          r.ID,
 			DealerID:    userID,
 			Type:        r.Type,
 			Description: r.Description,
-			Amount:      r.Amount,
+			Amount:      r.Amount.InexactFloat64(),
 			Status:      r.Status,
 			CreatedAt:   r.CreatedAt,
 		})
@@ -2590,10 +2589,14 @@ _ = rows.Scan(&r.ID, &r.Type, &r.Description, &r.Amount, &r.Status, &r.CreatedAt
 }
 
 func (s *KPIService) CreateDealerRequest(ctx context.Context, userID uuid.UUID, reqType, description string, amount float64) error {
+	if amount < 0 || amount > 1e12 {
+		return fmt.Errorf("amount out of range")
+	}
+	dec := MoneyFromFloat(amount)
 	return s.DB.Exec(`
 		INSERT INTO dealer_requests (id, dealer_id, type, description, amount, status, created_at, updated_at)
 		VALUES (gen_random_uuid(), ?, ?, ?, ?, 'pending', NOW(), NOW())
-	`, userID.String(), reqType, description, amount).Error
+	`, userID.String(), reqType, description, dec.StringFixed(2)).Error
 }
 
 // === Dealer Marketing Budget Service ===
@@ -2628,9 +2631,9 @@ func (s *KPIService) GetDealerMarketingBudget(ctx context.Context, userID uuid.U
 		resp.UsedAmount = mb.UsedAmount
 	}
 
-	resp.Remaining = resp.TotalAmount - resp.UsedAmount
+	resp.Remaining = MoneySub(resp.TotalAmount, resp.UsedAmount)
 	if resp.TotalAmount > 0 {
-		resp.UsagePercent = int((resp.UsedAmount / resp.TotalAmount) * 100)
+		resp.UsagePercent = MoneyPercent(resp.UsedAmount, resp.TotalAmount)
 	}
 
 	return resp, nil
@@ -2665,7 +2668,7 @@ func (s *KPIService) GetDealerAlerts(ctx context.Context, userID uuid.UUID) (*mo
 
 	for rows.Next() {
 		var a Alert
-_ = rows.Scan(&a.ID, &a.Type, &a.Title, &a.Message, &a.IsRead)
+		_ = rows.Scan(&a.ID, &a.Type, &a.Title, &a.Message, &a.IsRead)
 
 		priority := "info"
 		//nolint:staticcheck
@@ -2768,13 +2771,26 @@ func (s *KPIService) GetFranchiserRequests(ctx context.Context, userID uuid.UUID
 		Requests: []models.FranchiserRequestItem{},
 	}
 
-	query := s.DB.Where("status = ?", "pending")
+	// F8: раньше отдавались ВСЕ pending-запросы всех сетей (утечка между B2B-клиентами).
+	// super_admin — всё; остальные — только запросы дилеров своей сети.
+	var caller models.User
+	if err := s.DB.WithContext(ctx).Select("id, tenant_id, role").Where("id = ?", userID).First(&caller).Error; err != nil {
+		return nil, err
+	}
+	query := s.DB.WithContext(ctx).Model(&models.DealerRequest{})
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID == nil {
+			return resp, nil
+		}
+		query = query.Joins("JOIN users ON users.id = dealer_requests.dealer_id").Where("users.tenant_id = ?", *caller.TenantID)
+	}
+	query = query.Where("dealer_requests.status = ?", "pending")
 	if filter != "all" && filter != "" {
-		query = query.Where("type = ?", filter)
+		query = query.Where("dealer_requests.type = ?", filter)
 	}
 
 	var requests []models.DealerRequest
-	if err := query.Order("created_at DESC").Find(&requests).Error; err != nil {
+	if err := query.Order("dealer_requests.created_at DESC").Find(&requests).Error; err != nil {
 		return nil, err
 	}
 
@@ -2788,7 +2804,7 @@ func (s *KPIService) GetFranchiserRequests(ctx context.Context, userID uuid.UUID
 			DealerName:  dealerName,
 			Type:        req.Type,
 			Description: req.Description,
-			Amount:      req.Amount,
+			Amount:      req.Amount.InexactFloat64(),
 			Status:      req.Status,
 			CreatedAt:   req.CreatedAt,
 		})
@@ -2909,6 +2925,33 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 	if err != nil {
 		return resp, err
 	}
+	callerUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return resp, err
+	}
+
+	// F8: userID раньше игнорировался — любой видел дилеров любого менеджера.
+	// super_admin — всё; остальные — тот же tenant И (сам менеджер /
+	// его руководитель / franchiser(-manager) сети).
+	var caller models.User
+	if err := s.DB.WithContext(ctx).Select("id, tenant_id, role, managed_by").Where("id = ?", callerUUID).First(&caller).Error; err != nil {
+		return resp, err
+	}
+	var mgr models.User
+	if err := s.DB.WithContext(ctx).Select("id, tenant_id, role, managed_by").Where("id = ?", mgrUUID).First(&mgr).Error; err != nil {
+		return resp, err
+	}
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID == nil || mgr.TenantID == nil || *caller.TenantID != *mgr.TenantID {
+			return resp, errors.New("forbidden: manager not in your network")
+		}
+		isSelf := caller.ID == mgr.ID
+		isSupervisor := mgr.ManagedBy != nil && *mgr.ManagedBy == caller.ID
+		isFranchiser := caller.Role == models.RoleFranchisor || caller.Role == models.RoleFranchisorManager
+		if !isSelf && !isSupervisor && !isFranchiser {
+			return resp, errors.New("forbidden: manager not in your scope")
+		}
+	}
 
 	var dealers []models.User
 	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, mgrUUID).Limit(100).Find(&dealers).Error; err != nil {
@@ -3000,16 +3043,16 @@ func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter
 		// upsert: delete existing for this assignee+quarter then insert
 		s.DB.Where("assignee_id = ? AND period = ? AND start_date = ?", mgrID, "quarter", qStart).Delete(&models.Goal{})
 		goal := models.Goal{
-			AssignerID:   franchiserID,
-			AssigneeID:   mgrID,
-			Role:         string(models.RoleFranchisorManager),
-			SalesPlan:    p.PlanAmount,
-			LeadsPlan:    p.TargetDealers,
-			Period:       "quarter",
-			StartDate:    qStart,
-			EndDate:      qEnd,
-			TargetDate:   qStart,
-			TenantID:     franchiser.TenantID,
+			AssignerID: franchiserID,
+			AssigneeID: mgrID,
+			Role:       string(models.RoleFranchisorManager),
+			SalesPlan:  p.PlanAmount,
+			LeadsPlan:  p.TargetDealers,
+			Period:     "quarter",
+			StartDate:  qStart,
+			EndDate:    qEnd,
+			TargetDate: qStart,
+			TenantID:   franchiser.TenantID,
 		}
 		if err := s.DB.Create(&goal).Error; err != nil {
 			return err
@@ -3231,12 +3274,12 @@ func (s *KPIService) GetSystemIssues(ctx context.Context, userID string, status 
 	issues := []map[string]interface{}{}
 	// alerts (DB alerts table has status column even if Go model omits it, query via Table)
 	type AlertRow struct {
-		ID        uuid.UUID `gorm:"column:id"`
-		Title     string    `gorm:"column:title"`
-		Description string  `gorm:"column:description"`
-		Severity  string    `gorm:"column:severity"`
-		Status    string    `gorm:"column:status"`
-		CreatedAt time.Time `gorm:"column:created_at"`
+		ID          uuid.UUID `gorm:"column:id"`
+		Title       string    `gorm:"column:title"`
+		Description string    `gorm:"column:description"`
+		Severity    string    `gorm:"column:severity"`
+		Status      string    `gorm:"column:status"`
+		CreatedAt   time.Time `gorm:"column:created_at"`
 	}
 	var alerts []AlertRow
 	q := s.DB.Table("alerts").Limit(50).Order("created_at DESC")
@@ -3272,9 +3315,9 @@ func (s *KPIService) GetSystemIssues(ctx context.Context, userID string, status 
 // GetDealersGeography - география дилеров (GROUP BY region/city)
 func (s *KPIService) GetDealersGeography(ctx context.Context, userID string) ([]map[string]interface{}, error) {
 	type Row struct {
-		Region string  `gorm:"column:region"`
-		City   string  `gorm:"column:city"`
-		Count  int     `gorm:"column:cnt"`
+		Region string `gorm:"column:region"`
+		City   string `gorm:"column:city"`
+		Count  int    `gorm:"column:cnt"`
 	}
 	var rows []Row
 	s.DB.Table("salons").Select("COALESCE(region,'Не указан') as region, COALESCE(city,'') as city, COUNT(*) as cnt").Group("region, city").Limit(100).Scan(&rows)
@@ -3326,6 +3369,35 @@ func (s *KPIService) GetMarketingROI(ctx context.Context, userID string, period 
 	return map[string]interface{}{"roi": roi, "gain": gain, "cost": cost, "period": period}, nil
 }
 
+// AssignAlert — назначение уведомления сотруднику своей сети.
+// RE-AUDIT: раньше хендлер отвечал 200 ничего не делая (фантомный успех).
+func (s *KPIService) AssignAlert(ctx context.Context, callerID, alertID, targetUserID uuid.UUID) error {
+	var caller models.User
+	if err := s.DB.WithContext(ctx).Select("id, tenant_id, role").Where("id = ?", callerID).First(&caller).Error; err != nil {
+		return err
+	}
+	var n models.Notification
+	if err := s.DB.WithContext(ctx).Where("id = ?", alertID).First(&n).Error; err != nil {
+		return gorm.ErrRecordNotFound
+	}
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID == nil || n.TenantID != *caller.TenantID {
+			return errors.New("forbidden: alert not in your network")
+		}
+	}
+	var target models.User
+	if err := s.DB.WithContext(ctx).Select("id, tenant_id, role").Where("id = ?", targetUserID).First(&target).Error; err != nil {
+		return gorm.ErrRecordNotFound
+	}
+	if caller.Role != models.RoleSuperAdmin {
+		if target.TenantID == nil || *target.TenantID != *caller.TenantID {
+			return errors.New("forbidden: user not in your network")
+		}
+	}
+	n.UserID = &targetUserID
+	return s.DB.WithContext(ctx).Save(&n).Error
+}
+
 // GetAlertSettings - настройки алертов
 func (s *KPIService) GetAlertSettings(ctx context.Context, userID string) (map[string]interface{}, error) {
 	return map[string]interface{}{
@@ -3360,11 +3432,17 @@ func (s *KPIService) GetReportData(ctx context.Context, userID string, period, d
 	s.DB.Table("tenants").Count(&tenantCount)
 	return map[string]interface{}{
 		"executive_summary": map[string]interface{}{"period": period, "date": date, "total_plan": totalPlan, "total_fact": totalFact, "tenants": tenantCount},
-		"plan_fact_dynamics": map[string]interface{}{"total_plan": totalPlan, "total_fact": totalFact, "percent": func() int { if totalPlan > 0 { return int(totalFact / totalPlan * 100) } else { return 0 } }()},
-		"network_growth":     map[string]interface{}{"tenants": tenantCount, "health": health},
-		"sales_structure":    map[string]interface{}{"geography": geo, "roi": roi},
-		"territory_rating":   geo,
-		"risks":              issues,
+		"plan_fact_dynamics": map[string]interface{}{"total_plan": totalPlan, "total_fact": totalFact, "percent": func() int {
+			if totalPlan > 0 {
+				return int(totalFact / totalPlan * 100)
+			} else {
+				return 0
+			}
+		}()},
+		"network_growth":   map[string]interface{}{"tenants": tenantCount, "health": health},
+		"sales_structure":  map[string]interface{}{"geography": geo, "roi": roi},
+		"territory_rating": geo,
+		"risks":            issues,
 	}, nil
 }
 

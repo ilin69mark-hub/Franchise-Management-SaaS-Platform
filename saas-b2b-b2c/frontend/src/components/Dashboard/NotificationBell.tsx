@@ -84,13 +84,13 @@ const NotificationBell: React.FC = () => {
   }, []);
 
   const initWebSocket = useCallback(() => {
-    const token = localStorage.getItem('accessToken');
+    // F7: токен в query больше не кладём (светит сессию в логах/прокси);
+    // сокет при наличии сессии аутентифицируется cookie автоматически.
     const userId = localStorage.getItem('id') || localStorage.getItem('userId') || localStorage.getItem('user_id');
-    if (!token && !userId) return;
+    if (!userId) return;
 
     const baseWs = buildWsUrl();
-    const qs = token ? `token=${encodeURIComponent(token)}` : `user_id=${encodeURIComponent(userId || '')}`;
-    const wsUrl = `${baseWs}?${qs}`;
+    const wsUrl = baseWs;
 
     try {
       const ws = new WebSocket(wsUrl);

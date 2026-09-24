@@ -1,0 +1,6 @@
+# RE-AUDIT(E-registry): backups/ — нешифрованные дампы прод-БД (см. .audit-exceptions.yml E10).
+# Без этого одна команда `git add -A` после `make backup` уносит БД на GitHub.
+backups/
+*.sql.gz
+*.dump
+.env

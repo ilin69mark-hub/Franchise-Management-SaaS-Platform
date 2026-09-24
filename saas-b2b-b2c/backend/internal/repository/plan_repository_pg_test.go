@@ -8,6 +8,7 @@ import (
 	"franchise-saas-backend/internal/repository/testdb"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func TestPlanRepository_Create_Postgres(t *testing.T) {
 	plan := &models.Plan{
 		ID:        uuid.New(),
 		Name:      "Basic Plan",
-		Price:     29.99,
+		Price:     decimal.NewFromFloat(29.99),
 		MaxSalons: 1,
 		MaxUsers:  5,
 	}
@@ -35,7 +36,7 @@ func TestPlanRepository_Create_Postgres(t *testing.T) {
 	err = db.First(&found, "id = ?", plan.ID).Error
 	require.NoError(t, err)
 	assert.Equal(t, "Basic Plan", found.Name)
-	assert.Equal(t, 29.99, found.Price)
+	assert.True(t, decimal.NewFromFloat(29.99).Equal(found.Price))
 }
 
 func TestPlanRepository_GetByID_Postgres(t *testing.T) {
@@ -49,7 +50,7 @@ func TestPlanRepository_GetByID_Postgres(t *testing.T) {
 	plan := &models.Plan{
 		ID:        uuid.New(),
 		Name:      "Premium Plan",
-		Price:     99.99,
+		Price:     decimal.NewFromFloat(99.99),
 		MaxSalons: 10,
 		MaxUsers:  50,
 	}
@@ -71,9 +72,9 @@ func TestPlanRepository_List_Postgres(t *testing.T) {
 	repo := NewPlanRepository(db)
 
 	plans := []models.Plan{
-		{ID: uuid.New(), Name: "Basic", Price: 10, MaxSalons: 1, MaxUsers: 5},
-		{ID: uuid.New(), Name: "Pro", Price: 50, MaxSalons: 5, MaxUsers: 20},
-		{ID: uuid.New(), Name: "Enterprise", Price: 200, MaxSalons: 100, MaxUsers: 500},
+		{ID: uuid.New(), Name: "Basic", Price: decimal.NewFromInt(10), MaxSalons: 1, MaxUsers: 5},
+		{ID: uuid.New(), Name: "Pro", Price: decimal.NewFromInt(50), MaxSalons: 5, MaxUsers: 20},
+		{ID: uuid.New(), Name: "Enterprise", Price: decimal.NewFromInt(200), MaxSalons: 100, MaxUsers: 500},
 	}
 
 	for _, p := range plans {
@@ -98,7 +99,7 @@ func TestPlanRepository_Update_Postgres(t *testing.T) {
 	plan := &models.Plan{
 		ID:        uuid.New(),
 		Name:      "Original",
-		Price:     10,
+		Price:     decimal.NewFromInt(10),
 		MaxSalons: 1,
 		MaxUsers:  5,
 	}
@@ -107,7 +108,7 @@ func TestPlanRepository_Update_Postgres(t *testing.T) {
 	require.NoError(t, err)
 
 	plan.Name = "Updated"
-	plan.Price = 25
+	plan.Price = decimal.NewFromInt(25)
 
 	err = repo.Update(context.Background(), plan)
 	require.NoError(t, err)
@@ -115,7 +116,7 @@ func TestPlanRepository_Update_Postgres(t *testing.T) {
 	found, err := repo.GetByID(context.Background(), plan.ID.String())
 	require.NoError(t, err)
 	assert.Equal(t, "Updated", found.Name)
-	assert.Equal(t, 25.0, found.Price)
+	assert.True(t, decimal.NewFromInt(25).Equal(found.Price))
 }
 
 func TestPlanRepository_Delete_Postgres(t *testing.T) {
@@ -129,7 +130,7 @@ func TestPlanRepository_Delete_Postgres(t *testing.T) {
 	plan := &models.Plan{
 		ID:    uuid.New(),
 		Name:  "To Delete",
-		Price: 10,
+		Price: decimal.NewFromInt(10),
 	}
 
 	err := repo.Create(context.Background(), plan)

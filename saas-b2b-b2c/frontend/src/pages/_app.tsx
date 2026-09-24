@@ -19,9 +19,12 @@ function MyApp({ Component, pageProps }: AppProps) {
   const [showChild, setShowChild] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
+    // F7: восстанавливаем только кэш профиля (токенов больше нет);
+    // заодно зачищаем legacy-ключи эпохи localStorage-токенов.
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     const userStr = localStorage.getItem('user');
-    if (token && userStr) {
+    if (userStr) {
       try {
         const user = JSON.parse(userStr);
         if (user && user.role) {

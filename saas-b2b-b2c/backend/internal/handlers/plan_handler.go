@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"franchise-saas-backend/internal/middleware"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 
@@ -29,6 +30,8 @@ type PlanHandler struct {
 func NewPlanHandler(r *gin.RouterGroup, svc service.PlanService) {
 	h := &PlanHandler{svc: svc}
 	plans := r.Group("/plans")
+	// Тарифы — только super_admin (F3: любой авторизованный мог создавать/удалять).
+	plans.Use(middleware.RequireRole("super_admin"))
 	{
 		plans.POST("", h.Create)       // POST   /plans
 		plans.GET("", h.List)          // GET    /plans
@@ -56,7 +59,7 @@ func toResp(p *models.Plan) PlanResponse {
 	return PlanResponse{
 		ID:        p.ID.String(),
 		Name:      p.Name,
-		Price:     p.Price,
+		Price:     p.Price.InexactFloat64(),
 		MaxSalons: p.MaxSalons,
 		MaxUsers:  p.MaxUsers,
 		CreatedAt: p.CreatedAt.Format(time.RFC3339),

@@ -1,4 +1,3 @@
-import logger from '@/utils/logger';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import {
   User,
@@ -13,6 +12,7 @@ import {
   UnitTemplate,
 } from '@/types';
 import dayjs from 'dayjs';
+import { getCsrfToken, CSRF_HEADER } from '@/utils/csrf';
 
 export const apiSlice = createApi({
   reducerPath: 'api',
@@ -21,25 +21,11 @@ export const apiSlice = createApi({
     // fallback – localhost:8080 (для локального старта без Docker)
     baseUrl: `${(process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? (()=>{throw new Error('NEXT_PUBLIC_API_URL must be set in production')})() : 'http://localhost:8080'))}/api/v1`,
     credentials: 'include',
-    prepareHeaders: (headers, { getState }) => {
-      // Пытаемся взять токен из Redux‑стора
-      let token = (getState() as { auth?: { accessToken?: string } }).auth?.accessToken;
-
-      // Если в сторе ничего, ищем в localStorage (на случай полной перезагрузки)
-      if (!token && typeof window !== 'undefined') {
-        const storedState = localStorage.getItem('reduxState');
-        if (storedState) {
-          try {
-            const parsed = JSON.parse(storedState);
-            token = parsed?.auth?.accessToken;
-          } catch (e) {
-            logger.error('Error parsing reduxState from localStorage', e);
-          }
-        }
-      }
-
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
+    prepareHeaders: (headers) => {
+      // F7: сессия в httpOnly cookie; CSRF double-submit для мутаций.
+      const csrf = getCsrfToken();
+      if (csrf) {
+        headers.set(CSRF_HEADER, csrf);
       }
       return headers;
     },

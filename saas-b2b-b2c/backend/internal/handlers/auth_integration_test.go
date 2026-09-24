@@ -38,8 +38,8 @@ func (h *MockAuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	if len(req.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "validation error", "message": "password must be at least 6 characters"})
+	if len(req.Password) < 12 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "validation error", "message": "password must be at least 12 characters"})
 		return
 	}
 
@@ -119,7 +119,7 @@ func TestAuthHandler_Register_Success(t *testing.T) {
 
 	body := models.UserRegisterRequest{
 		Email:     "newuser@example.com",
-		Password:  "password123",
+		Password:  "password-12345",
 		Role:      "dealer",
 		FirstName: "John",
 		LastName:  "Doe",
@@ -153,7 +153,7 @@ func TestAuthHandler_Register_ValidationError(t *testing.T) {
 	}{
 		{
 			name:      "empty email",
-			body:      map[string]string{"email": "", "password": "123456"},
+			body:      map[string]string{"email": "", "password": "valid-password-12"},
 			wantCode:  http.StatusBadRequest,
 			wantError: "validation",
 		},
@@ -189,7 +189,7 @@ func TestAuthHandler_Register_ValidationError(t *testing.T) {
 func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
 	router := setupTestRouter()
 
-	body1 := map[string]string{"email": "duplicate@example.com", "password": "password123"}
+	body1 := map[string]string{"email": "duplicate@example.com", "password": "password-12345"}
 	jsonBody1, _ := json.Marshal(body1)
 	req1, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(jsonBody1))
 	req1.Header.Set("Content-Type", "application/json")
@@ -197,7 +197,7 @@ func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
 	router.ServeHTTP(w1, req1)
 	require.Equal(t, http.StatusCreated, w1.Code)
 
-	body2 := map[string]string{"email": "duplicate@example.com", "password": "password123"}
+	body2 := map[string]string{"email": "duplicate@example.com", "password": "password-12345"}
 	jsonBody2, _ := json.Marshal(body2)
 	req2, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(jsonBody2))
 	req2.Header.Set("Content-Type", "application/json")
@@ -211,7 +211,7 @@ func TestAuthHandler_Register_DuplicateEmail(t *testing.T) {
 func TestAuthHandler_Login_Success(t *testing.T) {
 	router := setupTestRouter()
 
-	registerBody := map[string]string{"email": "loginuser@example.com", "password": "password123"}
+	registerBody := map[string]string{"email": "loginuser@example.com", "password": "password-12345"}
 	jsonRegister, _ := json.Marshal(registerBody)
 	registerReq, _ := http.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(jsonRegister))
 	registerReq.Header.Set("Content-Type", "application/json")
@@ -219,7 +219,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	router.ServeHTTP(registerW, registerReq)
 	require.Equal(t, http.StatusCreated, registerW.Code)
 
-	loginBody := map[string]string{"email": "loginuser@example.com", "password": "password123"}
+	loginBody := map[string]string{"email": "loginuser@example.com", "password": "password-12345"}
 	jsonLogin, _ := json.Marshal(loginBody)
 	loginReq, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(jsonLogin))
 	loginReq.Header.Set("Content-Type", "application/json")
@@ -240,7 +240,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 func TestAuthHandler_Login_InvalidCredentials(t *testing.T) {
 	router := setupTestRouter()
 
-	body := map[string]string{"email": "nonexistent@example.com", "password": "password123"}
+	body := map[string]string{"email": "nonexistent@example.com", "password": "password-12345"}
 	jsonBody, _ := json.Marshal(body)
 	req, _ := http.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(jsonBody))
 	req.Header.Set("Content-Type", "application/json")

@@ -1,0 +1,44 @@
+#!/bin/sh
+# pre-commit: gitleaks (staged) + gofmt (staged Go) — быстро, <5с.
+# Установка: make hooks-install  (создаёт symlink .git/hooks/pre-commit)
+# Обход (только осознанно): git commit --no-verify
+
+set -eu
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# --- 1. gitleaks по staged-изменениям ---
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --verbose --staged --config .gitleaks.toml; then
+    echo ""
+    echo "⛔ gitleaks нашёл возможный секрет в staged-изменениях."
+    echo "   Проверьте вывод выше. Ложное срабатывание на dev-плейсхолдер —"
+    echo "   добавьте точный литерал в allowlist .gitleaks.toml (как остальные)."
+    exit 1
+  fi
+else
+  echo "⚠️  gitleaks не установлен — пропуск секрет-скана (CI всё равно проверит)."
+  echo "   Установить: brew install gitleaks  (macOS) / см. README."
+fi
+
+# --- 2. gofmt по staged Go-файлам ---
+STAGED_GO="$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)"
+if [ -n "$STAGED_GO" ]; then
+  BAD_FMT=""
+  for f in $STAGED_GO; do
+    if [ -f "$f" ]; then
+      if [ -n "$(gofmt -l "$f")" ]; then
+        BAD_FMT="$BAD_FMT $f"
+      fi
+    fi
+  done
+  if [ -n "$BAD_FMT" ]; then
+    echo ""
+    echo "⛔ gofmt: файлы требуют форматирования:$BAD_FMT"
+    echo "   Исправьте: gofmt -w$BAD_FMT"
+    exit 1
+  fi
+fi
+
+echo "✔ pre-commit: секретов нет, gofmt чист."
+exit 0

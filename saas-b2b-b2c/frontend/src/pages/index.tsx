@@ -16,8 +16,8 @@ const DashboardPage: React.FC = () => {
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token && !isAuthenticated) {
+    // F7: гейтинг по состоянию сессии (кэш профиля), не по токену.
+    if (!isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, router]);

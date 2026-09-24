@@ -7,11 +7,16 @@ import (
 	"time"
 
 	"franchise-saas-backend/internal/middleware"
+	"franchise-saas-backend/internal/mocks"
+	"franchise-saas-backend/internal/models"
+	"franchise-saas-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,9 +68,25 @@ func TestSecurity_JWT_ExpiredRejected(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code, "expired must be rejected")
 }
 
+func TestSecurity_JWT_MissingJtiRejected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	// F12: токен без jti нельзя отозвать — должен быть отвергнут.
+	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "exp": time.Now().Add(time.Hour).Unix()}
+	str := signToken(claims, jwt.SigningMethodHS256)
+	w := httptest.NewRecorder()
+	r := gin.New()
+	r.Use(middleware.AuthMiddleware())
+	r.GET("/", func(c *gin.Context) { c.Status(200) })
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+str)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "missing jti must be rejected")
+	assert.Contains(t, w.Body.String(), "jti")
+}
+
 func TestSecurity_JWT_ValidAccepted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "jti": "00000000-0000-0000-0000-000000000099", "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -79,7 +100,7 @@ func TestSecurity_JWT_ValidAccepted(t *testing.T) {
 
 func TestSecurity_AuthMiddleware_TrimSpaceBearer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000098", "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -131,7 +152,7 @@ func TestSecurity_RateLimit_XFFIgnoredWhenTrusted(t *testing.T) {
 
 func TestSecurity_CookieFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000097", "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -145,7 +166,51 @@ func TestSecurity_CookieFallback(t *testing.T) {
 
 func TestSecurity_JWT_RevokedRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	// set revoked via cache mock — if redis not available IsTokenRevoked returns false, so we test via refresh flow indirectly
-	// This test asserts that token with jti can be revoked via service and then rejected (uses in-memory cache not available, so skip if no redis)
-	t.Skip("requires redis — manual check: RevokeRefreshToken + IsTokenRevoked")
+	// F1: отзыв работает и без Redis (instance-local fallback) — скип убран.
+	secret := jwtSecretForTest()
+	_ = secret
+	svc := newTestAuthServiceForSecurity()
+	access, refresh, err := svc.GenerateTokens(uuid.New(), "revoked@test.com", "dealer", nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, svc.Logout(refresh))
+	require.NoError(t, svc.RevokeAccessToken("Bearer "+access))
+
+	r := gin.New()
+	r.Use(middleware.AuthMiddleware())
+	r.GET("/", func(c *gin.Context) { c.Status(200) })
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "revoked access must be rejected")
+
+	_, _, err = svc.RefreshTokens(refresh)
+	require.Error(t, err, "revoked refresh must not rotate")
+}
+
+func TestSecurity_Refresh_ReuseDenied(t *testing.T) {
+	// F1: повторное использование refresh после ротации — отказ (раньше без Redis проходило).
+	userID := uuid.New()
+	svc := newTestAuthServiceForSecurityWithUser(userID)
+	_, refresh, err := svc.GenerateTokens(userID, "reuse@test.com", "dealer", nil, nil)
+	require.NoError(t, err)
+	_, _, err = svc.RefreshTokens(refresh)
+	require.NoError(t, err)
+	_, _, err = svc.RefreshTokens(refresh)
+	require.Error(t, err, "refresh reuse must be denied")
+}
+
+// --- F1/F12 helpers: real AuthService with mocked user repo (no Redis needed) ---
+func newTestAuthServiceForSecurity() *services.AuthService {
+	jwtSecretForTest()
+	repo := mocks.NewMockUserRepository()
+	return services.NewAuthServiceWithInterface(repo, nil)
+}
+
+func newTestAuthServiceForSecurityWithUser(id uuid.UUID) *services.AuthService {
+	jwtSecretForTest()
+	repo := mocks.NewMockUserRepository()
+	repo.On("GetUserByID", mock.Anything, id).Return(&models.User{ID: id, Email: "reuse@test.com", Role: models.RoleDealer}, nil)
+	return services.NewAuthServiceWithInterface(repo, nil)
 }

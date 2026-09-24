@@ -1,17 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-function decodeRole(token: string): string | null {
-  try {
-    const payload = token.split('.')[1];
-    const json = Buffer.from(payload, 'base64').toString();
-    const data = JSON.parse(json);
-    return data.role || null;
-  } catch {
-    return null;
-  }
-}
-
+// RE-AUDIT: роль больше НЕ читаем из неподписанного JWT (atob без проверки
+// подписи открывал /admin любому с самописным токеном). Edge не знает
+// JWT_SECRET и проверить подпись не может — гейт только по наличию сессии,
+// роль проверяет API на каждый запрос.
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const accessToken = req.cookies.get('access_token')?.value || req.cookies.get('__Host-access_token')?.value;
@@ -22,15 +15,6 @@ export function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
-  }
-
-  if (pathname.startsWith('/admin') && accessToken) {
-    const role = decodeRole(accessToken);
-    if (role !== 'super_admin') {
-      const url = req.nextUrl.clone();
-      url.pathname = '/login';
-      return NextResponse.redirect(url);
-    }
   }
 
   return NextResponse.next();

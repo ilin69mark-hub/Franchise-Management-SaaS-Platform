@@ -158,8 +158,13 @@ func (h *UserHandler) UpdateEmployee(c *gin.Context) {
 	if currentUser.TenantID != nil {
 		tid = *currentUser.TenantID
 	}
+	// F4: запрет самоповышения — свою роль через HR-путь менять нельзя
+	if userID == currentUser.ID && req.Role != "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot change own role"})
+		return
+	}
 
-	user, err := h.service.UpdateEmployee(userID, tid, req)
+	user, err := h.service.UpdateEmployee(userID, tid, req, string(currentUser.Role))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -181,8 +186,13 @@ func (h *UserHandler) DeleteEmployee(c *gin.Context) {
 	if currentUser.TenantID != nil {
 		tid = *currentUser.TenantID
 	}
+	// F4: себя через HR-удаление удалять нельзя
+	if userID == currentUser.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete self"})
+		return
+	}
 
-	if err := h.service.DeleteEmployee(userID, tid); err != nil {
+	if err := h.service.DeleteEmployee(userID, tid, string(currentUser.Role)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

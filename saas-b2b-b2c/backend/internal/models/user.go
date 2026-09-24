@@ -47,7 +47,7 @@ type User struct {
 	ContactsPhone        string `json:"contacts_phone" gorm:"type:varchar(50)"`
 	ContactsTelegram     string `json:"contacts_telegram" gorm:"type:varchar(100)"`
 	ContactsWhatsApp     string `json:"contacts_whatsapp" gorm:"type:varchar(50)"`
-	ContactsWorkingHours  string `json:"contacts_working_hours" gorm:"type:varchar(100)"`
+	ContactsWorkingHours string `json:"contacts_working_hours" gorm:"type:varchar(100)"`
 
 	// Soft Delete
 	DeletedAt gorm.DeletedAt `json:"deleted_at" gorm:"index"`
@@ -68,8 +68,9 @@ type UserLoginRequest struct {
 }
 
 type UserRegisterRequest struct {
-	Email     string `json:"email" binding:"required"`
-	Password  string `json:"password" binding:"required"`
+	// F6: слабой пароль "1" больше не проходит — минимум 12 символов.
+	Email     string `json:"email" binding:"required,email"`
+	Password  string `json:"password" binding:"required,min=12,max=72"`
 	Role      Role   `json:"role"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -105,7 +106,7 @@ type AuthResponse struct {
 
 type CreateEmployeeRequest struct {
 	Email     string     `json:"email" binding:"required,email"`
-	Password  string     `json:"password" binding:"required,min=6"`
+	Password  string     `json:"password" binding:"required,min=12,max=72"`
 	FirstName string     `json:"first_name" binding:"required"`
 	LastName  string     `json:"last_name"`
 	Phone     string     `json:"phone"`
@@ -125,28 +126,28 @@ type UpdateEmployeeRequest struct {
 }
 
 type UserContacts struct {
-	EmailVisible   bool   `json:"email_visible"`
-	PhoneVisible   bool   `json:"phone_visible"`
-	Phone         string `json:"phone"`
-	Telegram      string `json:"telegram"`
-	WhatsApp      string `json:"whatsapp"`
-	WorkingHours  string `json:"working_hours"`
+	EmailVisible bool   `json:"email_visible"`
+	PhoneVisible bool   `json:"phone_visible"`
+	Phone        string `json:"phone"`
+	Telegram     string `json:"telegram"`
+	WhatsApp     string `json:"whatsapp"`
+	WorkingHours string `json:"working_hours"`
 }
 
 type UserProfileResponse struct {
 	ID                    string       `json:"id"`
 	Email                 string       `json:"email"`
-	FirstName            string       `json:"first_name"`
-	LastName             string       `json:"last_name"`
-	DisplayName          string       `json:"display_name"`
-	Position             string       `json:"position"`
-	Bio                  string       `json:"bio"`
-	Quote                string       `json:"quote"`
-	AvatarURL            string       `json:"avatar_url"`
-	Status               string       `json:"status"`
-	AvailableForQuestions bool        `json:"available_for_questions"`
-	Achievements         []string     `json:"achievements"`
-	Contacts             UserContacts `json:"contacts"`
+	FirstName             string       `json:"first_name"`
+	LastName              string       `json:"last_name"`
+	DisplayName           string       `json:"display_name"`
+	Position              string       `json:"position"`
+	Bio                   string       `json:"bio"`
+	Quote                 string       `json:"quote"`
+	AvatarURL             string       `json:"avatar_url"`
+	Status                string       `json:"status"`
+	AvailableForQuestions bool         `json:"available_for_questions"`
+	Achievements          []string     `json:"achievements"`
+	Contacts              UserContacts `json:"contacts"`
 }
 
 func (u *User) ToProfileResponse() UserProfileResponse {
@@ -156,21 +157,21 @@ func (u *User) ToProfileResponse() UserProfileResponse {
 	}
 
 	return UserProfileResponse{
-		ID:          u.ID.String(),
-		Email:       u.Email,
-		FirstName:   u.FirstName,
-		LastName:    u.LastName,
-		DisplayName: u.DisplayName,
-		Position:    u.Position,
-		Bio:         u.Bio,
-		Quote:       u.Quote,
-		AvatarURL:   u.AvatarURL,
-		Status:      u.UserStatus,
+		ID:                    u.ID.String(),
+		Email:                 u.Email,
+		FirstName:             u.FirstName,
+		LastName:              u.LastName,
+		DisplayName:           u.DisplayName,
+		Position:              u.Position,
+		Bio:                   u.Bio,
+		Quote:                 u.Quote,
+		AvatarURL:             u.AvatarURL,
+		Status:                u.UserStatus,
 		AvailableForQuestions: u.AvailableForQuestions,
-		Achievements: achievements,
+		Achievements:          achievements,
 		Contacts: UserContacts{
-			EmailVisible:  u.ContactsEmailVisible,
-			PhoneVisible:  u.ContactsPhoneVisible,
+			EmailVisible: u.ContactsEmailVisible,
+			PhoneVisible: u.ContactsPhoneVisible,
 			Phone:        u.ContactsPhone,
 			Telegram:     u.ContactsTelegram,
 			WhatsApp:     u.ContactsWhatsApp,

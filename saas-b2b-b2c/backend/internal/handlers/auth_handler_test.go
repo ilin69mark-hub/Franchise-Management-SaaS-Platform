@@ -269,7 +269,7 @@ func TestRegister_RejectsPrivilegedAndUnknownRoles(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			body, _ := json.Marshal(map[string]string{
 				"email":    "new@test.com",
-				"password": "secret123",
+				"password": "secret-password-12",
 				"role":     tc.role,
 			})
 			req, _ := http.NewRequest("POST", "/auth/register", bytes.NewBuffer(body))

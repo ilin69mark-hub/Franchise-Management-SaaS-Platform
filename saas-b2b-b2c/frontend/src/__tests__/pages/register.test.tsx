@@ -76,3 +76,36 @@ describe('RegisterPage', () => {
     expect(screen.getByText('Зарегистрироваться').closest('button')).toHaveClass('ant-btn-loading');
   });
 });
+
+describe('RegisterPage submit', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockState = { auth: { loading: false, error: null, isAuthenticated: false } };
+  });
+
+  const fillValidForm = () => {
+    fireEvent.change(screen.getByLabelText('Имя'), { target: { value: 'Ivan' } });
+    fireEvent.change(screen.getByLabelText('Фамилия'), { target: { value: 'Petrov' } });
+    fireEvent.change(screen.getByLabelText('Название компании'), { target: { value: 'Acme' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ivan@acme.test' } });
+    fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'long-password-12' } });
+  };
+
+  it('редиректит на /login только при успехе (RE-AUDIT)', async () => {
+    mockDispatch.mockResolvedValue({ meta: { requestStatus: 'fulfilled' } });
+    const { container } = render(<RegisterPage />);
+    fillValidForm();
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    await screen.findByText('Зарегистрироваться');
+    expect(mockPush).toHaveBeenCalledWith('/login');
+  });
+
+  it('не редиректит при провале регистрации (RE-AUDIT)', async () => {
+    mockDispatch.mockResolvedValue({ meta: { requestStatus: 'rejected' } });
+    const { container } = render(<RegisterPage />);
+    fillValidForm();
+    fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(mockPush).not.toHaveBeenCalledWith('/login');
+  });
+});

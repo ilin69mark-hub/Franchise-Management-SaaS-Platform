@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getCsrfToken, CSRF_HEADER } from '@/utils/csrf';
 
 function getApiBase(): string {
   const env = process.env.NEXT_PUBLIC_API_URL;
@@ -17,15 +18,13 @@ const apiClient = axios.create({
   withCredentials: true,
 });
 
-/* ----- Добавляем токен к каждому запросу ----- */
+/* ----- F7: CSRF-заголовок к каждому запросу (сессия — в httpOnly cookie,
+   токены в localStorage больше не храним и не шлём) ----- */
 apiClient.interceptors.request.use(
   (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('accessToken');
-      // Если токен пустой либо строка "null" – не отправляем заголовок
-      if (token && token !== 'null') {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const token = getCsrfToken();
+    if (token) {
+      config.headers[CSRF_HEADER] = token;
     }
     return config;
   },

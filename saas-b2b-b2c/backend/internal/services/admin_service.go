@@ -17,20 +17,20 @@ import (
 )
 
 var (
-	ErrAlreadyExists       = errors.New("tenant with this slug already exists")
-	ErrNotFound           = errors.New("tenant not found")
-	ErrHasActiveUsers     = errors.New("cannot delete tenant with active users")
+	ErrAlreadyExists  = errors.New("tenant with this slug already exists")
+	ErrNotFound       = errors.New("tenant not found")
+	ErrHasActiveUsers = errors.New("cannot delete tenant with active users")
 )
 
 type AdminService struct {
-	tenantRepo  repository.TenantRepositoryInterface
-	auditRepo   repository.AuditLogRepositoryInterface
-	db          *gorm.DB
+	tenantRepo repository.TenantRepositoryInterface
+	auditRepo  repository.AuditLogRepositoryInterface
+	db         *gorm.DB
 }
 
 func NewAdminService(db *gorm.DB) *AdminService {
 	return &AdminService{
-		tenantRepo:  repository.NewTenantRepository(db),
+		tenantRepo: repository.NewTenantRepository(db),
 		db:         db,
 	}
 }
@@ -203,12 +203,12 @@ func (s *AdminService) GetTenantByID(id uuid.UUID) (*models.Tenant, error) {
 
 // CreateTenantRequest - запрос на создание тенанта
 type CreateTenantRequest struct {
-	Name        string     `json:"name"`
-	PlanID      *uuid.UUID `json:"plan_id"`
-	LegalEntity string     `json:"legal_entity"`
-	INN         string     `json:"inn"`
-	MaxUsers    int        `json:"max_users"`
-	ContactName string     `json:"contact_name"`
+	Name         string     `json:"name"`
+	PlanID       *uuid.UUID `json:"plan_id"`
+	LegalEntity  string     `json:"legal_entity"`
+	INN          string     `json:"inn"`
+	MaxUsers     int        `json:"max_users"`
+	ContactName  string     `json:"contact_name"`
 	ContactEmail string     `json:"contact_email"`
 }
 
@@ -323,9 +323,12 @@ func (s *AdminService) GetAllPlans() ([]models.Plan, error) {
 }
 
 func (s *AdminService) CreatePlan(name string, price float64, maxUsers int) (*models.Plan, error) {
+	if price < 0 || price > 1e12 {
+		return nil, fmt.Errorf("price out of range")
+	}
 	plan := models.Plan{
 		Name:     name,
-		Price:    price,
+		Price:    MoneyFromFloat(price),
 		MaxUsers: maxUsers,
 	}
 	if err := s.db.Create(&plan).Error; err != nil {
@@ -341,8 +344,11 @@ func (s *AdminService) UpdatePlan(id uuid.UUID, name string, price float64, maxU
 		return nil, err
 	}
 
+	if price < 0 || price > 1e12 {
+		return nil, fmt.Errorf("price out of range")
+	}
 	plan.Name = name
-	plan.Price = price
+	plan.Price = MoneyFromFloat(price)
 	plan.MaxUsers = maxUsers
 
 	if err := s.db.Save(&plan).Error; err != nil {
@@ -359,12 +365,13 @@ func (s *AdminService) DeletePlan(id uuid.UUID) error {
 // === INVOICES ===
 
 func (s *AdminService) CreateInvoice(tenantID uuid.UUID, amount float64, description string, dueDate time.Time) (*models.Invoice, error) {
-	if amount <= 0 || amount > 1e12 {
+	dec := decimal.NewFromFloat(amount)
+	if dec.LessThanOrEqual(decimal.Zero) || dec.GreaterThan(decimal.NewFromFloat(1e12)) {
 		return nil, fmt.Errorf("amount out of range")
 	}
 	inv := models.Invoice{
 		TenantID:    tenantID,
-		Amount:      amount,
+		Amount:      dec,
 		Description: description,
 		DueDate:     dueDate,
 		Status:      "pending",
@@ -394,7 +401,7 @@ func (s *AdminService) MarkInvoicePaid(invoiceID uuid.UUID) error {
 		if inv.Status == "paid" {
 			return nil // идемпотентно
 		}
-		if inv.Amount <= 0 {
+		if inv.Amount.LessThanOrEqual(decimal.Zero) {
 			return fmt.Errorf("invalid invoice amount")
 		}
 		return tx.Model(&inv).Updates(map[string]interface{}{
@@ -671,7 +678,8 @@ func (s *AdminService) GetUnitEconomics() (map[string]interface{}, error) {
 
 // UpdateMarketingSpend - обновить расходы на маркетинг
 func (s *AdminService) UpdateMarketingSpend(amount float64) error {
-	amountStr := fmt.Sprintf("%.2f", amount)
+	// Точность копеек через decimal перед сохранением в system_settings
+	amountStr := decimal.NewFromFloat(amount).Round(2).StringFixed(2)
 	return s.db.Exec(`
         INSERT INTO system_settings (key, value, updated_at) 
         VALUES ('marketing_spend_current_month', ?, NOW()) 

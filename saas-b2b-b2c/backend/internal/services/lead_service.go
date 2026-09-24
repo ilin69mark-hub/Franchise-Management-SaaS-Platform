@@ -7,6 +7,7 @@ import (
 	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 )
 
 type LeadService struct {
@@ -37,7 +38,7 @@ func (s *LeadService) CreateLead(ctx context.Context, user *models.User, req mod
 		Phone:           req.Phone,
 		Email:           req.Email,
 		InterestProduct: req.InterestProduct,
-		Budget:          req.Budget,
+		Budget:          decimal.NewFromFloat(req.Budget),
 		Status:          "new", // Статус по умолчанию для новых клиентов
 	}
 

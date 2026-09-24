@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -68,6 +69,35 @@ func (rl *RateLimiter) Allow(key string, limit int, window time.Duration) bool {
 }
 
 var globalRateLimiter = NewRateLimiter()
+
+// RateLimitAuth — лимит для auth-эндпоинтов (F9): Redis-first через
+// cache.IncrLimit (общий на все реплики), fallback — процесс-локально.
+// Ключ: метод+путь+IP, чтобы login и register лимитировались независимо.
+func RateLimitAuth(requests int, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method == "OPTIONS" {
+			c.Next()
+			return
+		}
+
+		key := "ratelimit:auth:" + c.FullPath() + ":" + c.ClientIP()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 300*time.Millisecond)
+		n := cache.IncrLimit(ctx, key, window)
+		cancel()
+
+		if n > requests {
+			c.Header("Retry-After", strconv.Itoa(int(window.Seconds())))
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":       "Too many requests",
+				"retry_after": window.Seconds(),
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 
 func RateLimit(requests int, window time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {

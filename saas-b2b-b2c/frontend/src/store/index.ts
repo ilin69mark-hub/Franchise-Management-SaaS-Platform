@@ -91,11 +91,10 @@ if (typeof window !== 'undefined') {
     try {
       const state = store.getState();
       if (state.auth) {
+        // F7: токены не персистим (их больше нет в сторе); только профиль.
         const serializedState = JSON.stringify({
           auth: {
             user: state.auth.user,
-            accessToken: state.auth.accessToken,
-            refreshToken: state.auth.refreshToken,
             isAuthenticated: state.auth.isAuthenticated,
           },
         });

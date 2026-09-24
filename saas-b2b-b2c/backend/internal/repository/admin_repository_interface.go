@@ -9,6 +9,7 @@ import (
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -143,9 +144,12 @@ func (r *AdminRepository) GetAllPlans(ctx context.Context) ([]models.Plan, error
 }
 
 func (r *AdminRepository) CreatePlan(ctx context.Context, name string, price float64, maxUsers int) (*models.Plan, error) {
+	if price < 0 || price > 1e12 {
+		return nil, fmt.Errorf("price out of range")
+	}
 	plan := models.Plan{
 		Name:     name,
-		Price:    price,
+		Price:    decimal.NewFromFloat(price).Round(2),
 		MaxUsers: maxUsers,
 	}
 	if err := r.db.Create(&plan).Error; err != nil {
@@ -160,8 +164,11 @@ func (r *AdminRepository) UpdatePlan(ctx context.Context, id uuid.UUID, name str
 		return nil, err
 	}
 
+	if price < 0 || price > 1e12 {
+		return nil, fmt.Errorf("price out of range")
+	}
 	plan.Name = name
-	plan.Price = price
+	plan.Price = decimal.NewFromFloat(price).Round(2)
 	plan.MaxUsers = maxUsers
 
 	if err := r.db.Save(&plan).Error; err != nil {
@@ -177,7 +184,7 @@ func (r *AdminRepository) DeletePlan(ctx context.Context, id uuid.UUID) error {
 func (r *AdminRepository) CreateInvoice(ctx context.Context, tenantID uuid.UUID, amount float64, description string, dueDate time.Time) (*models.Invoice, error) {
 	inv := models.Invoice{
 		TenantID:    tenantID,
-		Amount:      amount,
+		Amount:      decimal.NewFromFloat(amount),
 		Description: description,
 		DueDate:     dueDate,
 		Status:      "pending",
@@ -253,8 +260,8 @@ func (r *AdminRepository) GetAnalyticsData(ctx context.Context) (map[string]inte
 		"funnel": map[string]interface{}{
 			"total_tenants": total,
 			"trial_active":  trial,
-			"paid_active":  paid,
-			"conversion":   conv,
+			"paid_active":   paid,
+			"conversion":    conv,
 		},
 	}, nil
 }

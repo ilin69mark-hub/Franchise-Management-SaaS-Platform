@@ -3,10 +3,11 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { User, AuthResponse } from '@/types';
 import apiClient from '@/api/axiosClient';
 
+// F7: сессия живёт в httpOnly cookie (бэкенд), в сторе — только профиль.
+// Токены здесь НЕ хранятся (ни в памяти стора, ни в localStorage): раньше
+// их крал любой XSS через localStorage.accessToken / тело ответа / WS-URL.
 interface AuthState {
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   loading: boolean;
   error: string | null;
@@ -14,12 +15,36 @@ interface AuthState {
 
 const initialState: AuthState = {
   user: null,
-  accessToken: null,
-  refreshToken: null,
   isAuthenticated: false,
   loading: false,
   error: null,
 };
+
+function cacheUser(user: User) {
+  if (typeof window === 'undefined') return;
+  try {
+    // Кэшируем ТОЛЬКО профиль (не секрет) — для мгновенного гейтинга страниц
+    // до первой серверной проверки. Источник правды — /auth/me + API 401.
+    localStorage.setItem('user', JSON.stringify(user));
+    if (user?.id) localStorage.setItem('id', user.id);
+    if (user?.role) localStorage.setItem('role', user.role);
+  } catch (e) {
+    logger.error('Failed to cache user', e);
+  }
+}
+
+function clearUserCache() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('user');
+  localStorage.removeItem('id');
+  localStorage.removeItem('role');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('user_id');
+  localStorage.removeItem('reduxState');
+  // Legacy-ключи эпохи токенов — зачищаем при выходе/старте.
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
 
 /* ---------- Асинхронные Thunk‑ы ---------- */
 export const login = createAsyncThunk(
@@ -61,31 +86,23 @@ const authSlice = createSlice({
   reducers: {
     logout: (state) => {
       state.user = null;
-      state.accessToken = null;
-      state.refreshToken = null;
       state.isAuthenticated = false;
       state.error = null;
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('id');
-        localStorage.removeItem('role');
-        localStorage.removeItem('reduxState');
-      }
+      clearUserCache();
     },
     setAuthFromStorage: (state) => {
       if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('accessToken');
         const userStr = localStorage.getItem('user');
-        const id = localStorage.getItem('id');
-        const role = localStorage.getItem('role');
-        if (token && userStr) {
-          state.accessToken = token;
-          state.user = JSON.parse(userStr);
-          state.isAuthenticated = true;
-          // Если id/role есть в хранилище – восстанавливаем их в state
-          if (id && state.user) (state.user as User).id = id;
-          if (role && state.user) (state.user as User).role = role as User['role'];
+        if (!userStr) return;
+        try {
+          const user = JSON.parse(userStr) as User;
+          if (user && user.id && user.role) {
+            state.user = user;
+            state.isAuthenticated = true;
+          }
+        } catch (e) {
+          logger.error('Failed to restore user', e);
+          clearUserCache();
         }
       }
     },
@@ -99,31 +116,16 @@ const authSlice = createSlice({
     });
     builder.addCase(login.fulfilled, (state, { payload }) => {
       state.loading = false;
-      state.isAuthenticated = true;
-
-      // Payload может быть в разных формах
-      const data = payload as AuthResponse & Record<string, unknown> & { Token?: string; RefreshToken?: string; token?: string; refresh_token?: string; accessToken?: string; refreshToken?: string };
-
-      // Токены могут быть `token` / `accessToken` / `Token`
-      const token = (data as Record<string, unknown>)['Token'] as string || data.accessToken || (data as Record<string, unknown>)['token'] as string;
-      const refresh = (data as Record<string, unknown>)['RefreshToken'] as string || data.refreshToken || (data as Record<string, unknown>)['refresh_token'] as string;
-
-      if (token) {
-        state.accessToken = token;
-        state.refreshToken = refresh || null;
-        state.user = data.user;
-
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('accessToken', token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-
-          // **Сохраняем id и role в localStorage**
-          if (data.user?.id) localStorage.setItem('id', data.user.id);
-          if (data.user?.role) localStorage.setItem('role', data.user.role);
-        }
+      // F7: бэкенд возвращает {user}, сессия — в cookie. Токен в теле больше
+      // не ждём и не требуем (раньше отсутствие токена считалось ошибкой).
+      const user = (payload as AuthResponse).user;
+      if (user && user.id) {
+        state.user = user;
+        state.isAuthenticated = true;
+        cacheUser(user);
       } else {
-        logger.error('Token not found in login response', payload);
-        state.error = 'Ошибка авторизации: токен не получен';
+        logger.error('User not found in login response', payload);
+        state.error = 'Ошибка авторизации: профиль не получен';
         state.isAuthenticated = false;
       }
     });
@@ -139,28 +141,14 @@ const authSlice = createSlice({
     });
     builder.addCase(register.fulfilled, (state, { payload }) => {
       state.loading = false;
-      state.isAuthenticated = true;
-
-      const data = payload as AuthResponse & Record<string, unknown> & { Token?: string; RefreshToken?: string; token?: string; refresh_token?: string; accessToken?: string; refreshToken?: string };
-      const token = (data as Record<string, unknown>)['Token'] as string || data.accessToken || (data as Record<string, unknown>)['token'] as string;
-      const refresh = (data as Record<string, unknown>)['RefreshToken'] as string || data.refreshToken || (data as Record<string, unknown>)['refresh_token'] as string;
-
-      if (token) {
-        state.accessToken = token;
-        state.refreshToken = refresh || null;
-        state.user = data.user;
-
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('accessToken', token);
-          localStorage.setItem('user', JSON.stringify(data.user));
-
-          // **Сохраняем id и role после регистрации**
-          if (data.user?.id) localStorage.setItem('id', data.user.id);
-          if (data.user?.role) localStorage.setItem('role', data.user.role);
-        }
+      const user = (payload as AuthResponse).user;
+      if (user && user.id) {
+        state.user = user;
+        state.isAuthenticated = true;
+        cacheUser(user);
       } else {
-        logger.error('Token not found in register response', payload);
-        state.error = 'Ошибка регистрации: токен не получен';
+        logger.error('User not found in register response', payload);
+        state.error = 'Ошибка регистрации: профиль не получен';
         state.isAuthenticated = false;
       }
     });

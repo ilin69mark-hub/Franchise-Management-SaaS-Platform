@@ -93,10 +93,28 @@ func (h *GoalHandler) GetVisibleGoals(c *gin.Context) {
 	c.JSON(http.StatusOK, list)
 }
 
-// DELETE /goals/:id – удалить цель (по желанию)
+// DELETE /goals/:id – удалить цель (только assigner / manager в том же tenant / super_admin)
 func (h *GoalHandler) DeleteGoal(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.svc.DeleteGoal(c.Request.Context(), id); err != nil {
+	requesterID, _ := c.Get("userID")
+	tenantID, _ := c.Get("tenantID")
+	role, _ := c.Get("role")
+	reqID, _ := requesterID.(string)
+	tenID, _ := tenantID.(string)
+	roleStr, _ := role.(string)
+	if reqID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	if err := h.svc.DeleteGoal(c.Request.Context(), id, reqID, tenID, roleStr); err != nil {
+		if err.Error() == "goal not found" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "goal not found"})
+			return
+		}
+		if err.Error() == "forbidden: goal not in your scope" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -113,8 +131,12 @@ func (h *GoalHandler) UpdateGoal(c *gin.Context) {
 	}
 	assignerID, _ := c.Get("userID")
 	tenantID, _ := c.Get("tenantID")
+	role, _ := c.Get("role")
+	reqID, _ := assignerID.(string)
+	tenID, _ := tenantID.(string)
+	roleStr, _ := role.(string)
 
-	goal, err := h.svc.UpdateGoal(c.Request.Context(), id, dto, assignerID.(string), tenantID.(string))
+	goal, err := h.svc.UpdateGoal(c.Request.Context(), id, dto, reqID, tenID, roleStr)
 	if err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return

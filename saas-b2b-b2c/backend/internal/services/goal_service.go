@@ -13,10 +13,28 @@ import (
 
 type GoalService interface {
 	CreateGoal(ctx context.Context, dto CreateGoalDTO, assignerID, tenantID string) (*models.Goal, error)
-	UpdateGoal(ctx context.Context, id string, dto UpdateGoalDTO, assignerID, tenantID string) (*models.Goal, error)
+	UpdateGoal(ctx context.Context, id string, dto UpdateGoalDTO, requesterID, tenantID, requesterRole string) (*models.Goal, error)
 	GetMyGoal(ctx context.Context, assigneeID string, date time.Time) (*models.Goal, error)
 	GetVisibleGoals(ctx context.Context, userID, role, tenantID string) ([]models.Goal, error)
-	DeleteGoal(ctx context.Context, id string) error
+	DeleteGoal(ctx context.Context, id, requesterID, tenantID, requesterRole string) error
+}
+
+// errForbidden — владелец/tenant не совпал (маппится в 403, а не 500).
+var errGoalForbidden = errors.New("forbidden: goal not in your scope")
+
+// sameTenant — оба tenant заданы и равны; если у цели tenant нет — требуем assigner.
+func sameGoalTenant(goalTenant *uuid.UUID, callerTenant string) bool {
+	if goalTenant == nil {
+		return false
+	}
+	if callerTenant == "" {
+		return false
+	}
+	tid, err := uuid.Parse(callerTenant)
+	if err != nil {
+		return false
+	}
+	return *goalTenant == tid
 }
 
 /* DTO – данные, получаемые от фронтенда */
@@ -99,6 +117,18 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 		return nil, err
 	}
 
+	// RE-AUDIT: assignee обязан существовать и быть в сети назначающего
+	// (раньше цели писались на произвольный UUID чужой сети — фантомные планы).
+	if assignerRole != string(models.RoleSuperAdmin) {
+		assigneeTenant, terr := s.repo.GetUserTenant(ctx, dto.AssigneeID)
+		if terr != nil || assigneeTenant == nil {
+			return nil, errors.New("assignee not found")
+		}
+		if tenantID == "" || assigneeTenant.String() != tenantID {
+			return nil, errors.New("forbidden: assignee not in your network")
+		}
+	}
+
 	period := models.PeriodDay
 	if dto.Period == "week" || dto.Period == "month" || dto.Period == "year" || dto.Period == "custom" {
 		period = models.GoalPeriod(dto.Period)
@@ -154,10 +184,22 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 }
 
 /* ---------- UpdateGoal ---------- */
-func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalDTO, assignerID, tenantID string) (*models.Goal, error) {
+// Правило: super_admin — всё; остальные — только своя цель (assignee/assigner)
+// или тот же tenant + canAssign(requesterRole → goal.Role). Иначе 403.
+func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalDTO, requesterID, tenantID, requesterRole string) (*models.Goal, error) {
 	goal, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("goal not found")
+	}
+	if requesterRole != string(models.RoleSuperAdmin) {
+		isOwner := goal.AssigneeID.String() == requesterID || goal.AssignerID.String() == requesterID
+		inTenant := sameGoalTenant(goal.TenantID, tenantID)
+		if !isOwner && !(inTenant && canAssign(requesterRole, goal.Role)) {
+			return nil, errGoalForbidden
+		}
+		if goal.TenantID != nil && tenantID != "" && !inTenant && !isOwner {
+			return nil, errGoalForbidden
+		}
 	}
 	// Валидация — отрицательные планы запрещены
 	if dto.SalesPlan < 0 || dto.SalesPlan > 1e12 {
@@ -223,6 +265,23 @@ func (s *goalService) GetVisibleGoals(ctx context.Context, userID, role, tenantI
 }
 
 /* ---------- DeleteGoal ---------- */
-func (s *goalService) DeleteGoal(ctx context.Context, id string) error {
+// Правило: super_admin — всё; остальные — только назначивший (assigner)
+// или тот же tenant + canAssign(requesterRole → goal.Role). Assignee сам
+// свою цель удалить не может (защита от скрытия недовыполнения).
+func (s *goalService) DeleteGoal(ctx context.Context, id, requesterID, tenantID, requesterRole string) error {
+	goal, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return errors.New("goal not found")
+	}
+	if requesterRole != string(models.RoleSuperAdmin) {
+		isAssigner := goal.AssignerID.String() == requesterID
+		inTenant := sameGoalTenant(goal.TenantID, tenantID)
+		if !isAssigner && !(inTenant && canAssign(requesterRole, goal.Role)) {
+			return errGoalForbidden
+		}
+		if goal.TenantID != nil && tenantID != "" && !inTenant && !isAssigner {
+			return errGoalForbidden
+		}
+	}
 	return s.repo.Delete(ctx, id)
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,10 +16,12 @@ import (
 const testSecret = "test_secret_key"
 
 func createTestToken(userID, email, role string, exp time.Time) string {
+	// F12: конформный токен обязан нести jti (middleware требует).
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
 		"email":   email,
 		"role":    role,
+		"jti":     uuid.New().String(),
 		"exp":     exp.Unix(),
 	})
 	tokenStr, _ := token.SignedString([]byte(testSecret))
@@ -294,4 +297,24 @@ func TestChained_Middleware(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// TestRateLimitAuth_6thRequest429: F9 — Redis-first лимит (без Redis работает fallback).
+func TestRateLimitAuth_6thRequest429(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(RateLimitAuth(5, time.Minute))
+	r.GET("/", func(c *gin.Context) { c.Status(200) })
+	var lastCode int
+	var lastRetryAfter string
+	for i := 0; i < 6; i++ {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "10.9.9.9:1234"
+		r.ServeHTTP(w, req)
+		lastCode = w.Code
+		lastRetryAfter = w.Header().Get("Retry-After")
+	}
+	assert.Equal(t, http.StatusTooManyRequests, lastCode, "6th request must be 429")
+	require.Equal(t, "60", lastRetryAfter)
 }
