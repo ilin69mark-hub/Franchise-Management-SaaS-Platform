@@ -102,14 +102,34 @@ func main() {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
 		status := "OK"
+		code := http.StatusOK
+		dbStatus := "ok"
+		redisStatus := "ok"
 		if m.Alloc > 500*1024*1024 {
 			status = "WARNING"
 		}
-		c.JSON(http.StatusOK, gin.H{
+		if err := db.Exec("SELECT 1").Error; err != nil {
+			dbStatus = "down"
+			status = "degraded"
+			code = http.StatusServiceUnavailable
+		}
+		if cache.Client != nil {
+			if err := cache.Client.Ping(c.Request.Context()).Err(); err != nil {
+				redisStatus = "down"
+				if status == "OK" {
+					status = "degraded"
+				}
+			}
+		} else {
+			redisStatus = "not_configured"
+		}
+		c.JSON(code, gin.H{
 			"status":    status,
 			"timestamp": time.Now().Format(time.RFC3339),
 			"version":   "1.0.0-stage1",
 			"memory_mb": m.Alloc / 1024 / 1024,
+			"db":        dbStatus,
+			"redis":     redisStatus,
 		})
 	})
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -354,6 +355,9 @@ func (s *AdminService) DeletePlan(id uuid.UUID) error {
 // === INVOICES ===
 
 func (s *AdminService) CreateInvoice(tenantID uuid.UUID, amount float64, description string, dueDate time.Time) (*models.Invoice, error) {
+	if amount <= 0 || amount > 1e12 {
+		return nil, fmt.Errorf("amount out of range")
+	}
 	inv := models.Invoice{
 		TenantID:    tenantID,
 		Amount:      amount,
@@ -378,11 +382,22 @@ func (s *AdminService) GetAllInvoices() ([]map[string]interface{}, error) {
 }
 
 func (s *AdminService) MarkInvoicePaid(invoiceID uuid.UUID) error {
-	now := time.Now()
-	return s.db.Model(&models.Invoice{}).Where("id = ?", invoiceID).Updates(map[string]interface{}{
-		"status":  "paid",
-		"paid_at": now,
-	}).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var inv models.Invoice
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&inv, "id = ?", invoiceID).Error; err != nil {
+			return err
+		}
+		if inv.Status == "paid" {
+			return nil // идемпотентно
+		}
+		if inv.Amount <= 0 {
+			return fmt.Errorf("invalid invoice amount")
+		}
+		return tx.Model(&inv).Updates(map[string]interface{}{
+			"status":  "paid",
+			"paid_at": time.Now(),
+		}).Error
+	})
 }
 
 // === ЭТАП 2: АНАЛИТИКА ===

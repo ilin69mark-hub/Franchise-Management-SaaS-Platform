@@ -77,6 +77,22 @@ func (s *goalService) CreateGoal(ctx context.Context, dto CreateGoalDTO, assigne
 	if !canAssign(assignerRole, dto.Role) {
 		return nil, errors.New("you are not allowed to assign a goal to this role")
 	}
+	// Валидация сумм — защита от накрутки KPI отрицательными значениями
+	if dto.SalesPlan < 0 || dto.SalesPlan > 1e12 {
+		return nil, errors.New("sales_plan out of range (0..1e12)")
+	}
+	if dto.LeadsPlan < 0 || dto.LeadsPlan > 100000 {
+		return nil, errors.New("leads_plan out of range (0..100000)")
+	}
+	if dto.CallsPlan < 0 || dto.CallsPlan > 100000 {
+		return nil, errors.New("calls_plan out of range")
+	}
+	if dto.MeetingsPlan < 0 || dto.MeetingsPlan > 100000 {
+		return nil, errors.New("meetings_plan out of range")
+	}
+	if dto.SalesPlan == 0 && dto.LeadsPlan == 0 && dto.CallsPlan == 0 && dto.MeetingsPlan == 0 {
+		return nil, errors.New("at least one plan must be >0")
+	}
 
 	assigneeUUID, err := uuid.Parse(dto.AssigneeID)
 	if err != nil {
@@ -142,6 +158,19 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 	goal, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, errors.New("goal not found")
+	}
+	// Валидация — отрицательные планы запрещены
+	if dto.SalesPlan < 0 || dto.SalesPlan > 1e12 {
+		return nil, errors.New("sales_plan out of range")
+	}
+	if dto.LeadsPlan < 0 || dto.LeadsPlan > 100000 {
+		return nil, errors.New("leads_plan out of range")
+	}
+	if dto.CallsPlan < 0 || dto.CallsPlan > 100000 {
+		return nil, errors.New("calls_plan out of range")
+	}
+	if dto.MeetingsPlan < 0 || dto.MeetingsPlan > 100000 {
+		return nil, errors.New("meetings_plan out of range")
 	}
 
 	if dto.SalesPlan > 0 {

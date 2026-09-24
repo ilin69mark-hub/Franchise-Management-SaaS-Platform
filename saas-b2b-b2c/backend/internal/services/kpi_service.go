@@ -281,23 +281,26 @@ func calcPercentInt(plan int, fact int64) models.KPIItem {
 }
 
 func calcPercentVal(plan, fact float64) int {
-	if plan == 0 {
+	if plan <= 0 || fact < 0 {
 		return 0
 	}
 	p := int((fact / plan) * 100)
 	if p > 100 {
 		return 100
 	}
+	if p < 0 {
+		return 0
+	}
 	return p
 }
 
 // GetDashboardMain - получение данных для главной вкладки дашборда менеджера салона
 func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DashboardMainResponse, error) {
-	// Парсим дату или берем текущую
-	targetDate := time.Now()
+	// Парсим дату в UTC — защита от TZ-разрыва (Москва vs UTC)
+	targetDate := time.Now().UTC()
 	if dateStr != "" {
-		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
+		if parsed, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC); err == nil {
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
 		}
 	}
 
