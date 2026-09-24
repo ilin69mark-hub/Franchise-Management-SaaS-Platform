@@ -98,8 +98,8 @@ const DealerAlerts: React.FC<DealerAlertsProps> = ({
     const connectWebSocket = () => {
       const api = process.env.NEXT_PUBLIC_API_URL;
       const baseWs = process.env.NEXT_PUBLIC_WS_URL || (api ? `${api.startsWith('https') ? 'wss' : 'ws'}://${api.replace(/^https?:\/\//, '').replace(/\/+$/, '')}/ws/alerts` : `${typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws'}://${typeof window !== 'undefined' ? window.location.host : 'localhost:8080'}/ws/alerts`);
-      const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-      const wsUrl = token ? `${baseWs}?token=${encodeURIComponent(token)}` : baseWs;
+      // токен теперь в httpOnly cookie — не добавляем ?token= в URL (утечка в логи/history)
+      const wsUrl = baseWs;
       try {
         wsRef.current = new WebSocket(wsUrl);
         

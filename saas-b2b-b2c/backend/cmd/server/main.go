@@ -94,6 +94,8 @@ func main() {
 	goalHandler := handlers.NewGoalHandler(goalService)
 
 	r := gin.Default()
+	// Только доверенные прокси (nginx) могут устанавливать X-Forwarded-For — защита от обхода rate-limit через подделку XFF
+	_ = r.SetTrustedProxies([]string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1/32"})
 	r.Use(middleware.CORS())
 
 	r.GET("/health", func(c *gin.Context) {

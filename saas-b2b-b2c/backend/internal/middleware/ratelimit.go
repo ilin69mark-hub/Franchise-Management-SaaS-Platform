@@ -100,6 +100,16 @@ func RateLimitByUser(requests int, window time.Duration) gin.HandlerFunc {
 
 		userID, exists := c.Get("userID")
 		if !exists {
+			// fail-closed: лимитируем по IP если нет userID (auth ещё не прошёл)
+			key := "ratelimit:ip:" + c.ClientIP()
+			if !globalRateLimiter.Allow(key, requests, window) {
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error":       "Too many requests",
+					"retry_after": window.Seconds(),
+				})
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -109,6 +119,16 @@ func RateLimitByUser(requests int, window time.Duration) gin.HandlerFunc {
 
 		count, err := cache.SetWithIncrement(ctx, key, window, requests)
 		if err != nil {
+			// fail-closed: fallback на in-memory при недоступности Redis
+			fallbackKey := "ratelimit:fb:" + userID.(string)
+			if !globalRateLimiter.Allow(fallbackKey, requests, window) {
+				c.JSON(http.StatusTooManyRequests, gin.H{
+					"error":       "Too many requests",
+					"retry_after": window.Seconds(),
+				})
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}

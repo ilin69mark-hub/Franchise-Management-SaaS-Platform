@@ -20,6 +20,7 @@ export const apiSlice = createApi({
     // Берём URL из env‑переменной (для Docker – имя сервиса `backend`);
     // fallback – localhost:8080 (для локального старта без Docker)
     baseUrl: `${(process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'production' ? (()=>{throw new Error('NEXT_PUBLIC_API_URL must be set in production')})() : 'http://localhost:8080'))}/api/v1`,
+    credentials: 'include',
     prepareHeaders: (headers, { getState }) => {
       // Пытаемся взять токен из Redux‑стора
       let token = (getState() as { auth?: { accessToken?: string } }).auth?.accessToken;

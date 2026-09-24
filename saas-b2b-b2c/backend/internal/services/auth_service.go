@@ -130,13 +130,24 @@ func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models
 		sidStr = salonID.String()
 	}
 
+	accessJti := uuid.New().String()
+	// respect JWT_EXPIRES from config, default 24h
+	jwtExpiresStr := viper.GetString("JWT_EXPIRES")
+	if jwtExpiresStr == "" {
+		jwtExpiresStr = viper.GetString("jwt_expires")
+	}
+	jwtExpires := 24 * time.Hour
+	if d, err := time.ParseDuration(jwtExpiresStr); err == nil {
+		jwtExpires = d
+	}
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id":   userID.String(),
 		"email":     email,
 		"role":      role,
 		"tenant_id": tidStr,
 		"salon_id":  sidStr,
-		"exp":       time.Now().Add(time.Hour * 24).Unix(),
+		"jti":       accessJti,
+		"exp":       time.Now().Add(jwtExpires).Unix(),
 	})
 
 	jti := uuid.New().String()
@@ -235,6 +246,45 @@ func (s *AuthService) Logout(refreshToken string) error {
 	}
 
 	return cache.RevokeRefreshToken(context.Background(), tokenID)
+}
+
+// RevokeAccessToken — извлекает jti из access токена и помещает в blacklist
+func (s *AuthService) RevokeAccessToken(authHeader string) error {
+	tokenStr := strings.TrimSpace(authHeader)
+	if strings.HasPrefix(strings.ToUpper(tokenStr), "BEARER ") {
+		tokenStr = strings.TrimSpace(tokenStr[7:])
+	}
+	if tokenStr == "" {
+		return errors.New("empty token")
+	}
+	secret := viper.GetString("jwt_secret")
+	if secret == "" {
+		return errors.New("jwt_secret is not configured")
+	}
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	}, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil || !token.Valid {
+		return errors.New("invalid token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return errors.New("invalid claims")
+	}
+	jti, _ := claims["jti"].(string)
+	if jti == "" {
+		return errors.New("jti missing")
+	}
+	// TTL до exp, fallback 24h
+	exp := 24 * time.Hour
+	if expVal, ok := claims["exp"].(float64); ok {
+		expTime := time.Unix(int64(expVal), 0)
+		remaining := time.Until(expTime)
+		if remaining > 0 && remaining < 24*time.Hour {
+			exp = remaining
+		}
+	}
+	return cache.Set(context.Background(), "revoked_token:"+jti, "1", exp)
 }
 
 // GetUserByID - Получение пользователя по ID

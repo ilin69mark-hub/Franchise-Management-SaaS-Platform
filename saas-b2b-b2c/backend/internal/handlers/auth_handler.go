@@ -85,12 +85,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
 		return
 	}
+	setAuthCookies(c, token, refresh)
 
 	c.JSON(http.StatusCreated, models.AuthResponse{
 		User:         *user,
 		Token:        token,
 		RefreshToken: refresh,
 	})
+}
+
+func setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	// httpOnly cookie для access — защита от XSS (localStorage остаётся для совместимости, но cookie — primary)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", accessToken, 86400, "/", "", isSecure, true)
+	c.SetCookie("refresh_token", refreshToken, 604800, "/", "", isSecure, true)
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -116,6 +125,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
 		return
 	}
+	setAuthCookies(c, token, refresh)
 
 	c.JSON(http.StatusOK, models.AuthResponse{
 		User:         *user,
@@ -133,11 +143,18 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		return
 	}
 
+	// fallback на cookie если тело пустое
+	if req.RefreshToken == "" {
+		if cookie, err := c.Cookie("refresh_token"); err == nil {
+			req.RefreshToken = cookie
+		}
+	}
 	access, refresh, err := h.service.RefreshTokens(req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
 	}
+	setAuthCookies(c, access, refresh)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":         access,
@@ -145,20 +162,29 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	})
 }
 
-// Logout - отзывает refresh token (по jti) и завершает сессию.
+// Logout - отзывает refresh token (по jti) и чистит cookie + отзывает access jti если передан
 func (h *AuthHandler) Logout(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+	_ = c.ShouldBindJSON(&req)
+	if req.RefreshToken == "" {
+		if cookie, err := c.Cookie("refresh_token"); err == nil {
+			req.RefreshToken = cookie
+		}
 	}
-
-	if err := h.service.Logout(req.RefreshToken); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
-		return
+	// отозвать access jti из Authorization/cookie для мгновенной инвалидации
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		_ = h.service.RevokeAccessToken(authHeader)
+	} else if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
+		_ = h.service.RevokeAccessToken("Bearer " + cookie)
 	}
+	if req.RefreshToken != "" {
+		_ = h.service.Logout(req.RefreshToken)
+	}
+	// clear cookies
+	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
