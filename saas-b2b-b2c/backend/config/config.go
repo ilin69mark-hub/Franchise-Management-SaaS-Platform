@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -53,9 +54,9 @@ func LoadConfig() *Config {
 	if config.ServerPort == "" {
 		config.ServerPort = "8080"
 	}
-	
+
 	if config.JWTSecret == "" {
-		config.JWTSecret = "unsafe-default-jwt-secret-change-me"
+		log.Fatal("JWT_SECRET must be set — refusing to start with unsafe default (set JWT_SECRET env var)")
 	}
 	
 	if config.RedisURL == "" {
@@ -82,9 +83,17 @@ func LoadConfig() *Config {
 		config.DBName = "franchise_db"
 	}
 
-	// Формируем URL для подключения к базе данных
-	config.DatabaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
-		config.DBUser, config.DBPassword, config.DBHost, config.DBPort, config.DBName)
+	// Формируем URL для подключения к базе данных — sslmode по умолчанию require в prod
+	sslmode := viper.GetString("DB_SSLMODE")
+	if sslmode == "" {
+		if viper.GetString("GIN_MODE") == "release" {
+			sslmode = "require"
+		} else {
+			sslmode = "disable"
+		}
+	}
+	config.DatabaseURL = fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		config.DBUser, config.DBPassword, config.DBHost, config.DBPort, config.DBName, sslmode)
 
 	// Парсим продолжительность жизни JWT токена
 	jwtExpiresStr := viper.GetString("JWT_EXPIRES")

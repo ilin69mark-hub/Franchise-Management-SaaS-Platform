@@ -15,7 +15,14 @@ var DB *gorm.DB
 func ConnectDB() (*gorm.DB, error) {
 	sslmode := viper.GetString("db_sslmode")
 	if sslmode == "" {
-		sslmode = "disable"
+		sslmode = viper.GetString("DB_SSLMODE")
+	}
+	if sslmode == "" {
+		if viper.GetString("GIN_MODE") == "release" {
+			sslmode = "require"
+		} else {
+			sslmode = "disable"
+		}
 	}
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s",

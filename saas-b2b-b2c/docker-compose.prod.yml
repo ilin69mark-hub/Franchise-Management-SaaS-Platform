@@ -11,17 +11,25 @@ services:
       dockerfile: Dockerfile.backend
       target: production
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - GIN_MODE=release
       - PORT=8080
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USER=${DB_USER:-postgres}
+      - DB_USER=${DB_USER:?DB_USER must be set}
       - DB_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set}
-      - DB_NAME=${DB_NAME:-franchise_db}
+      - DB_NAME=${DB_NAME:?DB_NAME must be set}
+      - DB_SSLMODE=require
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
       - REDIS_URL=redis://redis:6379
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,7 +52,14 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set for prod build — e.g. https://api.example.com}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     environment:
       - NODE_ENV=production
       - PORT=3000
