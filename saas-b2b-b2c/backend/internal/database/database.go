@@ -844,6 +844,7 @@ func migrateDailyGoals(db *gorm.DB) error {
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			salon_id UUID,
 			user_id UUID,
+			tenant_id UUID REFERENCES tenants(id),
 			target_date DATE NOT NULL,
 			sales_plan DECIMAL(12,2) DEFAULT 0,
 			leads_plan INTEGER DEFAULT 0,
@@ -855,6 +856,8 @@ func migrateDailyGoals(db *gorm.DB) error {
 	`).Error; err != nil {
 		return err
 	}
+	db.Exec(`ALTER TABLE daily_goals ADD COLUMN IF NOT EXISTS tenant_id UUID REFERENCES tenants(id)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_daily_goals_tenant ON daily_goals(tenant_id)`)
 	// PG15+: NULLS NOT DISTINCT чтобы (NULL, date) считалось дублем, иначе UNIQUE не работает для менеджеров без салона
 	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_salon_date ON daily_goals (salon_id, target_date) NULLS NOT DISTINCT`).Error; err != nil {
 		db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_goals_salon_date ON daily_goals (salon_id, target_date)`)

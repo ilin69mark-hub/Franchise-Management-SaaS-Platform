@@ -240,7 +240,7 @@ func (h *UserHandler) GetMySalons(c *gin.Context) {
 	c.JSON(http.StatusOK, salons)
 }
 
-// AssignManager
+// AssignManager — tenant-isolated
 func (h *UserHandler) AssignManager(c *gin.Context) {
 	var req struct {
 		UserID  uuid.UUID `json:"user_id" binding:"required"`
@@ -249,6 +249,25 @@ func (h *UserHandler) AssignManager(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	// tenant isolation: both user and salon must be in caller's tenant (except super_admin)
+	if currentUser.Role != "super_admin" && currentUser.TenantID != nil {
+		// verify salon belongs to tenant and target user belongs to tenant
+		salon, err := h.service.GetSalonByID(c.Request.Context(), req.SalonID)
+		if err != nil || salon.TenantID != *currentUser.TenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: salon not in your network"})
+			return
+		}
+		targetUser, err := h.service.GetUserByID(c.Request.Context(), req.UserID)
+		if err != nil || targetUser.TenantID == nil || *targetUser.TenantID != *currentUser.TenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: user not in your network"})
+			return
+		}
 	}
 
 	if err := h.service.AssignManagerToSalon(c.Request.Context(), req.UserID, req.SalonID); err != nil {
@@ -262,10 +281,25 @@ func (h *UserHandler) AssignManager(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Manager assigned to salon"})
 }
 
-// UpdateSalon
+// UpdateSalon — tenant-isolated
 func (h *UserHandler) UpdateSalon(c *gin.Context) {
 	idStr := c.Param("id")
 	salonID, _ := uuid.Parse(idStr)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	// verify salon belongs to tenant
+	salonCheck, err := h.service.GetSalonByID(c.Request.Context(), salonID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Salon not found"})
+		return
+	}
+	if currentUser.Role != "super_admin" && currentUser.TenantID != nil && salonCheck.TenantID != *currentUser.TenantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 
 	var req struct {
 		Name    string `json:"name" binding:"required"`
@@ -284,10 +318,24 @@ func (h *UserHandler) UpdateSalon(c *gin.Context) {
 	c.JSON(http.StatusOK, salon)
 }
 
-// DeleteSalon
+// DeleteSalon — tenant-isolated
 func (h *UserHandler) DeleteSalon(c *gin.Context) {
 	idStr := c.Param("id")
 	salonID, _ := uuid.Parse(idStr)
+	currentUser, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	salonCheck, err := h.service.GetSalonByID(c.Request.Context(), salonID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Salon not found"})
+		return
+	}
+	if currentUser.Role != "super_admin" && currentUser.TenantID != nil && salonCheck.TenantID != *currentUser.TenantID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
 
 	if err := h.service.DeleteSalon(c.Request.Context(), salonID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

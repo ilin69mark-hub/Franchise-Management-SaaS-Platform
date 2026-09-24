@@ -94,6 +94,11 @@ func (h *KPIHandler) SetGoal(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
 
 	date, _ := time.Parse("2006-01-02", req.TargetDate)
 	goal := models.DailyGoal{
@@ -105,15 +110,44 @@ func (h *KPIHandler) SetGoal(c *gin.Context) {
 	}
 
 	if req.SalonID != "" {
-		id, _ := uuid.Parse(req.SalonID)
+		id, err := uuid.Parse(req.SalonID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid salon_id"})
+			return
+		}
+		// tenant isolation: salon must be in caller's tenant
+		var salon models.Salon
+		if err := h.db.First(&salon, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: salon not found"})
+			return
+		}
+		if user.Role != models.RoleSuperAdmin && user.TenantID != nil && salon.TenantID != *user.TenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: salon not in your network"})
+			return
+		}
 		goal.SalonID = &id
 	}
 	if req.UserID != "" {
-		id, _ := uuid.Parse(req.UserID)
+		id, err := uuid.Parse(req.UserID)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user_id"})
+			return
+		}
+		var targetUser models.User
+		if err := h.db.First(&targetUser, "id = ?", id).Error; err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: user not found"})
+			return
+		}
+		if user.Role != models.RoleSuperAdmin && user.TenantID != nil {
+			if targetUser.TenantID == nil || *targetUser.TenantID != *user.TenantID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: user not in your network"})
+				return
+			}
+		}
 		goal.UserID = &id
 	}
 
-	// Вызываем репозиторий через сервис (добавим метод SetGoal в сервис)
+	// Вызываем репозиторий через сервис
 	if err := h.kpiSvc.SetGoal(c.Request.Context(), &goal); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -260,6 +294,39 @@ func (h *KPIHandler) CreateEventForManager(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	caller, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	targetID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user_id"})
+		return
+	}
+	// tenant + managed_by check: caller must manage target or be super_admin
+	var targetUser models.User
+	if err := h.db.First(&targetUser, "id = ?", targetID).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: user not found"})
+		return
+	}
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID != nil {
+			if targetUser.TenantID == nil || *targetUser.TenantID != *caller.TenantID {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: user not in your network"})
+				return
+			}
+		}
+		if targetUser.ManagedBy == nil || *targetUser.ManagedBy != caller.ID {
+			// allow if caller is franchiser_manager managing dealer? still must be direct manager
+			var cnt int64
+			h.db.Model(&models.User{}).Where("id = ? AND managed_by = ?", targetID, caller.ID).Count(&cnt)
+			if cnt == 0 {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: not your subordinate"})
+				return
+			}
+		}
+	}
 
 	startTime, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
@@ -268,18 +335,19 @@ func (h *KPIHandler) CreateEventForManager(c *gin.Context) {
 	}
 
 	event := &models.ScheduleEvent{
-		UserID:      uuid.MustParse(req.UserID), // Берем ID менеджера из тела запроса
+		UserID:      targetID,
 		Title:       req.Title,
 		Description: req.Description,
 		Type:        req.Type,
 		StartTime:   startTime,
 		Priority:    req.Priority,
 		Status:      "planned",
-		// SalonID нужно заполнить, если он есть в запросе или вычислить
 	}
-
-	// Если нужно SalonID, можно взять из базы по UserID или передать в запросе
-	// Для простоты оставим без SalonID или добавим поле в Request
+	if targetUser.SalonID != nil {
+		event.SalonID = *targetUser.SalonID
+	} else if caller.SalonID != nil {
+		event.SalonID = *caller.SalonID
+	}
 
 	if err := h.schedSvc.CreateEvent(c.Request.Context(), event); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -290,6 +358,25 @@ func (h *KPIHandler) CreateEventForManager(c *gin.Context) {
 
 func (h *KPIHandler) UpdateEvent(c *gin.Context) {
 	id, _ := uuid.Parse(c.Param("id"))
+	caller, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	var ev models.ScheduleEvent
+	if err := h.db.First(&ev, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+	// ownership: caller is owner or manager of owner
+	if ev.UserID != caller.ID {
+		var cnt int64
+		h.db.Model(&models.User{}).Where("id = ? AND managed_by = ?", ev.UserID, caller.ID).Count(&cnt)
+		if cnt == 0 && caller.Role != models.RoleSuperAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	}
 	var req models.UpdateScheduleEventRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -305,6 +392,24 @@ func (h *KPIHandler) UpdateEvent(c *gin.Context) {
 
 func (h *KPIHandler) DeleteEvent(c *gin.Context) {
 	id, _ := uuid.Parse(c.Param("id"))
+	caller, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	var ev models.ScheduleEvent
+	if err := h.db.First(&ev, "id = ?", id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Event not found"})
+		return
+	}
+	if ev.UserID != caller.ID {
+		var cnt int64
+		h.db.Model(&models.User{}).Where("id = ? AND managed_by = ?", ev.UserID, caller.ID).Count(&cnt)
+		if cnt == 0 && caller.Role != models.RoleSuperAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+	}
 	if err := h.schedSvc.DeleteEvent(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -420,13 +525,30 @@ func (h *KPIHandler) GetDashboardTeam(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
-// GetSalesRepHistory - история продавца
+// GetSalesRepHistory - история продавца — tenant-isolated
 func (h *KPIHandler) GetSalesRepHistory(c *gin.Context) {
 	idStr := c.Param("id")
 	managerID, err := uuid.Parse(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid manager ID"})
 		return
+	}
+	caller, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	// tenant isolation: target manager must be in same tenant
+	var targetUser models.User
+	if err := h.db.First(&targetUser, "id = ?", managerID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+	if caller.Role != models.RoleSuperAdmin && caller.TenantID != nil {
+		if targetUser.TenantID == nil || *targetUser.TenantID != *caller.TenantID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 	}
 
 	months := 6

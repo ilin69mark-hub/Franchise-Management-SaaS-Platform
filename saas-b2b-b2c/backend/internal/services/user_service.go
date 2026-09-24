@@ -122,19 +122,54 @@ func (s *UserService) GetEmployees(tenantID uuid.UUID) ([]models.User, error) {
 	return s.userRepo.FindUsersByTenantID(context.Background(), tenantID)
 }
 
-// CreateEmployee
+// CreateEmployee — strict whitelist per creator role + tenant isolation
 func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID uuid.UUID, creatorID uuid.UUID, creatorRole string) (*models.User, error) {
-	// 1. Проверка прав
-	if creatorRole != string(models.RoleSuperAdmin) {
-		if req.Role == models.RoleSuperAdmin || req.Role == models.RoleFranchisor {
+	// 1. Строгая проверка прав — whitelist
+	allowedByCreator := map[string]map[models.Role]bool{
+		string(models.RoleSuperAdmin): {
+			models.RoleFranchisor:        true,
+			models.RoleFranchisorManager: true,
+			models.RoleDealer:            true,
+			models.RoleDealerManager:     true,
+		},
+		string(models.RoleFranchisor): {
+			models.RoleFranchisorManager: true,
+			models.RoleDealer:            true,
+		},
+		string(models.RoleFranchisorManager): {
+			models.RoleDealer: true,
+		},
+		string(models.RoleDealer): {
+			models.RoleDealerManager: true,
+		},
+	}
+	if allowed, ok := allowedByCreator[creatorRole]; !ok || !allowed[req.Role] {
+		// super_admin уже покрыт map, остальные строго по whitelist
+		if creatorRole != string(models.RoleSuperAdmin) || !allowed[req.Role] {
 			return nil, errors.New("permission denied: cannot create user with this role")
 		}
 	}
-
 	// 2. Валидация TenantID для Франчайзера
-	// Франчайзер ОБЯЗАН быть привязан к сети.
 	if req.Role == models.RoleFranchisor && tenantID == uuid.Nil {
 		return nil, errors.New("tenant_id is required for franchiser role")
+	}
+	if tenantID == uuid.Nil && req.Role != models.RoleSuperAdmin {
+		// tenant_id must not be Nil for non-super_admin tenants — prevents uuid.Nil bypass
+		return nil, errors.New("tenant_id is required")
+	}
+
+	// 2b. ManagedBy must be in same tenant if provided
+	if req.ManagedBy != nil {
+		mgr, err := s.userRepo.GetUserByID(context.Background(), *req.ManagedBy)
+		if err != nil {
+			return nil, errors.New("managed_by user not found")
+		}
+		if tenantID != uuid.Nil && mgr.TenantID != nil && *mgr.TenantID != tenantID {
+			return nil, errors.New("managed_by must be in same tenant")
+		}
+		if tenantID != uuid.Nil && mgr.TenantID == nil {
+			return nil, errors.New("managed_by must be in same tenant")
+		}
 	}
 
 	// 3. Подготовка данных
@@ -205,6 +240,10 @@ func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID) error {
 }
 
 // === МЕТОДЫ ДЛЯ СУПЕР-АДМИНА ===
+
+func (s *UserService) GetUserByID(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	return s.userRepo.GetUserByID(ctx, userID)
+}
 
 func (s *UserService) GetAllUsersGlobal() ([]models.User, error) {
 	return s.userRepo.FindAllGlobal(context.Background())
