@@ -80,9 +80,11 @@ func main() {
 	c := cron.New(cron.WithSeconds())
 	paymentJob := jobs.NewPaymentJob(adminService, notifService)
 	_, _ = c.AddFunc("0 0 9 * * *", paymentJob.Run)
+	logRotation := jobs.NewLogRotationJob(db)
+	_, _ = c.AddFunc("0 0 3 * * *", logRotation.Run)
 	c.Start()
 	defer c.Stop()
-	log.Println("Cron jobs started")
+	log.Println("Cron jobs started (payment 09:00, log rotation 03:00)")
 
 	authHandler := handlers.NewAuthHandler(authService)
 	userHandler := handlers.NewUserHandler(userService)

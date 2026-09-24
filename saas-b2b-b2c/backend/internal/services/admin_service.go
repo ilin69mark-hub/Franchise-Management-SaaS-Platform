@@ -11,6 +11,7 @@ import (
 	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -42,14 +43,13 @@ func NewAdminServiceWithInterfaces(tenantRepo repository.TenantRepositoryInterfa
 	}
 }
 
-// GetDashboardStats - статистика
+// GetDashboardStats - статистика (decimal для денег)
 func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 	var tenantCount int64
 	var userCount int64
 	var activeTenants int64
 	var churnedTenants int64
 	var newTenantsMonth int64
-	var totalRevenue float64
 
 	s.db.Model(&models.Tenant{}).Count(&tenantCount)
 	s.db.Model(&models.User{}).Count(&userCount)
@@ -57,10 +57,14 @@ func (s *AdminService) GetDashboardStats() (map[string]interface{}, error) {
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
+	// decimal для точного суммирования денег (0.1+0.2=0.3 без float-ошибок)
+	var totalRevenueStr string
 	s.db.Model(&models.Invoice{}).
 		Where("status = ? AND paid_at >= ?", "paid", startOfMonth).
-		Select("COALESCE(SUM(amount), 0)").
-		Scan(&totalRevenue)
+		Select("CAST(COALESCE(SUM(amount), 0) AS TEXT)").
+		Scan(&totalRevenueStr)
+	totalRevenueDec, _ := decimal.NewFromString(totalRevenueStr)
+	totalRevenue := totalRevenueDec.InexactFloat64()
 
 	s.db.Model(&models.Tenant{}).Where("status = ?", "active").Count(&activeTenants)
 	s.db.Model(&models.Tenant{}).Where("status = ?", "churned").Count(&churnedTenants)
@@ -616,10 +620,12 @@ func (s *AdminService) GetUnitEconomics() (map[string]interface{}, error) {
 	// 1. LTV (Lifetime Value)
 	// Считаем средний доход с одной сети за всё время
 	// LTV = Общая выручка / Кол-во сетей (когда-либо созданных)
-	var totalRevenue float64
+	var totalRevenueStr string
 	var totalTenantsEver int64
 
-	s.db.Model(&models.Invoice{}).Where("status = ?", "paid").Select("COALESCE(SUM(amount), 0)").Scan(&totalRevenue)
+	s.db.Model(&models.Invoice{}).Where("status = ?", "paid").Select("CAST(COALESCE(SUM(amount), 0) AS TEXT)").Scan(&totalRevenueStr)
+	totalRevenueDec, _ := decimal.NewFromString(totalRevenueStr)
+	totalRevenue := totalRevenueDec.InexactFloat64()
 	s.db.Model(&models.Tenant{}).Unscoped().Count(&totalTenantsEver) // Unscoped чтобы считать и удаленных
 
 	ltv := 0.0

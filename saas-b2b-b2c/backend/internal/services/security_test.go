@@ -8,6 +8,7 @@ import (
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -182,4 +183,16 @@ func TestSecurity_TZ_GetDashboardMainUsesUTC(t *testing.T) {
 	uid := uuid.New()
 	_, _ = svc.GetDashboardMain(context.Background(), uid, "2026-09-23")
 	assert.True(t, true)
+}
+
+func TestSecurity_DecimalSumPrecise(t *testing.T) {
+	d1, _ := decimal.NewFromString("0.1")
+	d2, _ := decimal.NewFromString("0.2")
+	sum := d1.Add(d2)
+	expected, _ := decimal.NewFromString("0.3")
+	assert.True(t, sum.Equal(expected), "decimal 0.1+0.2 must equal 0.3")
+	inv1, _ := decimal.NewFromString("100.10")
+	inv2, _ := decimal.NewFromString("200.20")
+	total := inv1.Add(inv2)
+	assert.Equal(t, "300.30", total.StringFixed(2))
 }
