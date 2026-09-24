@@ -18,6 +18,8 @@ export interface User {
 export interface LoginRequest {
   email: string;
   password: string;
+  // S1: после captcha-порога бэкенд требует токен (captcha_required).
+  captcha_token?: string;
 }
 export interface RegisterRequest {
   email: string;

@@ -85,7 +85,11 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 // UpdateTenant - обновить сеть
 func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 
 	var req struct {
 		Name      string     `json:"name"`
@@ -107,7 +111,11 @@ func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 // BlockTenant - заблокировать
 func (h *AdminHandler) BlockTenant(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	if err := h.service.BlockTenant(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -118,7 +126,11 @@ func (h *AdminHandler) BlockTenant(c *gin.Context) {
 // UnblockTenant - разблокировать
 func (h *AdminHandler) UnblockTenant(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	if err := h.service.UnblockTenant(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -129,7 +141,11 @@ func (h *AdminHandler) UnblockTenant(c *gin.Context) {
 // DeleteTenant - удалить
 func (h *AdminHandler) DeleteTenant(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	if err := h.service.DeleteTenant(c.Request.Context(), id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -169,7 +185,11 @@ func (h *AdminHandler) CreatePlan(c *gin.Context) {
 // UpdatePlan - обновить тариф (НОВОЕ)
 func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 
 	var req struct {
 		Name     string  `json:"name" binding:"required"`
@@ -192,7 +212,11 @@ func (h *AdminHandler) UpdatePlan(c *gin.Context) {
 // DeletePlan - удалить тариф (НОВОЕ)
 func (h *AdminHandler) DeletePlan(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 	if err := h.service.DeletePlan(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -236,7 +260,11 @@ func (h *AdminHandler) GetAllInvoices(c *gin.Context) {
 // PayInvoice - оплатить счет
 func (h *AdminHandler) PayInvoice(c *gin.Context) {
 	idStr := c.Param("id")
-	id, _ := uuid.Parse(idStr)
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
 
 	if err := h.service.MarkInvoicePaid(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

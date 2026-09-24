@@ -24,7 +24,9 @@ services:
       - DB_SSLMODE=require
       # AUDIT-EXCEPTION(E01): owner-key, см. .audit-exceptions.yml
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
-      - REDIS_URL=redis://redis:6379
+      # AUDIT-EXCEPTION(E14): owner-key, см. .audit-exceptions.yml
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     read_only: true
     tmpfs:
       - /tmp
@@ -97,11 +99,13 @@ services:
 
   redis:
     image: redis:7-alpine
+    # AUDIT-EXCEPTION(E14): owner-key, см. .audit-exceptions.yml
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
     ports:
       - "127.0.0.1:6379:6379"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -112,7 +116,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      # S3: прод монтирует TLS-конфиг; дефолтный nginx.conf остаётся для локала.
+      - ${NGINX_CONF:-./nginx.conf}:/etc/nginx/nginx.conf:ro
       - ./certs:/etc/nginx/certs:ro
     depends_on:
       frontend:

@@ -4,11 +4,14 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -26,6 +29,69 @@ import (
 // ErrUserBlocked - возвращается при попытке входа заблокированного/приостановленного
 // пользователя. Хендлер маппит его в HTTP 403.
 var ErrUserBlocked = errors.New("account is blocked")
+
+// ErrCaptchaRequired - после captcha-порога вход без валидного токена запрещён.
+var ErrCaptchaRequired = errors.New("captcha required")
+
+// captchaFromEnv - конфиг провайдера из окружения (hCaptcha/Turnstile-совместимый POST).
+// Пусто = CAPTCHA не настроена (fail-open, чтобы dev/staging не ломались).
+func captchaFromEnv() (secret, verifyURL string) {
+	// AUDIT-EXCEPTION(E13): owner-key, см. .audit-exceptions.yml
+	secret = strings.TrimSpace(os.Getenv("CAPTCHA_SECRET"))
+	verifyURL = strings.TrimSpace(os.Getenv("CAPTCHA_VERIFY_URL"))
+	if secret == "" || verifyURL == "" {
+		return "", ""
+	}
+	return secret, verifyURL
+}
+
+// captchaThresholdAfter - с какого числа неудач требуется CAPTCHA (половина от lockout).
+func captchaThresholdAfter() int {
+	threshold := captchaThreshold
+	if threshold <= 0 || threshold >= maxLoginAttempts {
+		return maxLoginAttempts / 2
+	}
+	return threshold
+}
+
+// verifyCaptchaToken - S1: после порога неудач вход требует CAPTCHA.
+// Без CAPTCHA_SECRET/CAPTCHA_VERIFY_URL проверка пропускается (E13 — человек
+// заводит провайдера; ключи в репозитории хранить нельзя).
+func verifyCaptchaToken(ctx context.Context, clientIP, token string) error {
+	secret, verifyURL := captchaFromEnv()
+	if secret == "" {
+		return nil
+	}
+	if strings.TrimSpace(token) == "" {
+		return ErrCaptchaRequired
+	}
+	form := url.Values{"secret": {secret}, "response": {strings.TrimSpace(token)}}
+	if ip := strings.TrimSpace(clientIP); ip != "" {
+		form.Set("remoteip", ip)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, verifyURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return ErrCaptchaRequired
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := captchaHTTPClient.Do(req)
+	if err != nil {
+		// Провайдер недоступен — не открываем логин (fail-closed на enforce-пути).
+		log.Printf("captcha verify failed: %v", err)
+		return ErrCaptchaRequired
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	var parsed struct {
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil || !parsed.Success {
+		return ErrCaptchaRequired
+	}
+	return nil
+}
+
+var captchaHTTPClient = &http.Client{Timeout: 5 * time.Second}
 
 // ErrTooManyAttempts - lockout после N неудачных входов (хендлер маппит в 429).
 var ErrTooManyAttempts = errors.New("too many login attempts, try again later")
@@ -233,6 +299,8 @@ const (
 	// F9: lockout — 10 неудач за 15 минут на email (счётчик общий:
 	// инкремент и по неизвестному email, чтобы не выдавать существование).
 	maxLoginAttempts = 10
+	// S1: CAPTCHA требуется с середины lockout-окна.
+	captchaThreshold = maxLoginAttempts / 2
 	loginLockWindow  = 15 * time.Minute
 	// F12: потолки времени жизни токенов.
 	maxJWTExpires   = 24 * time.Hour
@@ -264,6 +332,9 @@ func NewAuthServiceWithInterface(userRepo repository.UserRepositoryInterface, te
 // CreateUserWithTenant - Создает сеть (Tenant) и Владельца (User)
 func (s *AuthService) CreateUserWithTenant(user *models.User, password string, companyName string) (*models.User, error) {
 	ctx := context.Background()
+
+	// S4: храним нормализованный email (уникальность — по LOWER(email)).
+	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
 
 	if err := validatePassword(password); err != nil {
 		return nil, err
@@ -316,6 +387,7 @@ func (s *AuthService) CreateUserWithTenant(user *models.User, password string, c
 
 // CreateUser - Создание пользователя без создания сети
 func (s *AuthService) CreateUser(user *models.User, password string) (*models.User, error) {
+	user.Email = strings.ToLower(strings.TrimSpace(user.Email))
 	if err := validatePassword(password); err != nil {
 		return nil, err
 	}
@@ -354,8 +426,21 @@ func loginFailKey(clientIP, email string) string {
 	return "loginfail:" + clientIP + ":" + strings.ToLower(strings.TrimSpace(email))
 }
 
-func (s *AuthService) Authenticate(ctx context.Context, email, password, clientIP string) (*models.User, error) {
+func (s *AuthService) Authenticate(ctx context.Context, email, password, clientIP string, captchaToken ...string) (*models.User, error) {
+	// S4: вход регистронезависимо (хранение — всегда lower).
+	email = strings.ToLower(strings.TrimSpace(email))
 	failKey := loginFailKey(clientIP, email)
+
+	// S1: после порога неудач — CAPTCHA (до проверки пароля).
+	if cache.PeekLimit(ctx, failKey) >= captchaThresholdAfter() {
+		token := ""
+		if len(captchaToken) > 0 {
+			token = captchaToken[0]
+		}
+		if err := verifyCaptchaToken(ctx, clientIP, token); err != nil {
+			return nil, err
+		}
+	}
 
 	// F9: сначала lockout (до обращения к БД — не даём перебирать и не течём таймингом).
 	if cache.PeekLimit(ctx, failKey) >= maxLoginAttempts {

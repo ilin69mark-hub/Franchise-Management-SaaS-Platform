@@ -48,6 +48,13 @@ curl http://localhost:8080/health
 curl http://localhost:3000
 ```
 
+### 3.1 TLS (прод, certbot — за человеком, E09)
+```bash
+# сертификаты в saas-b2b-b2c/certs (fullchain.pem + privkey.pem)
+NGINX_CONF=./nginx.prod.conf docker compose -f saas-b2b-b2c/docker-compose.prod.yml up -d --build
+# 80 редиректит на 443; без NGINX_CONF монтируется dev-конфиг без TLS
+```
+
 ## 4. Бэкап
 ```bash
 make backup    # pg_dump + volume tar в ./backups

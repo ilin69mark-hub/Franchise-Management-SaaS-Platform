@@ -65,7 +65,8 @@ func TestKPIService_GetDashboardProducts_ReturnsRealData(t *testing.T) {
 	userID := uuid.New()
 	insertTestUser(t, db, userID, "salon_manager", &salonID)
 
-	today := time.Now()
+	// S11: у юзера без тенанта границы суток считаются в UTC.
+	today := time.Now().UTC()
 	period := today.Format("2006-01")
 
 	// Проданный товар ИЗ каталога + товар вне каталога

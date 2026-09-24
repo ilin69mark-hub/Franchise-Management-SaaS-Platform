@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/mocks"
 	"franchise-saas-backend/internal/models"
 
@@ -577,4 +578,109 @@ func TestAuthService_Authenticate_SuperAdminNoTenantBypass(t *testing.T) {
 	got, err := svc.Authenticate(ctx, user.Email, "correct-password-12", "10.20.30.41")
 	require.NoError(t, err)
 	require.Equal(t, user.ID, got.ID)
+}
+
+// S4: email нормализуется и уникален регистронезависимо.
+func TestAuthService_CreateUser_NormalizesEmail(t *testing.T) {
+	stubHIBPEmpty(t)
+	repo := mocks.NewMockUserRepository()
+	repo.On("GetUserByEmail", mock.Anything, "user@test.com").Return(nil, gorm.ErrRecordNotFound)
+	var got *models.User
+	repo.On("CreateUser", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		got = args.Get(1).(*models.User)
+	}).Return(nil)
+	svc := NewAuthServiceWithInterface(repo, nil)
+
+	_, err := svc.CreateUser(&models.User{Email: "  User@Test.COM "}, "long-enough-password-1")
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	require.Equal(t, "user@test.com", got.Email)
+}
+
+func TestAuthService_CreateUser_CaseVariantDuplicate409(t *testing.T) {
+	stubHIBPEmpty(t)
+	repo := mocks.NewMockUserRepository()
+	repo.On("GetUserByEmail", mock.Anything, "user@test.com").Return(&models.User{Email: "user@test.com"}, nil)
+	svc := NewAuthServiceWithInterface(repo, nil)
+
+	_, err := svc.CreateUser(&models.User{Email: "USER@test.com"}, "long-enough-password-1")
+	require.ErrorIs(t, err, ErrEmailTaken)
+}
+
+func TestAuthService_Authenticate_CaseInsensitiveLogin(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("correct-password-12"), bcrypt.MinCost)
+	require.NoError(t, err)
+	user := &models.User{ID: uuid.New(), Email: "user@test.com", PasswordHash: string(hash), Status: "active"}
+	repo := mocks.NewMockUserRepository()
+	repo.On("GetUserByEmail", mock.Anything, "user@test.com").Return(user, nil)
+	repo.On("GetUserByID", mock.Anything, user.ID).Return(user, nil)
+	svc := NewAuthServiceWithInterface(repo, nil)
+
+	got, err := svc.Authenticate(context.Background(), "USER@Test.COM", "correct-password-12", "10.10.10.20")
+	require.NoError(t, err)
+	require.Equal(t, user.ID, got.ID)
+}
+
+// S1: CAPTCHA требуется после порога неудач; без конфига — пропускается.
+func TestVerifyCaptchaToken_SkipsWhenNotConfigured(t *testing.T) {
+	t.Setenv("CAPTCHA_SECRET", "")
+	t.Setenv("CAPTCHA_VERIFY_URL", "")
+	require.NoError(t, verifyCaptchaToken(context.Background(), "10.0.0.1", ""))
+}
+
+func TestVerifyCaptchaToken_RequiredWhenConfigured(t *testing.T) {
+	t.Setenv("CAPTCHA_SECRET", "secret-key")
+	t.Setenv("CAPTCHA_VERIFY_URL", "https://captcha.invalid/verify")
+	require.ErrorIs(t, verifyCaptchaToken(context.Background(), "10.0.0.1", ""), ErrCaptchaRequired)
+}
+
+func TestVerifyCaptchaToken_SuccessFromProvider(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		require.Equal(t, "secret-key", r.Form.Get("secret"))
+		require.Equal(t, "token-42", r.Form.Get("response"))
+		require.Equal(t, "10.0.0.9", r.Form.Get("remoteip"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("CAPTCHA_SECRET", "secret-key")
+	t.Setenv("CAPTCHA_VERIFY_URL", srv.URL)
+	require.NoError(t, verifyCaptchaToken(context.Background(), "10.0.0.9", "token-42"))
+}
+
+func TestVerifyCaptchaToken_ProviderFailClosed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":false}`))
+	}))
+	defer srv.Close()
+
+	t.Setenv("CAPTCHA_SECRET", "secret-key")
+	t.Setenv("CAPTCHA_VERIFY_URL", srv.URL)
+	require.ErrorIs(t, verifyCaptchaToken(context.Background(), "10.0.0.9", "token-42"), ErrCaptchaRequired)
+}
+
+func TestAuthService_Authenticate_CaptchaRequiredAfterThreshold(t *testing.T) {
+	stubHIBPEmpty(t)
+	repo := mocks.NewMockUserRepository()
+	svc := NewAuthServiceWithInterface(repo, nil)
+	ctx := context.Background()
+	email := "captcha@test.com"
+	ip := "10.55.55.55"
+	failKey := loginFailKey(ip, email)
+
+	for i := 0; i < captchaThreshold; i++ {
+		repo.On("GetUserByEmail", mock.Anything, email).Return(nil, gorm.ErrRecordNotFound).Once()
+		_, err := svc.Authenticate(ctx, email, "wrong-password-12", ip)
+		require.Error(t, err)
+	}
+	require.Equal(t, captchaThreshold, cache.PeekLimit(ctx, failKey))
+
+	t.Setenv("CAPTCHA_SECRET", "secret-key")
+	t.Setenv("CAPTCHA_VERIFY_URL", "https://captcha.invalid/verify")
+
+	_, err := svc.Authenticate(ctx, email, "correct-password-12", ip)
+	require.ErrorIs(t, err, ErrCaptchaRequired, "S1: без токена вход не проверяем вовсе")
 }

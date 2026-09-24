@@ -221,7 +221,7 @@ func TestGoalService_UpdateGoal_Success(t *testing.T) {
 
 	goalID := uuid.New().String()
 	existingGoal := &models.Goal{SalesPlan: 1000.0}
-	dto := UpdateGoalDTO{SalesPlan: 2000.0}
+	dto := UpdateGoalDTO{SalesPlan: f64ptr(2000.0)}
 
 	mockRepo.On("GetByID", mock.Anything, goalID).Return(existingGoal, nil)
 	mockRepo.On("Update", mock.Anything, mock.Anything).Return(nil)
@@ -238,7 +238,7 @@ func TestGoalService_UpdateGoal_NotFound(t *testing.T) {
 	service := NewGoalService(mockRepo)
 
 	goalID := "invalid-goal"
-	dto := UpdateGoalDTO{SalesPlan: 2000.0}
+	dto := UpdateGoalDTO{SalesPlan: f64ptr(2000.0)}
 
 	mockRepo.On("GetByID", mock.Anything, goalID).Return(nil, errors.New("not found"))
 
@@ -357,7 +357,7 @@ func TestGoalService_UpdateGoal_ForbiddenCrossTenant(t *testing.T) {
 	existing := &models.Goal{AssignerID: uuid.New(), AssigneeID: uuid.New(), Role: "salon_manager", TenantID: &goalTenant}
 	mockRepo.On("GetByID", mock.Anything, goalID).Return(existing, nil)
 
-	dto := UpdateGoalDTO{SalesPlan: 2000.0}
+	dto := UpdateGoalDTO{SalesPlan: f64ptr(2000.0)}
 	_, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), otherTenant.String(), "dealer")
 
 	assert.Error(t, err)
@@ -453,4 +453,29 @@ func TestGoalService_CreateGoal_DuplicateMaps409(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrGoalExists)
 	require.Nil(t, goal)
+}
+
+func f64ptr(v float64) *float64 { return &v }
+
+func TestGoalService_UpdateGoal_ZeroesPlans(t *testing.T) {
+	mockRepo := new(MockGoalRepo)
+	service := NewGoalService(mockRepo)
+
+	goalID := uuid.New().String()
+	zero := 0.0
+	existing := &models.Goal{SalesPlan: 1000.0, LeadsPlan: 10}
+	dto := UpdateGoalDTO{SalesPlan: &zero}
+
+	mockRepo.On("GetByID", mock.Anything, goalID).Return(existing, nil)
+	mockRepo.On("Update", mock.Anything, mock.MatchedBy(func(g *models.Goal) bool {
+		return g.SalesPlan == 0 && g.LeadsPlan == 10
+	})).Return(nil)
+
+	goal, err := service.UpdateGoal(context.Background(), goalID, dto, uuid.New().String(), "", "super_admin")
+
+	require.NoError(t, err)
+	require.NotNil(t, goal)
+	require.Equal(t, 0.0, goal.SalesPlan)
+	require.Equal(t, 10, goal.LeadsPlan, "непереданное поле не тронуто")
+	mockRepo.AssertExpectations(t)
 }

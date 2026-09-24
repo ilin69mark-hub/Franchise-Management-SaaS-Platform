@@ -50,7 +50,7 @@ function clearUserCache() {
 export const login = createAsyncThunk(
   'auth/login',
   async (
-    credentials: { email: string; password: string },
+    credentials: { email: string; password: string; captcha_token?: string },
     { rejectWithValue },
   ) => {
     try {

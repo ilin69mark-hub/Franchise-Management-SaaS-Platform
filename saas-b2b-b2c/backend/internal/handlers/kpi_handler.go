@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -1177,6 +1178,11 @@ func (h *KPIHandler) SetManagerPlans(c *gin.Context) {
 	}
 	err = h.kpiSvc.SetManagerPlans(c.Request.Context(), user.ID.String(), req.Quarter, req.Plans)
 	if err != nil {
+		// S6: частично невалидный батч — 400 с объяснением, а не молчаливый 201.
+		if strings.HasPrefix(err.Error(), "skipped ") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

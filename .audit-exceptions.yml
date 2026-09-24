@@ -168,3 +168,25 @@ entries:
     accepted_at: "2026-09-24"
     remove_when: "снять когда на VPS закрыта парольная аутентификация и проверен отказ password-ssh"
     no_expiry: true
+  - id: "E13"
+    file: "saas-b2b-b2c/backend/internal/services/auth_service.go"
+    line: 39
+    pattern: "CAPTCHA_SECRET"
+    title: "CAPTCHA-провайдер заводит человек (fail-open без ключей)"
+    risk: "Medium"
+    reason: "S1-хук verifyCaptchaToken enforce-ит CAPTCHA с порога maxLoginAttempts/2, но без CAPTCHA_SECRET/CAPTCHA_VERIFY_URL проверка пропускается: dev/staging не ломаются. Секрет и аккаунт у внешнего провайдера (hCaptcha/Turnstile) выдаёт человек — в репозитории их быть не может."
+    accepted_by: "jepsy"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда CAPTCHA_SECRET/CAPTCHA_VERIFY_URL заданы в .env на VPS и проверен вход после 5 неудач с валидным токеном"
+    no_expiry: true
+  - id: "E14"
+    file: "saas-b2b-b2c/docker-compose.prod.yml"
+    line: 27
+    pattern: "REDIS_PASSWORD"
+    title: "REDIS_PASSWORD выдаёт человек (requirepass)"
+    risk: "High"
+    reason: "Без пароля Redis открыт любому процессу в docker-сети; backend к тому же игнорировал REDIS_URL и смотрел в localhost, т.е. Redis в проде не коннектился никогда. Пароль задаёт человек, compose требует через :?."
+    accepted_by: "jepsy"
+    accepted_at: "2026-09-24"
+    remove_when: "снять когда REDIS_PASSWORD задан в .env на VPS и backend видит redis (health: redis ok)"
+    no_expiry: true

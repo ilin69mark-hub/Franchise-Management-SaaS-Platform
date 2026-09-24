@@ -42,6 +42,11 @@ func (s *KPIService) getSettingFloat(key string, def float64) float64 {
 }
 
 // SetGoal - обертка для репозитория
+// nowFor — S11: текущее время в зоне тенанта пользователя (границы суток).
+func (s *KPIService) nowFor(ctx context.Context, userID uuid.UUID) time.Time {
+	return time.Now().In(repository.TenantLocationForUser(ctx, s.DB, &userID))
+}
+
 func (s *KPIService) SetGoal(ctx context.Context, goal *models.DailyGoal) error {
 	return s.kpiRepo.UpsertGoal(ctx, goal)
 }
@@ -51,7 +56,7 @@ func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, sa
 		return s.analyticsRepo.CalculateDashboardStats(ctx, &userID, &salonID, isManager)
 	}
 
-	today := time.Now()
+	today := s.nowFor(ctx, userID)
 	todayStr := today.Format("2006-01-02")
 	dayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
 	dayEnd := dayStart.AddDate(0, 0, 1)
@@ -122,7 +127,7 @@ func (s *KPIService) GetDashboardStats(ctx context.Context, userID uuid.UUID, sa
 
 // GetTeamAnalytics - аналитика для дилера
 func (s *KPIService) GetTeamAnalytics(ctx context.Context, dealerID uuid.UUID, period string) ([]map[string]interface{}, error) {
-	now := time.Now()
+	now := s.nowFor(ctx, dealerID)
 	var start, end time.Time
 
 	switch period {
@@ -297,7 +302,7 @@ func calcPercentVal(plan, fact float64) int {
 // GetDashboardMain - получение данных для главной вкладки дашборда менеджера салона
 func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DashboardMainResponse, error) {
 	// Парсим дату в UTC — защита от TZ-разрыва (Москва vs UTC)
-	targetDate := time.Now().UTC()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.ParseInLocation("2006-01-02", dateStr, time.UTC); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
@@ -531,7 +536,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 
 // GetDashboardFunnel - получение данных для воронки продаж
 func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DashboardFunnelResponse, error) {
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -659,7 +664,7 @@ func (s *KPIService) GetDashboardFunnel(ctx context.Context, userID uuid.UUID, d
 
 // GetDashboardTeam - получение данных команды (рейтинг продавцов)
 func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, period, dateStr string) (*models.DashboardTeamResponse, error) {
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -835,7 +840,7 @@ func (s *KPIService) GetDashboardTeam(ctx context.Context, userID uuid.UUID, per
 func (s *KPIService) GetSalesRepHistory(ctx context.Context, managerID uuid.UUID, months int) ([]models.SalesRepHistory, error) {
 	resp := []models.SalesRepHistory{}
 
-	now := time.Now()
+	now := s.nowFor(ctx, managerID)
 	for i := months - 1; i >= 0; i-- {
 		monthStart := time.Date(now.Year(), now.Month()-time.Month(i), 1, 0, 0, 0, 0, now.Location())
 		monthEnd := monthStart.AddDate(0, 1, 0)
@@ -868,7 +873,7 @@ func (s *KPIService) GetSalesRepHistory(ctx context.Context, managerID uuid.UUID
 
 // GetDashboardProducts - получение данных о товарах
 func (s *KPIService) GetDashboardProducts(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DashboardProductsResponse, error) {
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1066,7 +1071,7 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	salonID := *user.SalonID
 
 	// === План продаж ===
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1189,7 +1194,7 @@ func (s *KPIService) GetManagerTargets(ctx context.Context, userID uuid.UUID, da
 	if promoErr != nil {
 		promoRows = nil
 	}
-	now := time.Now()
+	now := s.nowFor(ctx, userID)
 	for _, pr := range promoRows {
 		expiring := false
 		endDate := ""
@@ -1267,7 +1272,7 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1346,7 +1351,7 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1486,7 +1491,7 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1656,7 +1661,7 @@ func (s *KPIService) GetDealerProducts(ctx context.Context, userID uuid.UUID, da
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1763,7 +1768,7 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -1851,7 +1856,7 @@ func (s *KPIService) GetFranchiserNetwork(ctx context.Context, userID uuid.UUID,
 		dealerIDs = append(dealerIDs, d.ID)
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -2184,7 +2189,7 @@ func (s *KPIService) GetTerritorySummary(ctx context.Context, userID uuid.UUID, 
 		dealerIDs = append(dealerIDs, d.ID)
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -2272,7 +2277,7 @@ func (s *KPIService) GetTerritoryFunnel(ctx context.Context, userID uuid.UUID, p
 		return resp, nil
 	}
 
-	targetDate := time.Now()
+	targetDate := s.nowFor(ctx, userID)
 	if dateStr != "" {
 		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
 			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
@@ -2314,7 +2319,7 @@ func (s *KPIService) GetTerritoryPlanFact(ctx context.Context, userID uuid.UUID,
 		return resp, nil
 	}
 
-	now := time.Now()
+	now := s.nowFor(ctx, userID)
 	var startDate, endDate time.Time
 	switch period {
 	case "week":
@@ -2486,7 +2491,7 @@ func (s *KPIService) GetDealerTasks(ctx context.Context, userID uuid.UUID) (*mod
 	}
 	defer func() { _ = rows.Close() }()
 
-	now := time.Now()
+	now := s.nowFor(ctx, userID)
 	for rows.Next() {
 		var t DealerTask
 		_ = rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.DueDate, &t.CreatedAt)
@@ -2715,7 +2720,19 @@ func (s *KPIService) GetFranchiserDealers(ctx context.Context, userID uuid.UUID,
 		Dealers: []models.FranchiserDealerItem{},
 	}
 
+	// S7: только своя сеть (связь managed_by без tenant не защищает от
+	// кросс-сетевых данных при повреждённой иерархии).
+	var caller models.User
+	if err := s.DB.Select("id, tenant_id, role").Where("id = ?", userID).First(&caller).Error; err != nil {
+		return nil, err
+	}
 	query := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID == nil {
+			return resp, nil
+		}
+		query = query.Where("tenant_id = ?", *caller.TenantID)
+	}
 	if filter == "problem" {
 		query = query.Where("status = ?", "inactive")
 	}
@@ -2959,7 +2976,7 @@ func (s *KPIService) GetManagerDealers(ctx context.Context, userID, managerID st
 	}
 
 	defaultPlan := s.getSettingFloat("default_monthly_plan", 4000000)
-	now := time.Now()
+	now := s.nowFor(ctx, mgrUUID)
 	firstOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	lastOfMonth := firstOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond)
 
@@ -3023,25 +3040,41 @@ func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter
 		return err
 	}
 	var franchiser models.User
-	if err := s.DB.First(&franchiser, franchiserID).Error; err != nil {
+	if err := s.DB.Select("id, tenant_id, role").Where("id = ?", franchiserID).First(&franchiser).Error; err != nil {
 		return err
 	}
+	var skipped []string
 	for _, p := range plans {
 		mgrID, err := uuid.Parse(p.ManagerID)
 		if err != nil {
+			skipped = append(skipped, p.ManagerID)
 			continue
 		}
 		// IDOR: менеджер должен быть под франчайзером
-		var cnt int64
-		s.DB.Model(&models.User{}).Where("id = ? AND managed_by = ?", mgrID, franchiserID).Count(&cnt)
-		if cnt == 0 {
+		var mgr models.User
+		if err := s.DB.Select("id, tenant_id, managed_by").Where("id = ?", mgrID).First(&mgr).Error; err != nil {
+			skipped = append(skipped, p.ManagerID)
 			continue
 		}
+		if mgr.ManagedBy == nil || *mgr.ManagedBy != franchiserID {
+			skipped = append(skipped, p.ManagerID)
+			continue
+		}
+		// S6: та же сеть (связь managed_by без tenant не защищает от кросс-сетевых данных).
+		if franchiser.Role != models.RoleSuperAdmin {
+			if franchiser.TenantID == nil || mgr.TenantID == nil || *mgr.TenantID != *franchiser.TenantID {
+				skipped = append(skipped, p.ManagerID)
+				continue
+			}
+		}
 		if p.PlanAmount < 0 {
+			skipped = append(skipped, p.ManagerID)
 			continue
 		}
 		// upsert: delete existing for this assignee+quarter then insert
-		s.DB.Where("assignee_id = ? AND period = ? AND start_date = ?", mgrID, "quarter", qStart).Delete(&models.Goal{})
+		if err := s.DB.Where("assignee_id = ? AND period = ? AND start_date = ?", mgrID, "quarter", qStart).Delete(&models.Goal{}).Error; err != nil {
+			return err
+		}
 		goal := models.Goal{
 			AssignerID: franchiserID,
 			AssigneeID: mgrID,
@@ -3057,6 +3090,10 @@ func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter
 		if err := s.DB.Create(&goal).Error; err != nil {
 			return err
 		}
+	}
+	// S6: тихих частичных применений больше нет — вызывающий видит, что пропущено.
+	if len(skipped) > 0 {
+		return fmt.Errorf("skipped %d invalid plans", len(skipped))
 	}
 	return nil
 }

@@ -127,8 +127,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.Authenticate(c.Request.Context(), req.Email, req.Password, c.ClientIP())
+	user, err := h.service.Authenticate(c.Request.Context(), req.Email, req.Password, c.ClientIP(), req.CaptchaToken)
 	if err != nil {
+		// S1: после порога неудач нужен валидный captcha_token.
+		if errors.Is(err, services.ErrCaptchaRequired) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "captcha_required"})
+			return
+		}
 		if errors.Is(err, services.ErrUserBlocked) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "account is blocked"})
 			return

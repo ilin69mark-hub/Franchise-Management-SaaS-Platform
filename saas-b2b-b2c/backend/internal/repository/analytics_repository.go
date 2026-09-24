@@ -37,7 +37,8 @@ func calcPercent(plan, fact float64) models.KPIItem {
 }
 
 func (r *AnalyticsRepository) CalculateDashboardStats(ctx context.Context, userID *uuid.UUID, salonID *uuid.UUID, isManager bool) (*models.DashboardStatsResponse, error) {
-	today := time.Now()
+	// S11: сутки в зоне тенанта (для салонного входа — салон владельца).
+	today := time.Now().In(TenantLocationForUser(ctx, r.db, userID))
 	todayStr := today.Format("2006-01-02")
 	dayStart := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, today.Location())
 	dayEnd := dayStart.AddDate(0, 0, 1)
@@ -76,10 +77,12 @@ func (r *AnalyticsRepository) CalculateDashboardStats(ctx context.Context, userI
 }
 
 func (r *AnalyticsRepository) CalculateDashboardMain(ctx context.Context, userID uuid.UUID, dateStr string) (*models.DashboardMainResponse, error) {
-	targetDate := time.Now()
+	// S11: дефолтный день — в зоне тенанта.
+	loc := TenantLocationForUser(ctx, r.db, &userID)
+	targetDate := time.Now().In(loc)
 	if dateStr != "" {
-		if parsed, err := time.Parse("2006-01-02", dateStr); err == nil {
-			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, parsed.Location())
+		if parsed, err := time.ParseInLocation("2006-01-02", dateStr, loc); err == nil {
+			targetDate = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, loc)
 		}
 	}
 

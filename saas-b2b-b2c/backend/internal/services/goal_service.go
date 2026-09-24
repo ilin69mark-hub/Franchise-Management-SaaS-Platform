@@ -55,13 +55,16 @@ type CreateGoalDTO struct {
 }
 
 type UpdateGoalDTO struct {
-	SalesPlan    float64 `json:"sales_plan"`
-	LeadsPlan    int     `json:"leads_plan"`
-	CallsPlan    int     `json:"calls_plan"`
-	MeetingsPlan int     `json:"meetings_plan"`
-	Period       string  `json:"period"`
-	StartDate    string  `json:"start_date"`
-	EndDate      string  `json:"end_date"`
+	// S5: указатели различают «поле не передано» (nil — не трогаем)
+	// и «обнулить» (0 — пишем 0). Раньше 0 было неотличимо и goal
+	// нельзя было обнулить.
+	SalesPlan    *float64 `json:"sales_plan"`
+	LeadsPlan    *int     `json:"leads_plan"`
+	CallsPlan    *int     `json:"calls_plan"`
+	MeetingsPlan *int     `json:"meetings_plan"`
+	Period       string   `json:"period"`
+	StartDate    string   `json:"start_date"`
+	EndDate      string   `json:"end_date"`
 }
 
 /* Реализация */
@@ -209,31 +212,31 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 			return nil, errGoalForbidden
 		}
 	}
-	// Валидация — отрицательные планы запрещены
-	if dto.SalesPlan < 0 || dto.SalesPlan > 1e12 {
+	// Валидация — отрицательные планы запрещены (только переданные поля).
+	if dto.SalesPlan != nil && (*dto.SalesPlan < 0 || *dto.SalesPlan > 1e12) {
 		return nil, errors.New("sales_plan out of range")
 	}
-	if dto.LeadsPlan < 0 || dto.LeadsPlan > 100000 {
+	if dto.LeadsPlan != nil && (*dto.LeadsPlan < 0 || *dto.LeadsPlan > 100000) {
 		return nil, errors.New("leads_plan out of range")
 	}
-	if dto.CallsPlan < 0 || dto.CallsPlan > 100000 {
+	if dto.CallsPlan != nil && (*dto.CallsPlan < 0 || *dto.CallsPlan > 100000) {
 		return nil, errors.New("calls_plan out of range")
 	}
-	if dto.MeetingsPlan < 0 || dto.MeetingsPlan > 100000 {
+	if dto.MeetingsPlan != nil && (*dto.MeetingsPlan < 0 || *dto.MeetingsPlan > 100000) {
 		return nil, errors.New("meetings_plan out of range")
 	}
 
-	if dto.SalesPlan > 0 {
-		goal.SalesPlan = dto.SalesPlan
+	if dto.SalesPlan != nil {
+		goal.SalesPlan = *dto.SalesPlan
 	}
-	if dto.LeadsPlan > 0 {
-		goal.LeadsPlan = dto.LeadsPlan
+	if dto.LeadsPlan != nil {
+		goal.LeadsPlan = *dto.LeadsPlan
 	}
-	if dto.CallsPlan > 0 {
-		goal.CallsPlan = dto.CallsPlan
+	if dto.CallsPlan != nil {
+		goal.CallsPlan = *dto.CallsPlan
 	}
-	if dto.MeetingsPlan > 0 {
-		goal.MeetingsPlan = dto.MeetingsPlan
+	if dto.MeetingsPlan != nil {
+		goal.MeetingsPlan = *dto.MeetingsPlan
 	}
 	if dto.Period != "" {
 		if dto.Period != "day" && dto.Period != "week" && dto.Period != "month" && dto.Period != "year" && dto.Period != "custom" {

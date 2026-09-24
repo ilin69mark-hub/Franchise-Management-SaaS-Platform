@@ -28,10 +28,10 @@ func AuthMiddleware() gin.HandlerFunc {
 				return
 			}
 		} else {
-			// fallback на httpOnly cookie (миграция с localStorage)
+			// S9: только access_token — мёртвая __Host-ветка удалена
+			// (__Host-cookie бэкенд никогда не ставит; приём несуществующего
+			// имени создавал ложное чувство __Host-строгости).
 			if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
-				tokenString = cookie
-			} else if cookie, err := c.Cookie("__Host-access_token"); err == nil && cookie != "" {
 				tokenString = cookie
 			}
 		}

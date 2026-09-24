@@ -165,6 +165,11 @@ func migrateUsers(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_phone_visible BOOLEAN DEFAULT TRUE`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_whatsapp VARCHAR(50)`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_working_hours VARCHAR(100)`)
+	// S4: email уникален регистронезависимо (иначе User@x и user@x — два аккаунта,
+	// один lockout-ключ на двоих). Старый UNIQUE(email) остаётся как есть.
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email))`).Error; err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -174,6 +179,7 @@ func migrateTenants(db *gorm.DB) error {
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			name VARCHAR(255) NOT NULL,
 			status VARCHAR(50) DEFAULT 'active',
+			timezone VARCHAR(64) DEFAULT 'UTC',
 			plan_id UUID REFERENCES plans(id),
 			legal_entity TEXT,
 			inn VARCHAR(20),
@@ -190,6 +196,7 @@ func migrateTenants(db *gorm.DB) error {
 		return err
 	}
 	// Добавить колонки если таблица уже существует
+	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) DEFAULT 'UTC'`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity TEXT`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS inn VARCHAR(20)`)
 	db.Exec(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS max_users INTEGER DEFAULT 10`)

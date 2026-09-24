@@ -17,6 +17,9 @@ type Tenant struct {
 	LegalEntity string `json:"legal_entity"`
 	INN         string `json:"inn"`
 
+	// S11: IANA-зона тенанта (границы day/month считаются в ней, не в UTC).
+	Timezone string `json:"timezone" gorm:"type:varchar(64);default:'UTC'"`
+
 	// Лимиты
 	MaxUsers int `json:"max_users" gorm:"default:10"`
 

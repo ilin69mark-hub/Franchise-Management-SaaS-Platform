@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"franchise-saas-backend/internal/models"
+	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
@@ -338,4 +340,94 @@ func TestKPIService_AssignAlert_CrossTenantTargetForbidden(t *testing.T) {
 	err := svc.AssignAlert(context.Background(), caller, alert, target)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forbidden")
+}
+
+func setupGoalsTableForPlansTest(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.Exec(`CREATE TABLE goals (
+		id TEXT PRIMARY KEY, assigner_id TEXT, assignee_id TEXT, role TEXT,
+		sales_plan REAL, leads_plan INTEGER, calls_plan INTEGER, meetings_plan INTEGER,
+		period TEXT, start_date DATETIME, end_date DATETIME, target_date DATETIME,
+		tenant_id TEXT, created_at DATETIME, updated_at DATETIME)`).Error)
+}
+
+func TestKPIService_SetManagerPlans_CrossTenantSkipped(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	setupGoalsTableForPlansTest(t, db)
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	franchiser := uuid.New()
+	mgrA, mgrB := uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		franchiser.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, managed_by) VALUES (?, ?, ?, ?)`,
+		mgrA.String(), tenantA.String(), string(models.RoleFranchisorManager), franchiser.String()).Error)
+	// Связь есть, но сеть чужая (повреждённая иерархия): тоже пропуск.
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, managed_by) VALUES (?, ?, ?, ?)`,
+		mgrB.String(), tenantB.String(), string(models.RoleFranchisorManager), franchiser.String()).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	plans := []struct {
+		ManagerID     string  `json:"manager_id"`
+		PlanAmount    float64 `json:"plan_amount"`
+		TargetDealers int     `json:"target_dealers"`
+	}{
+		{ManagerID: mgrA.String(), PlanAmount: 1000, TargetDealers: 5},
+		{ManagerID: mgrB.String(), PlanAmount: 2000, TargetDealers: 5},
+	}
+	err := svc.SetManagerPlans(context.Background(), franchiser.String(), "2026-Q1", plans)
+	require.Error(t, err, "частичный батч — не молчаливый успех")
+	require.Contains(t, err.Error(), "skipped 1")
+
+	var n int64
+	require.NoError(t, db.Table("goals").Count(&n).Error)
+	require.Equal(t, int64(1), n, "валидный план применён")
+}
+
+func TestKPIService_GetFranchiserDealers_TenantIsolation(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	franchiser := uuid.New()
+	dealerA, dealerB := uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		franchiser.String(), tenantA.String(), string(models.RoleFranchisor)).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, managed_by) VALUES (?, ?, ?, ?)`,
+		dealerA.String(), tenantA.String(), string(models.RoleDealer), franchiser.String()).Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role, managed_by) VALUES (?, ?, ?, ?)`,
+		dealerB.String(), tenantB.String(), string(models.RoleDealer), franchiser.String()).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	resp, err := svc.GetFranchiserDealers(context.Background(), franchiser, "all")
+	require.NoError(t, err)
+	require.Len(t, resp.Dealers, 1, "чужой сети не видно даже при битой связи")
+	require.Equal(t, dealerA, resp.Dealers[0].ID)
+}
+
+// S11: границы суток считаются в зоне тенанта, не в UTC/зоне сервера.
+func TestResolveLocation_ValidAndInvalid(t *testing.T) {
+	require.Equal(t, "Asia/Almaty", repository.ResolveLocation("Asia/Almaty").String())
+	require.Equal(t, "UTC", repository.ResolveLocation("Not/AZone").String())
+	require.Equal(t, "UTC", repository.ResolveLocation("").String())
+}
+
+func TestKPIService_NowForUsesTenantTimezone(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	setupUsersTableForScopeTest(t, db)
+	require.NoError(t, db.Exec(`CREATE TABLE tenants (id TEXT PRIMARY KEY, timezone TEXT)`).Error)
+
+	tenantID, userID := uuid.New(), uuid.New()
+	require.NoError(t, db.Exec(`INSERT INTO tenants (id, timezone) VALUES (?, ?)`,
+		tenantID.String(), "Asia/Almaty").Error)
+	require.NoError(t, db.Exec(`INSERT INTO users (id, tenant_id, role) VALUES (?, ?, ?)`,
+		userID.String(), tenantID.String(), string(models.RoleDealer)).Error)
+
+	svc := NewKPIService(db, nil, nil)
+	now := svc.nowFor(context.Background(), userID)
+	require.Equal(t, "Asia/Almaty", now.Location().String())
+
+	utcNow := time.Now().UTC()
+	assert.WithinDuration(t, utcNow, now, 5*time.Second, "момент времени тот же, только зона тенанта")
 }

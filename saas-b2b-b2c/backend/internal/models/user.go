@@ -65,6 +65,8 @@ func (User) TableName() string {
 type UserLoginRequest struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	// S1: обязателен после captcha-порога (enforce включается CAPTCHA_SECRET).
+	CaptchaToken string `json:"captcha_token"`
 }
 
 type UserRegisterRequest struct {

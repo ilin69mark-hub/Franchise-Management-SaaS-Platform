@@ -38,3 +38,17 @@
 Каждая волна: `npx tsc --noEmit` 0, `npx jest` 1524+ → зелёный, `jest --coverage` пороги, `git commit` + `push origin main`, `CHANGELOG.md` + `mem_save`.
 
 > Режим: автономный, без запроса разрешения. При `confidence <0.7` или `supersedes/conflicts_with` для `architecture/policy/decision` — спросить.
+
+## Приоритет S — безопасность (reaudit-остатки, по значимости)
+- [x] **S1** CAPTCHA после lockout-порога: хук `verifyCaptchaToken` (skip без ключей, enforce с ключами) + `E13` в реестре + тесты (stub-провайдер)
+- [x] **S2** Redis в проде: `REDIS_ADDR=redis:6379` backend'у (сейчас код смотрит в localhost — Redis в проде не коннектится никогда), `requirepass` + `REDIS_PASSWORD` + `E14` в реестре
+- [x] **S3** TLS-override `docker-compose.prod.tls.yml` (маунт `nginx.prod.conf`) + DEPLOY-шаг; certbot остаётся за человеком (E09)
+- [x] **S4** Email case-insensitive unique: `LOWER(email)` индекс + нормализация на register/login + тесты
+- [x] **S5** UpdateGoal обнуление планов (pointer-DTO) + тесты
+- [x] **S6** SetManagerPlans tenant-check + список пропущенных; AssignManager role-check; тесты
+- [x] **S7** GetFranchiserDealers tenant-фильтр + тест
+- [x] **S8** Super_admin user-management без tenant (bypass Nil) + тест
+- [x] **S9** Убрать мёртвую `__Host-access_token` ветку + тест
+- [x] **S10** UUID-парсинг 400/404 вместо 500 (`id, _ :=` аудит) + тесты
+- [x] **S11** Tenant timezone для границ day/month (миграция + сервис) + тесты
+- [x] **S12** Timing-oracle и HIBP fail-open — принятые риски, задокументировать в SECURITY.md

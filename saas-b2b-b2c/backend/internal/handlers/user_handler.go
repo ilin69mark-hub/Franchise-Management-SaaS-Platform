@@ -265,6 +265,14 @@ func (h *UserHandler) AssignManager(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
 		return
 	}
+	// S6: назначать менеджера может только супер-админ или франчайзер
+	// (менеджер/дилер не имеют права менять привязку салонов).
+	switch currentUser.Role {
+	case models.RoleSuperAdmin, models.RoleFranchisor:
+	default:
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: role cannot assign managers"})
+		return
+	}
 	// tenant isolation: both user and salon must be in caller's tenant (except super_admin)
 	if currentUser.Role != "super_admin" && currentUser.TenantID != nil {
 		// verify salon belongs to tenant and target user belongs to tenant

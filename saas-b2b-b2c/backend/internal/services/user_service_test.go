@@ -424,7 +424,8 @@ func TestUserService_UpdateEmployee_InvalidRole(t *testing.T) {
 	tenantID := uuid.New()
 	req := models.UpdateEmployeeRequest{Role: models.RoleSuperAdmin}
 
-	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID}, nil)
+	// S8: super_admin грузит цель напрямую через GetUserByID.
+	mockRepo.On("GetUserByID", mock.Anything, userID).Return(&models.User{ID: userID}, nil)
 
 	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleSuperAdmin))
 
@@ -508,4 +509,37 @@ func TestUserService_ChangePassword_ShortRejected(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "12..72")
 	mockRepo.AssertNotCalled(t, "GetUserByID", mock.Anything, mock.Anything)
+}
+
+func TestUserService_SuperAdminManagesAnyTenant(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	target := &models.User{ID: userID, TenantID: &tenantID, Role: models.RoleDealer}
+
+	mockRepo.On("GetUserByID", mock.Anything, userID).Return(target, nil)
+	mockRepo.On("UpdateUserFields", mock.Anything, userID, mock.Anything).Return(nil)
+
+	updated, err := service.UpdateEmployee(userID, uuid.Nil, models.UpdateEmployeeRequest{FirstName: "SA"}, string(models.RoleSuperAdmin))
+
+	require.NoError(t, err, "S8: super_admin без сети управляет любым tenant")
+	require.NotNil(t, updated)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestUserService_SuperAdminDeletesAnyTenant(t *testing.T) {
+	mockRepo := mocks.NewMockUserRepository()
+	service := NewUserServiceWithInterface(mockRepo, nil)
+
+	userID := uuid.New()
+	tenantID := uuid.New()
+	target := &models.User{ID: userID, TenantID: &tenantID, Role: models.RoleDealer}
+
+	mockRepo.On("GetUserByID", mock.Anything, userID).Return(target, nil)
+	mockRepo.On("DeleteUser", mock.Anything, userID).Return(nil)
+
+	require.NoError(t, service.DeleteEmployee(userID, uuid.Nil, string(models.RoleSuperAdmin)))
+	mockRepo.AssertExpectations(t)
 }

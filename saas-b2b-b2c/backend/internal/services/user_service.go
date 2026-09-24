@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"strings"
 	"time"
 
 	"franchise-saas-backend/internal/models"
@@ -177,7 +178,9 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 	}
 
 	// 3. Подготовка данных (F6: HR-пароли — та же политика, binding-валидацию можно обойти прямым вызовом)
-	if len(req.Password) < 12 || len(req.Password) > 128 {
+	// S4: email нормализуем как в AuthService (уникальность — LOWER(email)).
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if len(req.Password) < 12 || len(req.Password) > 72 {
 		return nil, errors.New("password must be 12..72 characters")
 	}
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -226,7 +229,15 @@ var allowedManage = map[string]map[models.Role]bool{
 }
 
 func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.UpdateEmployeeRequest, callerRole string) (*models.User, error) {
-	target, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+	// S8: super_admin без сети грузит напрямую (иначе fail-closed ломал
+	// управление: поиск в tenant Nil ничего не находил).
+	var target *models.User
+	var err error
+	if callerRole == string(models.RoleSuperAdmin) {
+		target, err = s.userRepo.GetUserByID(context.Background(), userID)
+	} else {
+		target, err = s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+	}
 	if err != nil {
 		return nil, errors.New("employee not found in your network")
 	}
@@ -282,7 +293,13 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 }
 
 func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID, callerRole string) error {
-	target, err := s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+	var target *models.User
+	var err error
+	if callerRole == string(models.RoleSuperAdmin) {
+		target, err = s.userRepo.GetUserByID(context.Background(), userID)
+	} else {
+		target, err = s.userRepo.FindUserByIDAndTenant(context.Background(), userID, tenantID)
+	}
 	if err != nil {
 		return errors.New("employee not found in your network")
 	}
