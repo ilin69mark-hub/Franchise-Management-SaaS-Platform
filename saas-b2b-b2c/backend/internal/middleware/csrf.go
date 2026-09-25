@@ -26,13 +26,6 @@ func GenerateCSRFToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// setCSRFCookie выставляет читаемую cookie (вызывается при login/register/refresh).
-func setCSRFCookie(c *gin.Context, token string, isSecure bool, maxAge int) {
-	// SameSite=Lax + сравнение с заголовком (см. CSRF ниже).
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(CSRFCookie, token, maxAge, "/", "", isSecure, false)
-}
-
 // CSRF — double-submit защита для cookie-сессий (F7).
 // Правила:
 //   - GET/HEAD/OPTIONS — пропуск (без побочных эффектов);

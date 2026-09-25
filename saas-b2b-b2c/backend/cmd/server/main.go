@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 
-	"franchise-saas-backend/internal/models"
-
 	"log"
 	"net/http"
 	"os"
@@ -117,6 +115,11 @@ func main() {
 	_, _ = c.AddFunc("0 0 9 * * *", paymentJob.Run)
 	logRotation := jobs.NewLogRotationJob(db)
 	_, _ = c.AddFunc("0 0 3 * * *", logRotation.Run)
+	_, _ = c.AddFunc("0 0 * * * *", func() {
+		if _, err := authService.CleanupAuthSessions(context.Background()); err != nil {
+			log.Printf("auth session cleanup failed: %v", err)
+		}
+	})
 	c.Start()
 	defer c.Stop()
 	log.Println("Cron jobs started (payment 09:00, log rotation 03:00)")
@@ -130,47 +133,24 @@ func main() {
 	kpiHandler := handlers.NewKPIHandler(db, kpiService, scheduleService, alertService)
 	goalHandler := handlers.NewGoalHandler(goalService)
 
-	// REAUDIT-4: авторизация берёт роль/tenant из БД, а не из JWT-claim.
-	// Без этого понижение роли/перенос в другой tenant действовали до refresh.
-	middleware.SetIdentityResolver(func(ctx context.Context, userID string) (string, string, bool) {
+	middleware.SetIdentityResolver(func(ctx context.Context, userID, sessionID string, authVersion int64) (string, string, bool) {
 		uid, err := uuid.Parse(userID)
 		if err != nil {
 			return "", "", false
 		}
-		var u models.User
-		if err := db.WithContext(ctx).Select("id, role, tenant_id, status").First(&u, "id = ?", uid).Error; err != nil {
+		sid, err := uuid.Parse(sessionID)
+		if err != nil {
 			return "", "", false
 		}
-		switch strings.ToLower(strings.TrimSpace(u.Status)) {
-		case "blocked", "suspended", "banned", "disabled", "inactive":
+		identity, err := authService.ResolveAccessIdentity(ctx, uid, sid, authVersion)
+		if err != nil {
 			return "", "", false
 		}
-		tenant := ""
-		if u.TenantID != nil {
-			// REAUDIT-4: статус и оплата сети проверяются на КАЖДЫЙ запрос.
-			// Раньше block/истечение paid_until действовали только на login/refresh,
-			// и уже выданный access-токен продолжал работать до 24 часов.
-			var tn models.Tenant
-			if err := db.WithContext(ctx).Select("id, status, paid_until, grace_period_days").
-				First(&tn, "id = ?", *u.TenantID).Error; err != nil {
-				return "", "", false
-			}
-			switch strings.ToLower(strings.TrimSpace(tn.Status)) {
-			case "blocked", "suspended":
-				return "", "", false
-			}
-			if tn.PaidUntil != nil {
-				grace := 0
-				if tn.GracePeriodDays > 0 {
-					grace = tn.GracePeriodDays
-				}
-				if time.Now().After(tn.PaidUntil.AddDate(0, 0, grace)) {
-					return "", "", false
-				}
-			}
-			tenant = u.TenantID.String()
+		tenantID := ""
+		if identity.TenantID != nil {
+			tenantID = identity.TenantID.String()
 		}
-		return string(u.Role), tenant, true
+		return string(identity.Role), tenantID, true
 	})
 
 	r := gin.Default()
@@ -225,6 +205,7 @@ func main() {
 	authLimited.Use(middleware.RateLimitAuth(10, time.Minute))
 	{
 		authLimited.POST("/register", authHandler.Register)
+		authLimited.POST("/logout", middleware.CSRF(), authHandler.Logout)
 	}
 	authLoginLimited := api.Group("/auth")
 	authLoginLimited.Use(middleware.RateLimitAuth(5, time.Minute))
@@ -253,7 +234,6 @@ func main() {
 		protected.GET("/auth/me", userHandler.GetProfile)
 		protected.PUT("/auth/me", userHandler.UpdateProfile)
 		protected.POST("/auth/change-password", userHandler.ChangePassword)
-		protected.POST("/auth/logout", authHandler.Logout)
 
 		protected.GET("/stats/my", kpiHandler.GetMyStats)
 		protected.GET("/stats/salon", kpiHandler.GetSalonStats)

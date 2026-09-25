@@ -24,6 +24,7 @@ type User struct {
 	PasswordHash string    `json:"-" gorm:"column:password_hash"`
 	Role         Role      `json:"role" gorm:"type:varchar(50);not null"`
 	Status       string    `json:"status" gorm:"default:'active'"`
+	AuthVersion  int64     `json:"-" gorm:"not null;default:1"`
 
 	TenantID  *uuid.UUID `json:"tenant_id" gorm:"type:uuid"`
 	SalonID   *uuid.UUID `json:"salon_id" gorm:"type:uuid;index"`
@@ -58,6 +59,13 @@ type User struct {
 
 func (User) TableName() string {
 	return "users"
+}
+
+func (u *User) BeforeCreate(_ *gorm.DB) error {
+	if u.AuthVersion == 0 {
+		u.AuthVersion = 1
+	}
+	return nil
 }
 
 // === DTOs ===

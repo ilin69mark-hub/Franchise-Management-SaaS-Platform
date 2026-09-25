@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AdminRepositoryInterface interface {
@@ -159,19 +160,27 @@ func (r *AdminRepository) CreatePlan(ctx context.Context, name string, price flo
 }
 
 func (r *AdminRepository) UpdatePlan(ctx context.Context, id uuid.UUID, name string, price float64, maxUsers int) (*models.Plan, error) {
-	var plan models.Plan
-	if err := r.db.First(&plan, id).Error; err != nil {
-		return nil, err
-	}
-
 	if price < 0 || price > 1e12 {
 		return nil, fmt.Errorf("price out of range")
 	}
-	plan.Name = name
-	plan.Price = decimal.NewFromFloat(price).Round(2)
-	plan.MaxUsers = maxUsers
-
-	if err := r.db.Save(&plan).Error; err != nil {
+	var plan models.Plan
+	if err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		query := tx.Model(&models.Tenant{}).Where("plan_id = ?", id).Order("id ASC")
+		if tx.Name() == "postgres" {
+			query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		var tenants []models.Tenant
+		if err := query.Find(&tenants).Error; err != nil {
+			return err
+		}
+		if err := tx.First(&plan, id).Error; err != nil {
+			return err
+		}
+		plan.Name = name
+		plan.Price = decimal.NewFromFloat(price).Round(2)
+		plan.MaxUsers = maxUsers
+		return tx.Save(&plan).Error
+	}); err != nil {
 		return nil, err
 	}
 	return &plan, nil

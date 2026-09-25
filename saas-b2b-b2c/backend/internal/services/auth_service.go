@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrUserBlocked - возвращается при попытке входа заблокированного/приостановленного
@@ -83,7 +84,7 @@ func verifyCaptchaToken(ctx context.Context, clientIP, token string) error {
 		log.Printf("captcha verify failed: %v", err)
 		return ErrCaptchaRequired
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	var parsed struct {
 		Success bool `json:"success"`
@@ -104,6 +105,13 @@ var ErrTooManyAttempts = errors.New("too many login attempts, try again later")
 // сети не смотрел, неплательщик работал дальше.
 var ErrTenantBlocked = errors.New("tenant is blocked")
 
+var (
+	ErrAuthSessionUnavailable = errors.New("durable auth session store unavailable")
+	ErrAuthSessionNotFound    = errors.New("auth session not found")
+	ErrAuthSessionRevoked     = errors.New("auth session revoked")
+	ErrRefreshReuse           = errors.New("refresh token reuse detected")
+)
+
 // tenantAccessDenied — статусы сети, закрывающие вход и refresh.
 // churned сознательно пропускаем (graceful wind-down бывшим клиентам).
 func tenantAccessDenied(status string) bool {
@@ -117,24 +125,32 @@ func tenantAccessDenied(status string) bool {
 // checkTenantAccess — сеть пользователя активна? super_admin и пользователи
 // без сети (nil) — вне проверки. Ошибка БД — fail-closed (deny).
 func (s *AuthService) checkTenantAccess(ctx context.Context, user *models.User) error {
-	if user.Role == models.RoleSuperAdmin || user.TenantID == nil {
+	if s.db == nil && user != nil && user.TenantID == nil {
 		return nil
 	}
-	if s.tenantRepo == nil {
+	return checkTenantAccessWithRepository(ctx, s.tenantRepo, user)
+}
+
+func checkTenantAccessWithRepository(ctx context.Context, tenantRepo repository.TenantRepositoryInterface, user *models.User) error {
+	if user == nil {
+		return errors.New("user is required")
+	}
+	if user.Role == models.RoleSuperAdmin {
+		return nil
+	}
+	if user.TenantID == nil {
+		return errors.New("tenant is required")
+	}
+	if tenantRepo == nil {
 		return errors.New("tenant check unavailable")
 	}
-	tenant, err := s.tenantRepo.FindByID(ctx, *user.TenantID)
+	tenant, err := tenantRepo.FindByID(ctx, *user.TenantID)
 	if err != nil || tenant == nil {
 		return ErrTenantBlocked
 	}
 	if tenantAccessDenied(tenant.Status) {
 		return ErrTenantBlocked
 	}
-	// REAUDIT-3: оплаченный период — тоже условие доступа. Раньше paid_until/
-	// grace_period_days вообще не проверялись: истёкший tenant продолжал входить.
-	// REAUDIT-4: grace_period_days <= 0 означает "без отсрочки" (раньше
-	// подставлялось 7 дней, и нулевой лимит не соблюдался). paid_until IS NULL —
-	// сознательно «безлимит» (так создаются новые tenant'ы до первой оплаты).
 	if tenant.PaidUntil != nil {
 		grace := 0
 		if tenant.GracePeriodDays > 0 {
@@ -200,23 +216,6 @@ func fetchHIBPSuffixes(prefix string) ([]string, bool) {
 		}
 	}
 	return out, true
-}
-
-func checkHIBP(password string) (exposed bool, checked bool) {
-	sum := sha1.Sum([]byte(password))
-	hex := strings.ToUpper(hex.EncodeToString(sum[:]))
-	prefix, suffix := hex[:5], hex[5:]
-
-	suffixes, ok := fetchHIBPSuffixes(prefix)
-	if !ok {
-		return false, false
-	}
-	for _, s := range suffixes {
-		if strings.EqualFold(s, suffix) {
-			return true, true
-		}
-	}
-	return false, true
 }
 
 // hibpCacheTTL — кэш ответов range-API: префикс редко меняется, режем latency/нагрузку.
@@ -327,19 +326,28 @@ const (
 	maxRefreshChainLifetime = 30 * 24 * time.Hour
 )
 
+type AuthIdentity struct {
+	UserID      uuid.UUID
+	SessionID   uuid.UUID
+	Email       string
+	Role        models.Role
+	TenantID    *uuid.UUID
+	AuthVersion int64
+}
+
 type AuthService struct {
-	userRepo   repository.UserRepositoryInterface
-	tenantRepo repository.TenantRepositoryInterface
-	// db — nil в юнит-тестах с моками; в проде нужен для транзакционной
-	// регистрации (tenant+owner атомарно).
-	db *gorm.DB
+	userRepo    repository.UserRepositoryInterface
+	tenantRepo  repository.TenantRepositoryInterface
+	sessionRepo *repository.AuthSessionRepository
+	db          *gorm.DB
 }
 
 func NewAuthService(db *gorm.DB) *AuthService {
 	return &AuthService{
-		db:         db,
-		userRepo:   repository.NewUserRepository(db),
-		tenantRepo: repository.NewTenantRepository(db),
+		db:          db,
+		userRepo:    repository.NewUserRepository(db),
+		tenantRepo:  repository.NewTenantRepository(db),
+		sessionRepo: repository.NewAuthSessionRepository(db),
 	}
 }
 
@@ -533,31 +541,135 @@ func (s *AuthService) Authenticate(ctx context.Context, email, password, clientI
 	return freshUser, nil
 }
 
-// GenerateTokens - Генерация токенов (новая цепочка: cid = свежий uuid).
-func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID) (string, string, error) {
-	return s.generateTokensWithChain(userID, email, role, tenantID, salonID, uuid.New().String(), time.Now().Unix())
+func userAccessDenied(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "blocked", "suspended", "banned", "disabled", "inactive":
+		return true
+	default:
+		return false
+	}
 }
 
-// generateTokensWithChain — ротация в рамках той же цепочки (cid carried).
-func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID, chainID string, chainStart int64) (string, string, error) {
+func (s *AuthService) IssueSession(ctx context.Context, user *models.User) (string, string, error) {
+	if s.db == nil || s.sessionRepo == nil || user == nil {
+		return "", "", ErrAuthSessionUnavailable
+	}
+	var accessToken, refreshToken string
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var locked models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&locked, "id = ?", user.ID).Error; err != nil {
+			return err
+		}
+		if locked.AuthVersion <= 0 {
+			return ErrAuthSessionRevoked
+		}
+		if user.AuthVersion > 0 && locked.AuthVersion != user.AuthVersion {
+			return ErrAuthSessionRevoked
+		}
+		if userAccessDenied(locked.Status) {
+			return ErrUserBlocked
+		}
+		if err := checkTenantAccessWithRepository(ctx, repository.NewTenantRepository(tx), &locked); err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		chainExpiresAt := now.Add(maxRefreshChainLifetime)
+		refreshExpiresAt := now.Add(refreshLifetime)
+		if refreshExpiresAt.After(chainExpiresAt) {
+			refreshExpiresAt = chainExpiresAt
+		}
+		sessionID := uuid.New()
+		refreshJTI := uuid.New()
+		session := &models.AuthSession{
+			ID:                sessionID,
+			UserID:            locked.ID,
+			AuthVersion:       locked.AuthVersion,
+			CurrentRefreshJTI: refreshJTI,
+			ChainStartedAt:    now,
+			ChainExpiresAt:    chainExpiresAt,
+			RefreshExpiresAt:  refreshExpiresAt,
+			LastTokenIssuedAt: now,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+		if err := repository.NewAuthSessionRepository(tx).Create(ctx, session); err != nil {
+			return err
+		}
+		var err error
+		accessToken, refreshToken, err = s.generateTokensForSession(locked, sessionID, now, now, locked.AuthVersion, refreshJTI)
+		return err
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return accessToken, refreshToken, nil
+}
+
+func (s *AuthService) ResolveAccessIdentity(ctx context.Context, userID, sessionID uuid.UUID, authVersion int64) (AuthIdentity, error) {
+	if s.db == nil {
+		return AuthIdentity{}, ErrAuthSessionUnavailable
+	}
+	var user models.User
+	if err := s.db.WithContext(ctx).Select("id, email, role, status, tenant_id, auth_version").First(&user, "id = ?", userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return AuthIdentity{}, ErrAuthSessionNotFound
+		}
+		return AuthIdentity{}, err
+	}
+	if userAccessDenied(user.Status) || user.Role == "" {
+		return AuthIdentity{}, ErrAuthSessionRevoked
+	}
+	if user.Role != models.RoleSuperAdmin && user.TenantID == nil {
+		return AuthIdentity{}, ErrAuthSessionRevoked
+	}
+	if user.AuthVersion != authVersion {
+		return AuthIdentity{}, ErrAuthSessionRevoked
+	}
+	var session models.AuthSession
+	if err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", sessionID, userID).First(&session).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return AuthIdentity{}, ErrAuthSessionNotFound
+		}
+		return AuthIdentity{}, err
+	}
+	if session.AuthVersion != authVersion || session.RevokedAt != nil || !time.Now().UTC().Before(session.ChainExpiresAt) {
+		return AuthIdentity{}, ErrAuthSessionRevoked
+	}
+	if err := checkTenantAccessWithRepository(ctx, s.tenantRepo, &user); err != nil {
+		return AuthIdentity{}, err
+	}
+	return AuthIdentity{
+		UserID:      user.ID,
+		SessionID:   session.ID,
+		Email:       user.Email,
+		Role:        user.Role,
+		TenantID:    user.TenantID,
+		AuthVersion: user.AuthVersion,
+	}, nil
+}
+
+func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID) (string, string, error) {
+	if s.db != nil {
+		return "", "", ErrAuthSessionUnavailable
+	}
+	now := time.Now().UTC()
+	sessionID := uuid.New()
+	return s.generateTokensForSession(models.User{ID: userID, Email: email, Role: role, TenantID: tenantID, SalonID: salonID}, sessionID, now, now, 1, uuid.New())
+}
+
+func (s *AuthService) generateTokensForSession(user models.User, sessionID uuid.UUID, chainStart time.Time, issuedAt time.Time, authVersion int64, refreshJTI uuid.UUID) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
 	if secret == "" {
 		return "", "", errors.New("jwt_secret is not configured")
 	}
-
-	tidStr := ""
-	if tenantID != nil {
-		tidStr = tenantID.String()
+	tenantID := ""
+	if user.TenantID != nil {
+		tenantID = user.TenantID.String()
 	}
-
-	sidStr := ""
-	if salonID != nil {
-		sidStr = salonID.String()
+	salonID := ""
+	if user.SalonID != nil {
+		salonID = user.SalonID.String()
 	}
-
-	accessJti := uuid.New().String()
-	// respect JWT_EXPIRES from config, default 24h, hard cap 24h (F12:
-	// без потолка env JWT_EXPIRES=8760h давал годовой access-токен).
 	jwtExpiresStr := viper.GetString("JWT_EXPIRES")
 	if jwtExpiresStr == "" {
 		jwtExpiresStr = viper.GetString("jwt_expires")
@@ -569,35 +681,31 @@ func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, ro
 	if jwtExpires > maxJWTExpires || jwtExpires <= 0 {
 		jwtExpires = maxJWTExpires
 	}
-	now := time.Now()
+	accessJTI := uuid.New()
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"token_use": "access",
-		"user_id":   userID.String(),
-		"email":     email,
-		"role":      role,
-		"tenant_id": tidStr,
-		"salon_id":  sidStr,
-		"jti":       accessJti,
-		"iat":       now.Unix(),
-		"exp":       now.Add(jwtExpires).Unix(),
+		"user_id":   user.ID.String(),
+		"email":     user.Email,
+		"role":      user.Role,
+		"tenant_id": tenantID,
+		"salon_id":  salonID,
+		"sid":       sessionID.String(),
+		"av":        authVersion,
+		"jti":       accessJTI.String(),
+		"iat":       issuedAt.Unix(),
+		"exp":       issuedAt.Add(jwtExpires).Unix(),
 	})
-
-	jti := uuid.New().String()
-	if chainID == "" {
-		chainID = jti
-	}
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"token_use": "refresh",
-		"user_id":   userID.String(),
-		"jti":       jti,
-		"cid":       chainID,
-		// REAUDIT-3: chain_iat — начало цепочки, не переносится при ротации.
-		// Раньше iat перезаписывался, и «потолок 30 дней» можно было продлевать.
-		"chain_iat": chainStart,
-		"iat":       now.Unix(),
-		"exp":       now.Add(refreshLifetime).Unix(),
+		"user_id":   user.ID.String(),
+		"jti":       refreshJTI.String(),
+		"sid":       sessionID.String(),
+		"cid":       sessionID.String(),
+		"av":        authVersion,
+		"chain_iat": chainStart.Unix(),
+		"iat":       issuedAt.Unix(),
+		"exp":       issuedAt.Add(refreshLifetime).Unix(),
 	})
-
 	accessStr, err := accessToken.SignedString([]byte(secret))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to sign access token: %w", err)
@@ -606,12 +714,204 @@ func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, ro
 	if err != nil {
 		return "", "", fmt.Errorf("failed to sign refresh token: %w", err)
 	}
-
 	return accessStr, refreshStr, nil
 }
 
-// RefreshTokens - Обновление токенов с ротацией
+func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID, chainID string, chainStart int64) (string, string, error) {
+	sessionID, err := uuid.Parse(chainID)
+	if err != nil {
+		sessionID = uuid.New()
+	}
+	issuedAt := time.Now().UTC()
+	return s.generateTokensForSession(models.User{ID: userID, Email: email, Role: role, TenantID: tenantID, SalonID: salonID}, sessionID, time.Unix(chainStart, 0).UTC(), issuedAt, 1, uuid.New())
+}
+
+func (s *AuthService) parseSignedClaims(raw string, validateClaims bool) (jwt.MapClaims, error) {
+	secret := viper.GetString("jwt_secret")
+	if secret == "" {
+		return nil, errors.New("jwt_secret is not configured")
+	}
+	options := []jwt.ParserOption{jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()}
+	if !validateClaims {
+		options = append(options, jwt.WithoutClaimsValidation())
+	}
+	token, err := jwt.Parse(raw, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return []byte(secret), nil
+	}, options...)
+	if err != nil || !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid token claims")
+	}
+	return claims, nil
+}
+
+func (s *AuthService) parseRefreshClaims(raw string) (jwt.MapClaims, error) {
+	claims, err := s.parseSignedClaims(raw, true)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+	if use, _ := claims["token_use"].(string); use != "refresh" {
+		return nil, errors.New("not a refresh token")
+	}
+	return claims, nil
+}
+
 func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, error) {
+	return s.RefreshTokensWithContext(context.Background(), oldRefreshToken)
+}
+
+func (s *AuthService) RefreshTokensWithContext(ctx context.Context, oldRefreshToken string) (string, string, error) {
+	if s.db == nil {
+		return s.refreshTokensLegacy(oldRefreshToken)
+	}
+	return s.refreshTokensDurable(ctx, oldRefreshToken)
+}
+
+func (s *AuthService) refreshTokensDurable(ctx context.Context, oldRefreshToken string) (string, string, error) {
+	claims, err := s.parseRefreshClaims(oldRefreshToken)
+	if err != nil {
+		return "", "", err
+	}
+	userID, err := uuid.Parse(stringClaim(claims, "user_id"))
+	if err != nil {
+		return "", "", errors.New("user_id not found in token")
+	}
+	sessionID, err := uuid.Parse(stringClaim(claims, "sid"))
+	if err != nil {
+		return "", "", errors.New("refresh token missing sid")
+	}
+	chainID, err := uuid.Parse(stringClaim(claims, "cid"))
+	if err != nil || chainID != sessionID {
+		return "", "", errors.New("refresh token has invalid chain")
+	}
+	refreshJTI, err := uuid.Parse(stringClaim(claims, "jti"))
+	if err != nil {
+		return "", "", errors.New("refresh token missing jti")
+	}
+	authVersion, ok := numericClaim(claims, "av")
+	if !ok || authVersion <= 0 {
+		return "", "", errors.New("refresh token missing auth version")
+	}
+	chainStart, ok := numericClaim(claims, "chain_iat")
+	if !ok || chainStart <= 0 {
+		return "", "", errors.New("refresh token missing chain_iat")
+	}
+	iat, ok := numericClaim(claims, "iat")
+	if !ok || iat <= 0 {
+		return "", "", errors.New("refresh token missing iat")
+	}
+	requestTime := time.Now().UTC()
+	if iat > float64(requestTime.Add(30*time.Second).Unix()) {
+		return "", "", errors.New("refresh token iat is in the future")
+	}
+	var accessToken, newRefreshToken string
+	var validationErr error
+	reuse := false
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user models.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				validationErr = errors.New("user not found")
+				return nil
+			}
+			return err
+		}
+		var session models.AuthSession
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND user_id = ?", sessionID, userID).First(&session).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				validationErr = ErrAuthSessionNotFound
+				return nil
+			}
+			return err
+		}
+		now := time.Now().UTC()
+		if tx.Name() == "postgres" {
+			if err := tx.Raw("SELECT clock_timestamp()").Scan(&now).Error; err != nil {
+				return err
+			}
+		}
+		if user.AuthVersion != int64(authVersion) || session.AuthVersion != int64(authVersion) || session.RevokedAt != nil || !now.Before(session.ChainExpiresAt) {
+			validationErr = ErrAuthSessionRevoked
+			return nil
+		}
+		if session.ChainStartedAt.Unix() != int64(chainStart) {
+			validationErr = ErrAuthSessionRevoked
+			return nil
+		}
+		if !now.Before(session.RefreshExpiresAt) {
+			validationErr = ErrAuthSessionRevoked
+			return nil
+		}
+		if userAccessDenied(user.Status) {
+			validationErr = ErrUserBlocked
+			return nil
+		}
+		if err := checkTenantAccessWithRepository(ctx, repository.NewTenantRepository(tx), &user); err != nil {
+			validationErr = err
+			return nil
+		}
+		if session.CurrentRefreshJTI != refreshJTI {
+			revokedAt := time.Now().UTC()
+			if err := tx.Model(&models.AuthSession{}).Where("id = ? AND user_id = ?", sessionID, userID).Updates(map[string]interface{}{
+				"revoked_at":    revokedAt,
+				"revoke_reason": "refresh_reuse",
+				"updated_at":    revokedAt,
+			}).Error; err != nil {
+				return err
+			}
+			reuse = true
+			return nil
+		}
+		newJTI := uuid.New()
+		newRefreshExpiresAt := now.Add(refreshLifetime)
+		if newRefreshExpiresAt.After(session.ChainExpiresAt) {
+			newRefreshExpiresAt = session.ChainExpiresAt
+		}
+		result := tx.Model(&models.AuthSession{}).Where("id = ? AND user_id = ? AND current_refresh_jti = ? AND revoked_at IS NULL", sessionID, userID, refreshJTI).Updates(map[string]interface{}{
+			"current_refresh_jti":  newJTI,
+			"refresh_expires_at":   newRefreshExpiresAt,
+			"last_token_issued_at": now,
+			"updated_at":           now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			reuse = true
+			return nil
+		}
+		accessToken, newRefreshToken, err = s.generateTokensForSession(user, sessionID, session.ChainStartedAt, now, int64(authVersion), newJTI)
+		return err
+	})
+	if err != nil {
+		return "", "", err
+	}
+	if validationErr != nil {
+		return "", "", validationErr
+	}
+	if reuse {
+		return "", "", ErrRefreshReuse
+	}
+	return accessToken, newRefreshToken, nil
+}
+
+func stringClaim(claims jwt.MapClaims, name string) string {
+	value, _ := claims[name].(string)
+	return value
+}
+
+func numericClaim(claims jwt.MapClaims, name string) (float64, bool) {
+	value, ok := claims[name].(float64)
+	return value, ok
+}
+
+func (s *AuthService) refreshTokensLegacy(oldRefreshToken string) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
 	if secret == "" {
 		return "", "", errors.New("jwt_secret is not configured")
@@ -716,37 +1016,77 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 	return s.generateTokensWithChain(user.ID, user.Email, user.Role, user.TenantID, user.SalonID, chainID, int64(chainStart))
 }
 
-// Logout - отзывает refresh-токен, извлекая его jti.
-func (s *AuthService) Logout(refreshToken string) error {
-	secret := viper.GetString("jwt_secret")
-	if secret == "" {
-		return errors.New("jwt_secret is not configured")
+func (s *AuthService) LogoutSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+	if s.db == nil || s.sessionRepo == nil {
+		return ErrAuthSessionUnavailable
 	}
+	return s.sessionRepo.Revoke(ctx, sessionID, userID, "logout")
+}
 
-	token, err := jwt.Parse(refreshToken, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
+func (s *AuthService) LogoutToken(ctx context.Context, raw string) (bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || s.db == nil || s.sessionRepo == nil {
+		return false, nil
+	}
+	claims, err := s.parseSignedClaims(raw, false)
+	if err != nil {
+		return false, nil
+	}
+	use, _ := claims["token_use"].(string)
+	if use != "access" && use != "refresh" {
+		return false, nil
+	}
+	userID, err := uuid.Parse(stringClaim(claims, "user_id"))
+	if err != nil {
+		return false, nil
+	}
+	sessionID, err := uuid.Parse(stringClaim(claims, "sid"))
+	if err != nil {
+		return false, nil
+	}
+	if use == "refresh" {
+		chainID, err := uuid.Parse(stringClaim(claims, "cid"))
+		if err != nil || chainID != sessionID {
+			return false, nil
 		}
-		return []byte(secret), nil
-	}, jwt.WithValidMethods([]string{"HS256"}))
-	if err != nil || !token.Valid {
-		return errors.New("invalid refresh token")
 	}
+	return true, s.sessionRepo.Revoke(ctx, sessionID, userID, "logout")
+}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return errors.New("invalid token claims")
+func (s *AuthService) RevokeAllUserSessions(ctx context.Context, userID uuid.UUID, reason string) error {
+	if s.db == nil || s.sessionRepo == nil {
+		return ErrAuthSessionUnavailable
 	}
+	return s.sessionRepo.IncrementAuthVersionAndRevoke(ctx, userID, reason)
+}
 
-	tokenID, _ := claims["jti"].(string)
+func (s *AuthService) CleanupAuthSessions(ctx context.Context) (int64, error) {
+	if s.db == nil || s.sessionRepo == nil {
+		return 0, ErrAuthSessionUnavailable
+	}
+	return s.sessionRepo.Cleanup(ctx, time.Now().UTC(), 1000)
+}
+
+func (s *AuthService) Logout(refreshToken string) error {
+	claims, err := s.parseRefreshClaims(refreshToken)
+	if err != nil {
+		return err
+	}
+	if s.db != nil && s.sessionRepo != nil {
+		userID, userErr := uuid.Parse(stringClaim(claims, "user_id"))
+		sessionID, sessionErr := uuid.Parse(stringClaim(claims, "sid"))
+		if userErr != nil || sessionErr != nil {
+			return errors.New("refresh token missing session")
+		}
+		return s.LogoutSession(context.Background(), userID, sessionID)
+	}
+	tokenID := stringClaim(claims, "jti")
 	if tokenID == "" {
 		return errors.New("refresh token missing jti")
 	}
-
 	return cache.RevokeRefreshToken(context.Background(), tokenID)
 }
 
-// RevokeAccessToken — извлекает jti из access токена и помещает в blacklist
 func (s *AuthService) RevokeAccessToken(authHeader string) error {
 	tokenStr := strings.TrimSpace(authHeader)
 	if strings.HasPrefix(strings.ToUpper(tokenStr), "BEARER ") {
@@ -760,7 +1100,6 @@ func (s *AuthService) RevokeAccessToken(authHeader string) error {
 		return errors.New("jwt_secret is not configured")
 	}
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
-		// F12: явная проверка метода (раньше её не было — только WithValidMethods).
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
@@ -773,15 +1112,21 @@ func (s *AuthService) RevokeAccessToken(authHeader string) error {
 	if !ok {
 		return errors.New("invalid claims")
 	}
-	jti, _ := claims["jti"].(string)
+	if s.db != nil && s.sessionRepo != nil {
+		userID, userErr := uuid.Parse(stringClaim(claims, "user_id"))
+		sessionID, sessionErr := uuid.Parse(stringClaim(claims, "sid"))
+		if userErr != nil || sessionErr != nil {
+			return errors.New("access token missing session")
+		}
+		return s.LogoutSession(context.Background(), userID, sessionID)
+	}
+	jti := stringClaim(claims, "jti")
 	if jti == "" {
 		return errors.New("jti missing")
 	}
-	// TTL до exp, fallback 24h
 	exp := 24 * time.Hour
-	if expVal, ok := claims["exp"].(float64); ok {
-		expTime := time.Unix(int64(expVal), 0)
-		remaining := time.Until(expTime)
+	if expVal, ok := numericClaim(claims, "exp"); ok {
+		remaining := time.Until(time.Unix(int64(expVal), 0))
 		if remaining > 0 && remaining < 24*time.Hour {
 			exp = remaining
 		}

@@ -208,7 +208,7 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 	if requesterRole != string(models.RoleSuperAdmin) {
 		isAssigner := goal.AssignerID.String() == requesterID
 		inTenant := sameGoalTenant(goal.TenantID, tenantID)
-		if !isAssigner && !(inTenant && canAssign(requesterRole, goal.Role)) {
+		if !isAssigner && (!inTenant || !canAssign(requesterRole, goal.Role)) {
 			return nil, errGoalForbidden
 		}
 		if goal.TenantID != nil && tenantID != "" && !inTenant {
@@ -290,7 +290,7 @@ func (s *goalService) DeleteGoal(ctx context.Context, id, requesterID, tenantID,
 	if requesterRole != string(models.RoleSuperAdmin) {
 		isAssigner := goal.AssignerID.String() == requesterID
 		inTenant := sameGoalTenant(goal.TenantID, tenantID)
-		if !isAssigner && !(inTenant && canAssign(requesterRole, goal.Role)) {
+		if !isAssigner && (!inTenant || !canAssign(requesterRole, goal.Role)) {
 			return errGoalForbidden
 		}
 		if goal.TenantID != nil && tenantID != "" && !inTenant && !isAssigner {

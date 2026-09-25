@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,14 +17,14 @@ import (
 const testSecret = "test_secret_key"
 
 func createTestToken(userID, email, role string, exp time.Time) string {
-	// F12: конформный токен обязан нести jti (middleware требует).
-	// REAUDIT-3: bearer обязан быть access-токеном (token_use=access).
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"token_use": "access",
 		"user_id":   userID,
 		"email":     email,
 		"role":      role,
 		"tenant_id": "11111111-1111-1111-1111-111111111111",
+		"sid":       uuid.New().String(),
+		"av":        int64(1),
 		"jti":       uuid.New().String(),
 		"iat":       time.Now().Unix(),
 		"exp":       exp.Unix(),
@@ -34,6 +35,9 @@ func createTestToken(userID, email, role string, exp time.Time) string {
 
 func setupTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
+	SetIdentityResolver(func(_ context.Context, _, _ string, _ int64) (string, string, bool) {
+		return "dealer", "11111111-1111-1111-1111-111111111111", true
+	})
 	return gin.New()
 }
 

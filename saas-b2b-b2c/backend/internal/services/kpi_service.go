@@ -3759,7 +3759,7 @@ func (s *KPIService) SendReport(ctx context.Context, userID string, reportID str
 	// Диалект-специфичный SQL: jsonb/NOW() есть только в PostgreSQL
 	// (тесты гоняются на sqlite, где эквиваленты — просто TEXT/CURRENT_TIMESTAMP).
 	setExpr := "recipients = ?::jsonb, updated_at = NOW()"
-	if s.DB.Dialector.Name() != "postgres" {
+	if s.DB.Name() != "postgres" {
 		setExpr = "recipients = ?, updated_at = CURRENT_TIMESTAMP"
 	}
 	res := s.DB.Exec("UPDATE reports SET "+setExpr+" WHERE id = ? AND franchiser_id = ?", string(recJSON), rid, userID)

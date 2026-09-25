@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
-	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 
@@ -269,28 +267,36 @@ func (s *AdminService) UpdateTenant(id uuid.UUID, name string, planID *uuid.UUID
 	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Updates(updates).Error
 }
 
-// BlockTenant - заблокировать
 func (s *AdminService) BlockTenant(id uuid.UUID) error {
-	res := s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "blocked")
-	if res.Error != nil {
-		return res.Error
+	if s.db == nil {
+		return errors.New("database is required")
 	}
-	// REAUDIT-4: блокировка сети обязана убивать живые access-токены её
-	// пользователей — иначе tenant работал ещё до 24 часов после block.
-	s.revokeTenantSessions(id)
-	return nil
-}
-
-// revokeTenantSessions — гасит сессии всех пользователей tenant'а.
-func (s *AdminService) revokeTenantSessions(tenantID uuid.UUID) {
-	var ids []uuid.UUID
-	if err := s.db.Model(&models.User{}).Where("tenant_id = ?", tenantID).Pluck("id", &ids).Error; err != nil {
-		log.Printf("WARNING: cannot list tenant users for session revocation: %v", err)
-		return
-	}
-	for _, uid := range ids {
-		cache.RevokeUserSessions(context.Background(), uid.String())
-	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var tenant models.Tenant
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tenant, "id = ?", id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.Tenant{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"status":     "blocked",
+			"updated_at": time.Now().UTC(),
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&models.User{}).Where("tenant_id = ?", id).Updates(map[string]interface{}{
+			"auth_version": gorm.Expr("auth_version + 1"),
+			"updated_at":   time.Now().UTC(),
+		}).Error; err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		return tx.Model(&models.AuthSession{}).
+			Where("user_id IN (?) AND revoked_at IS NULL", tx.Model(&models.User{}).Select("id").Where("tenant_id = ?", id)).
+			Updates(map[string]interface{}{
+				"revoked_at":    now,
+				"revoke_reason": "tenant_blocked",
+				"updated_at":    now,
+			}).Error
+	})
 }
 
 // UnblockTenant - разблокировать
@@ -305,6 +311,15 @@ func (s *AdminService) UnblockTenant(id uuid.UUID) error {
 
 // SuspendTenant - приостановить тенант
 func (s *AdminService) SuspendTenant(ctx context.Context, id uuid.UUID) error {
+	if s.db != nil {
+		if err := s.BlockTenant(id); err != nil {
+			return err
+		}
+		return s.db.Model(&models.Tenant{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"status":     "suspended",
+			"updated_at": time.Now().UTC(),
+		}).Error
+	}
 	tenant, err := s.tenantRepo.FindByID(ctx, id)
 	if err != nil {
 		return ErrNotFound
@@ -363,21 +378,36 @@ func (s *AdminService) CreatePlan(name string, price float64, maxUsers int) (*mo
 	return &plan, nil
 }
 
+func lockTenantsUsingPlan(tx *gorm.DB, planID uuid.UUID) error {
+	if tx == nil || planID == uuid.Nil {
+		return nil
+	}
+	query := tx.Model(&models.Tenant{}).Where("plan_id = ?", planID).Order("id ASC")
+	if tx.Name() == "postgres" {
+		query = query.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	var tenants []models.Tenant
+	return query.Find(&tenants).Error
+}
+
 // UpdatePlan - обновить тариф (НОВОЕ)
 func (s *AdminService) UpdatePlan(id uuid.UUID, name string, price float64, maxUsers int) (*models.Plan, error) {
-	var plan models.Plan
-	if err := s.db.First(&plan, id).Error; err != nil {
-		return nil, err
-	}
-
 	if price < 0 || price > 1e12 {
 		return nil, fmt.Errorf("price out of range")
 	}
-	plan.Name = name
-	plan.Price = MoneyFromFloat(price)
-	plan.MaxUsers = maxUsers
-
-	if err := s.db.Save(&plan).Error; err != nil {
+	var plan models.Plan
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockTenantsUsingPlan(tx, id); err != nil {
+			return err
+		}
+		if err := tx.First(&plan, id).Error; err != nil {
+			return err
+		}
+		plan.Name = name
+		plan.Price = MoneyFromFloat(price)
+		plan.MaxUsers = maxUsers
+		return tx.Save(&plan).Error
+	}); err != nil {
 		return nil, err
 	}
 	return &plan, nil

@@ -439,7 +439,7 @@ func stubHIBPEmpty(t *testing.T) {
 	hibpBaseURL = srv.URL
 }
 
-func TestCheckHIBP_ExposedDetected(t *testing.T) {
+func TestRejectPwnedPassword_ExposedDetected(t *testing.T) {
 	pwd := "test-pwned-password-12"
 	sum := sha1.Sum([]byte(pwd))
 	hexsum := strings.ToUpper(hex.EncodeToString(sum[:]))
@@ -452,28 +452,19 @@ func TestCheckHIBP_ExposedDetected(t *testing.T) {
 	hibpBaseURL = srv.URL
 	defer func() { hibpBaseURL = prev }()
 
-	exposed, checked := checkHIBP(pwd)
-	require.True(t, checked)
-	require.True(t, exposed)
 	require.Error(t, rejectPwnedPassword(pwd))
 }
 
-func TestCheckHIBP_CleanPasses(t *testing.T) {
+func TestRejectPwnedPassword_CleanPasses(t *testing.T) {
 	stubHIBPEmpty(t)
-	exposed, checked := checkHIBP("definitely-not-pwned-password-12")
-	require.True(t, checked)
-	require.False(t, exposed)
 	require.NoError(t, rejectPwnedPassword("definitely-not-pwned-password-12"))
 }
 
-func TestCheckHIBP_FailOpenOnOutage(t *testing.T) {
+func TestRejectPwnedPassword_FailOpenOnOutage(t *testing.T) {
 	prev := hibpBaseURL
 	hibpBaseURL = "http://127.0.0.1:1"
 	defer func() { hibpBaseURL = prev }()
 
-	exposed, checked := checkHIBP("anything-12-chars")
-	require.False(t, checked)
-	require.False(t, exposed)
 	require.NoError(t, rejectPwnedPassword("anything-12-chars"))
 }
 

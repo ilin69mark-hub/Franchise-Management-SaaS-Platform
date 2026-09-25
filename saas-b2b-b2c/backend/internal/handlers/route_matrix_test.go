@@ -31,7 +31,7 @@ func setupMatrixDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.Exec(`CREATE TABLE users (
 		id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
-		email TEXT, password_hash TEXT, role TEXT, status TEXT,
+		email TEXT, password_hash TEXT, role TEXT, status TEXT, auth_version INTEGER NOT NULL DEFAULT 1,
 		tenant_id TEXT, salon_id TEXT, managed_by TEXT,
 		first_name TEXT, last_name TEXT, phone TEXT,
 		display_name TEXT, position TEXT, bio TEXT, quote TEXT, avatar_url TEXT,

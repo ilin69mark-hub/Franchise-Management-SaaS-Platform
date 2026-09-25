@@ -22,11 +22,7 @@ func testDBConn(t *testing.T) *gorm.DB {
 	if os.Getenv("TEST_DB_DSN") == "" {
 		t.Skip("TEST_DB_DSN не задан: интеграционный realdb-тест пропущен")
 	}
-	db, err := testdb.Connect()
-	if err != nil {
-		t.Fatalf("realdb: не удалось подключиться: %v", err)
-	}
-	return db
+	return testdb.MustConnectIsolated(t)
 }
 
 // setupRealDBSchema создаёт PG-совместимую схему аналитики (TIMESTAMP вместо
@@ -85,7 +81,7 @@ func TestIntegrationDashboardProductsRealDB(t *testing.T) {
 	userID := uuid.New()
 	insertTestUser(t, db, userID, "salon_manager", &salonID)
 
-	today := time.Now()
+	today := time.Now().UTC()
 	period := today.Format("2006-01")
 
 	insertSalonProduct(t, db, salonID, "Диван", "Основная", "Мебель", 120000, 70000, 2, 6, 35)
@@ -142,7 +138,7 @@ func TestIntegrationManagerTargetsRealDB(t *testing.T) {
 	userID := uuid.New()
 	insertTestUser(t, db, userID, "salon_manager", &salonID)
 
-	today := time.Now()
+	today := time.Now().UTC()
 	firstOfMonth := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, today.Location())
 
 	require.NoError(t, db.Exec(
@@ -210,7 +206,7 @@ func TestIntegrationDealerProductsRealDB(t *testing.T) {
 		"INSERT INTO users (id, email, password_hash, role, salon_id, managed_by) VALUES (?, ?, '', 'salon_manager', ?, ?)",
 		managerID.String(), managerID.String()+"@test.ru", salonID.String(), dealerID.String()).Error)
 
-	today := time.Now()
+	today := time.Now().UTC()
 	insertLeadWithProduct(t, db, salonID, "Диван", 100000, "sale", today)
 	insertLeadWithProduct(t, db, salonID, "Кресло", 50000, "paid", today)
 	insertLeadWithProduct(t, db, salonID, "Стол", 77777, "new", today)

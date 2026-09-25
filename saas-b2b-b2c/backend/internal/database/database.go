@@ -66,20 +66,30 @@ func ConnectDB() (*gorm.DB, error) {
 	return DB, nil
 }
 
-func runMigrations(db *gorm.DB) error {
-	sqlDB, err := db.DB()
-	if err != nil {
-		return err
-	}
+const migrationAdvisoryLockID int64 = 721602250614
 
+func runMigrations(db *gorm.DB) error {
+	if db.Name() == "postgres" {
+		return db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", migrationAdvisoryLockID).Error; err != nil {
+				return err
+			}
+			return runMigrationList(tx)
+		})
+	}
+	return runMigrationList(db)
+}
+
+func runMigrationList(db *gorm.DB) error {
 	migrations := []func(*gorm.DB) error{
 		migrateUsers,
+		migrateAuthSessions,
+		migratePlans,
 		migrateTenants,
 		migrateSalons,
 		migrateOrders,
 		migrateTasks,
 		migrateChecklists,
-		migratePlans,
 		migrateNotifications,
 		migrateInvoices,
 		migrateLeads,
@@ -113,8 +123,6 @@ func runMigrations(db *gorm.DB) error {
 			return err
 		}
 	}
-
-	_ = sqlDB
 	return nil
 }
 
@@ -181,6 +189,82 @@ func migrateUsers(db *gorm.DB) error {
 	// S4: email уникален регистронезависимо (иначе User@x и user@x — два аккаунта,
 	// один lockout-ключ на двоих). Старый UNIQUE(email) остаётся как есть.
 	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email))`).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func migrateAuthSessions(db *gorm.DB) error {
+	if err := db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version BIGINT NOT NULL DEFAULT 1`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`
+		DO $$
+		BEGIN
+			IF EXISTS (SELECT 1 FROM users WHERE auth_version <= 0) THEN
+				RAISE EXCEPTION 'users.auth_version must be positive';
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint
+				WHERE conname = 'users_auth_version_check'
+				  AND conrelid = 'users'::regclass
+			) THEN
+				ALTER TABLE users ADD CONSTRAINT users_auth_version_check CHECK (auth_version > 0);
+			END IF;
+		END
+		$$
+	`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS auth_sessions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			auth_version BIGINT NOT NULL DEFAULT 1,
+			current_refresh_jti UUID NOT NULL UNIQUE,
+			chain_started_at TIMESTAMPTZ NOT NULL,
+			chain_expires_at TIMESTAMPTZ NOT NULL,
+			refresh_expires_at TIMESTAMPTZ NOT NULL,
+			last_token_issued_at TIMESTAMPTZ NOT NULL,
+			revoked_at TIMESTAMPTZ,
+			revoke_reason TEXT,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			CONSTRAINT auth_sessions_auth_version_check CHECK (auth_version > 0),
+			CONSTRAINT auth_sessions_refresh_expiry_check CHECK (refresh_expires_at <= chain_expires_at)
+		)
+	`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`
+		DO $$
+		BEGIN
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint
+				WHERE conname = 'auth_sessions_auth_version_check'
+				  AND conrelid = 'auth_sessions'::regclass
+			) THEN
+				ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_auth_version_check CHECK (auth_version > 0);
+			END IF;
+			IF NOT EXISTS (
+				SELECT 1 FROM pg_constraint
+				WHERE conname = 'auth_sessions_refresh_expiry_check'
+				  AND conrelid = 'auth_sessions'::regclass
+			) THEN
+				ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_refresh_expiry_check CHECK (refresh_expires_at <= chain_expires_at);
+			END IF;
+		END
+		$$
+	`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_active ON auth_sessions(user_id) WHERE revoked_at IS NULL`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_auth_sessions_refresh_expiry_active ON auth_sessions(refresh_expires_at) WHERE revoked_at IS NULL`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_auth_sessions_revoked ON auth_sessions(revoked_at) WHERE revoked_at IS NOT NULL`).Error; err != nil {
 		return err
 	}
 	return nil
@@ -963,10 +1047,7 @@ func GetDB() *gorm.DB {
 // seedAllowedInThisEnv — жёсткий запрет демо-сидов в production. Проверяются
 // все индикаторы prod-режима, потому что в k8s APP_ENV/GIN_MODE не заданы.
 func seedAllowedInThisEnv() bool {
-	if isProdLikeEnv() {
-		return false
-	}
-	return true
+	return !isProdLikeEnv()
 }
 
 func isProdLikeEnv() bool {

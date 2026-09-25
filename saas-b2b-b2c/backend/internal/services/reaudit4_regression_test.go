@@ -81,7 +81,7 @@ func TestAuthMiddleware_BlockedUserRejected(t *testing.T) {
 	defer viper.Set("jwt_secret", "")
 
 	// Резолвер БД говорит "пользователя нет/заблокирован".
-	middleware.SetIdentityResolver(func(ctx context.Context, userID string) (string, string, bool) {
+	middleware.SetIdentityResolver(func(ctx context.Context, userID, sessionID string, authVersion int64) (string, string, bool) {
 		return "", "", false
 	})
 	defer middleware.SetIdentityResolver(nil)
@@ -91,6 +91,8 @@ func TestAuthMiddleware_BlockedUserRejected(t *testing.T) {
 		"user_id":   uuid.New().String(),
 		"role":      "franchiser",
 		"tenant_id": uuid.New().String(),
+		"sid":       uuid.New().String(),
+		"av":        int64(1),
 		"jti":       uuid.New().String(),
 		"iat":       time.Now().Unix(),
 		"exp":       time.Now().Add(time.Hour).Unix(),

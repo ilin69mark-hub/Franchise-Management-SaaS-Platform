@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -39,6 +40,14 @@ func signToken(claims jwt.MapClaims, method jwt.SigningMethod) string {
 	return s
 }
 
+func setSecurityIdentityResolver(t *testing.T) {
+	t.Helper()
+	middleware.SetIdentityResolver(func(_ context.Context, _, _ string, _ int64) (string, string, bool) {
+		return "dealer", "11111111-1111-1111-1111-111111111111", true
+	})
+	t.Cleanup(func() { middleware.SetIdentityResolver(nil) })
+}
+
 func TestSecurity_JWT_NoneAlgorithmRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
@@ -70,6 +79,21 @@ func TestSecurity_JWT_ExpiredRejected(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, w.Code, "expired must be rejected")
 }
 
+func TestSecurity_JWT_MissingExpRejected(t *testing.T) {
+	setSecurityIdentityResolver(t)
+	gin.SetMode(gin.TestMode)
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "sid": "00000000-0000-0000-0000-000000000098", "av": int64(1), "jti": "00000000-0000-0000-0000-000000000099", "iat": time.Now().Unix()}
+	str := signToken(claims, jwt.SigningMethodHS256)
+	w := httptest.NewRecorder()
+	r := gin.New()
+	r.Use(middleware.AuthMiddleware())
+	r.GET("/", func(c *gin.Context) { c.Status(http.StatusOK) })
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+str)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusUnauthorized, w.Code, "access token without exp must be rejected")
+}
+
 func TestSecurity_JWT_MissingJtiRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// F12: токен без jti нельзя отозвать — должен быть отвергнут.
@@ -88,8 +112,9 @@ func TestSecurity_JWT_MissingJtiRejected(t *testing.T) {
 }
 
 func TestSecurity_JWT_ValidAccepted(t *testing.T) {
+	setSecurityIdentityResolver(t)
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "jti": "00000000-0000-0000-0000-000000000099", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "sid": "00000000-0000-0000-0000-000000000098", "av": int64(1), "jti": "00000000-0000-0000-0000-000000000099", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -102,8 +127,9 @@ func TestSecurity_JWT_ValidAccepted(t *testing.T) {
 }
 
 func TestSecurity_AuthMiddleware_TrimSpaceBearer(t *testing.T) {
+	setSecurityIdentityResolver(t)
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000098", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "sid": "00000000-0000-0000-0000-000000000097", "av": int64(1), "jti": "00000000-0000-0000-0000-000000000098", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -167,8 +193,9 @@ func TestSecurity_RateLimit_XFFIgnoredWhenTrusted(t *testing.T) {
 }
 
 func TestSecurity_CookieFallback(t *testing.T) {
+	setSecurityIdentityResolver(t)
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000097", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "sid": "00000000-0000-0000-0000-000000000096", "av": int64(1), "jti": "00000000-0000-0000-0000-000000000097", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -181,6 +208,7 @@ func TestSecurity_CookieFallback(t *testing.T) {
 }
 
 func TestSecurity_JWT_RevokedRejected(t *testing.T) {
+	setSecurityIdentityResolver(t)
 	gin.SetMode(gin.TestMode)
 	// F1: отзыв работает и без Redis (instance-local fallback) — скип убран.
 	secret := jwtSecretForTest()

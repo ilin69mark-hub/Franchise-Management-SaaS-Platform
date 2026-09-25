@@ -1,22 +1,22 @@
 .PHONY: test test-pg test-unit test-all lint clean
 
+COMPOSE := docker compose
+
 # Run all unit tests (fast, no external deps)
 test:
 	go test -short ./...
 
 # Run PostgreSQL integration tests (requires docker)
 test-pg:
-	docker-compose -f docker-compose.test.yml up -d
-	sleep 2
-	go test -v -run "Postgres" ./...
-	docker-compose -f docker-compose.test.yml down
+	$(COMPOSE) -f docker-compose.test.yml up -d --wait
+	TEST_DB_DSN='host=127.0.0.1 port=5433 user=postgres password=postgres dbname=franchise_test sslmode=disable' go test -v -run "Postgres" ./...
+	$(COMPOSE) -f docker-compose.test.yml down
 
 # Run all tests including PostgreSQL
 test-all:
-	docker-compose -f docker-compose.test.yml up -d
-	sleep 2
-	go test -v ./...
-	docker-compose -f docker-compose.test.yml down
+	$(COMPOSE) -f docker-compose.test.yml up -d --wait
+	TEST_DB_DSN='host=127.0.0.1 port=5433 user=postgres password=postgres dbname=franchise_test sslmode=disable' go test -v ./...
+	$(COMPOSE) -f docker-compose.test.yml down
 
 # Run tests with coverage
 test-coverage:
@@ -28,7 +28,7 @@ lint:
 
 # Clean up
 clean:
-	docker-compose -f docker-compose.test.yml down -v 2>/dev/null || true
+	$(COMPOSE) -f docker-compose.test.yml down -v 2>/dev/null || true
 	rm -f coverage.out
 
 # Run specific package tests

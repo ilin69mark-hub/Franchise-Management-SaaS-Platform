@@ -11,12 +11,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 )
 
 // IdentityResolver — актуальная роль/tenant пользователя из БД (REAUDIT-4).
 // Возвращает ok=false, если аккаунт удалён или заблокирован.
-type IdentityResolver func(ctx context.Context, userID string) (role string, tenantID string, ok bool)
+type IdentityResolver func(ctx context.Context, userID, sessionID string, authVersion int64) (role string, tenantID string, ok bool)
 
 var identityResolver IdentityResolver
 
@@ -24,13 +25,12 @@ var identityResolver IdentityResolver
 func SetIdentityResolver(fn IdentityResolver) { identityResolver = fn }
 
 // currentIdentity — актуальные роль/tenant из БД. Если резолвер не внедрён
-// (юнит-тесты), возвращается ok=true с пустыми значениями — вызывающий код
-// тогда оставляет claims как есть.
-func currentIdentity(ctx context.Context, userID string) (role string, tenantID string, ok bool) {
-	if identityResolver != nil {
-		return identityResolver(ctx, userID)
+// (юнит-тесты), возвращается ok=false.
+func currentIdentity(ctx context.Context, userID, sessionID string, authVersion int64) (role string, tenantID string, ok bool) {
+	if identityResolver == nil {
+		return "", "", false
 	}
-	return "", "", true
+	return identityResolver(ctx, userID, sessionID, authVersion)
 }
 
 // AuthMiddleware - основная проверка токена (поддерживает httpOnly cookie + Authorization)
@@ -72,7 +72,7 @@ func AuthMiddleware() gin.HandlerFunc {
 				return nil, errors.New("unexpected signing method")
 			}
 			return []byte(secret), nil
-		}, jwt.WithValidMethods([]string{"HS256"}))
+		}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
 
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
@@ -81,77 +81,67 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-			// REAUDIT-3: refresh-токен не должен работать как bearer.
 			if use, _ := claims["token_use"].(string); use != "access" {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 				c.Abort()
 				return
 			}
-			// F12: jti обязателен — токены без jti нельзя отозвать (бессмертные).
 			jti, _ := claims["jti"].(string)
-			if jti == "" {
+			if _, err := uuid.Parse(jti); err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing jti"})
 				c.Abort()
 				return
 			}
-			// revocation check via jti (Redis + instance-local fallback)
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
-			revoked := cache.IsTokenRevoked(ctx, jti)
-			cancel()
-			if revoked {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token revoked"})
-				c.Abort()
-				return
-			}
-			userID, ok := claims["user_id"].(string)
-			if !ok {
+			userID, _ := claims["user_id"].(string)
+			if _, err := uuid.Parse(userID); err != nil {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing user_id"})
 				c.Abort()
 				return
 			}
-
-			// REAUDIT-4: обязательный iat (иначе токен нельзя привязать к эпохе
-			// отзыва, а проверка 0 <= revokedAfter трактовала его как мёртвый/живой
-			// в зависимости от наличия маркера).
 			iatClaim, hasIat := claims["iat"].(float64)
 			if !hasIat || iatClaim <= 0 {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing iat"})
 				c.Abort()
 				return
 			}
-
-			// REAUDIT-3: после смены пароля/роли/блокировки все ранее выданные
-			// токены этого пользователя недействительны (эпоха в Redis).
-			ctxR, cancelR := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
-			revokedAfter := cache.UserSessionsRevokedAfter(ctxR, userID)
-			cancelR()
-			if revokedAfter > 0 && int64(iatClaim) <= revokedAfter {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Session revoked"})
+			sessionID, _ := claims["sid"].(string)
+			if _, err := uuid.Parse(sessionID); err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing session"})
+				c.Abort()
+				return
+			}
+			authVersion, hasAuthVersion := claims["av"].(float64)
+			if !hasAuthVersion || authVersion <= 0 {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token missing auth version"})
 				c.Abort()
 				return
 			}
 
+			curRole, curTenantID, ok := currentIdentity(c.Request.Context(), userID, sessionID, int64(authVersion))
+			if !ok || curRole == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Account or session not found"})
+				c.Abort()
+				return
+			}
+			if curRole != "super_admin" && curTenantID == "" {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Tenant is required"})
+				c.Abort()
+				return
+			}
+			revocationCtx, cancel := context.WithTimeout(c.Request.Context(), 500*time.Millisecond)
+			revoked := cache.IsTokenRevoked(revocationCtx, jti)
+			cancel()
+			if revoked {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Token revoked"})
+				c.Abort()
+				return
+			}
 			userEmail, _ := claims["email"].(string)
-
-			// REAUDIT-4: роль и tenant берём из БД, а не из токена. Иначе понижение
-			// роли/перенос в другой tenant действовали только с момента refresh.
-			curRole, curTenantID, ok := currentIdentity(c.Request.Context(), userID)
-			if !ok {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Account not found or disabled"})
-				c.Abort()
-				return
-			}
-			if curRole == "" {
-				curRole, _ = claims["role"].(string)
-			}
-			if curTenantID == "" {
-				curTenantID, _ = claims["tenant_id"].(string)
-			}
-
 			c.Set("userID", userID)
 			c.Set("email", userEmail)
 			c.Set("role", curRole)
 			c.Set("tenantID", curTenantID)
+			c.Set("sessionID", sessionID)
 			c.Set("jti", jti)
 		} else {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})

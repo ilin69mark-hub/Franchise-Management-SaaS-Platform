@@ -108,26 +108,49 @@ func (s *UserService) ChangePassword(userID uuid.UUID, oldPassword, newPassword 
 	if err := rejectPwnedPassword(newPassword); err != nil {
 		return err
 	}
-	user, err := s.userRepo.GetUserByID(context.Background(), userID)
-	if err != nil {
-		return err
-	}
-	err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword))
-	if err != nil {
-		return errors.New("invalid old password")
-	}
 	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}
-	updateData := map[string]interface{}{
-		"password_hash": string(newHash),
-		"updated_at":    time.Now(),
+	if s.db != nil {
+		return s.db.Transaction(func(tx *gorm.DB) error {
+			var current models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", userID).Error; err != nil {
+				return err
+			}
+			if err := bcrypt.CompareHashAndPassword([]byte(current.PasswordHash), []byte(oldPassword)); err != nil {
+				return errors.New("invalid old password")
+			}
+			if err := tx.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+				"password_hash": string(newHash),
+				"auth_version":  gorm.Expr("auth_version + 1"),
+				"updated_at":    time.Now(),
+			}).Error; err != nil {
+				return err
+			}
+			now := time.Now().UTC()
+			return tx.Model(&models.AuthSession{}).
+				Where("user_id = ? AND revoked_at IS NULL", userID).
+				Updates(map[string]interface{}{
+					"revoked_at":    now,
+					"revoke_reason": "password_changed",
+					"updated_at":    now,
+				}).Error
+		})
 	}
-	if err := s.userRepo.UpdateUserFields(context.Background(), userID, updateData); err != nil {
+	user, err := s.userRepo.GetUserByID(context.Background(), userID)
+	if err != nil {
 		return err
 	}
-	// REAUDIT-3: смена пароля убивает все живые сессии пользователя.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPassword)); err != nil {
+		return errors.New("invalid old password")
+	}
+	if err := s.userRepo.UpdateUserFields(context.Background(), userID, map[string]interface{}{
+		"password_hash": string(newHash),
+		"updated_at":    time.Now(),
+	}); err != nil {
+		return err
+	}
 	cache.RevokeUserSessions(context.Background(), userID.String())
 	return nil
 }
@@ -154,10 +177,11 @@ func enforceUserQuota(tx *gorm.DB, tenantID uuid.UUID) error {
 	limit := tenant.MaxUsers
 	if tenant.PlanID != nil {
 		var plan models.Plan
-		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err == nil && plan.MaxUsers > 0 {
-			if limit <= 0 || plan.MaxUsers < limit {
-				limit = plan.MaxUsers
-			}
+		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err != nil {
+			return err
+		}
+		if plan.MaxUsers > 0 && (limit <= 0 || plan.MaxUsers < limit) {
+			limit = plan.MaxUsers
 		}
 	}
 	if limit <= 0 {
@@ -185,9 +209,10 @@ func enforceSalonQuota(tx *gorm.DB, tenantID uuid.UUID) error {
 	limit := 0
 	if tenant.PlanID != nil {
 		var plan models.Plan
-		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err == nil {
-			limit = plan.MaxSalons
+		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err != nil {
+			return err
 		}
+		limit = plan.MaxSalons
 	}
 	if limit <= 0 {
 		return nil
@@ -269,16 +294,6 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 	// REAUDIT-4: квота лицензий плана. Раньше max_users/max_salons были
 	// метаданными: tenant с max_users=1 спокойно создавал десятки сотрудников.
 	// Проверка и вставка идут в одной транзакции с блокировкой строки tenant'а.
-	if s.db != nil {
-		txErr := s.db.Transaction(func(tx *gorm.DB) error {
-			return enforceUserQuota(tx, tenantID)
-		})
-		if txErr != nil {
-			return nil, txErr
-		}
-	}
-
-	// 4. Создание пользователя
 	user := models.User{
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
@@ -290,7 +305,17 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 		Phone:        req.Phone,
 	}
 
-	if err := s.userRepo.CreateUser(context.Background(), &user); err != nil {
+	if s.db != nil {
+		err = s.db.Transaction(func(tx *gorm.DB) error {
+			if err := enforceUserQuota(tx, tenantID); err != nil {
+				return err
+			}
+			return repository.NewUserRepository(tx).CreateUser(context.Background(), &user)
+		})
+	} else {
+		err = s.userRepo.CreateUser(context.Background(), &user)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -421,6 +446,7 @@ func (s *UserService) UpdateEmployee(callerID, userID, tenantID uuid.UUID, req m
 		return nil, errors.New("permission denied: target is not in your hierarchy")
 	}
 	updateData := map[string]interface{}{"updated_at": time.Now()}
+	securityChanged := false
 	if req.FirstName != "" {
 		updateData["first_name"] = req.FirstName
 	}
@@ -442,6 +468,7 @@ func (s *UserService) UpdateEmployee(callerID, userID, tenantID uuid.UUID, req m
 			return nil, errors.New("permission denied: cannot assign this role")
 		}
 		updateData["role"] = req.Role
+		securityChanged = true
 	}
 	if req.ManagedBy != nil {
 		if callerRole == "" {
@@ -454,16 +481,22 @@ func (s *UserService) UpdateEmployee(callerID, userID, tenantID uuid.UUID, req m
 			return nil, err
 		}
 		updateData["managed_by"] = req.ManagedBy
+		securityChanged = true
 	}
 
+	if securityChanged && s.db != nil {
+		updateData["auth_version"] = gorm.Expr("auth_version + 1")
+	}
 	if err := s.userRepo.UpdateUserFields(context.Background(), userID, updateData); err != nil {
 		return nil, err
 	}
-	// REAUDIT-3: смена роли/менеджера обесценивает ранее выданные токены.
-	if _, roleChanged := updateData["role"]; roleChanged {
-		cache.RevokeUserSessions(context.Background(), userID.String())
-	}
-	if _, mgrChanged := updateData["managed_by"]; mgrChanged {
+	if securityChanged && s.db != nil {
+		if s.db.Migrator().HasTable(&models.AuthSession{}) {
+			if err := repository.NewAuthSessionRepository(s.db).RevokeAllForUser(context.Background(), userID, "security_change"); err != nil {
+				return nil, err
+			}
+		}
+	} else if securityChanged {
 		cache.RevokeUserSessions(context.Background(), userID.String())
 	}
 	return s.userRepo.GetUserByID(context.Background(), userID)

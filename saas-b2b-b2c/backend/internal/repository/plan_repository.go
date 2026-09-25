@@ -22,6 +22,8 @@ type planRepo struct{ db *gorm.DB }
 
 func NewPlanRepository(db *gorm.DB) PlanRepository { return &planRepo{db: db} }
 
+func (r *planRepo) Database() *gorm.DB { return r.db }
+
 func (r *planRepo) Create(ctx context.Context, p *models.Plan) error {
 	return r.db.WithContext(ctx).Create(p).Error
 }

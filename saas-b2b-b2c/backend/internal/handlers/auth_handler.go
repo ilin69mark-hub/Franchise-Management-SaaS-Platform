@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"franchise-saas-backend/internal/middleware"
 	"franchise-saas-backend/internal/models"
@@ -118,6 +120,14 @@ func setAuthCookies(c *gin.Context, accessToken, refreshToken string) {
 	}
 }
 
+func clearAuthCookies(c *gin.Context) {
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie(middleware.CSRFCookie, "", -1, "/", "", isSecure, false)
+}
+
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req models.UserLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -155,10 +165,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// ИСПРАВЛЕНО: Передаем user.SalonID (чтобы токен содержал актуальный салон)
-	token, refresh, err := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
+	token, refresh, err := h.service.IssueSession(c.Request.Context(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
 	setAuthCookies(c, token, refresh)
@@ -171,18 +180,17 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// fallback на cookie если тело пустое
 	if req.RefreshToken == "" {
 		if cookie, err := c.Cookie("refresh_token"); err == nil {
 			req.RefreshToken = cookie
 		}
 	}
-	access, refresh, err := h.service.RefreshTokens(req.RefreshToken)
+	access, refresh, err := h.service.RefreshTokensWithContext(c.Request.Context(), req.RefreshToken)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
@@ -207,53 +215,62 @@ func (h *AuthHandler) GetCSRF(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "csrf refreshed"})
 }
 
-// Logout - отзывает refresh token (по jti) и чистит cookie + отзывает access jti если передан.
-// F1: ошибки отзыва больше не глотаются — клиент должен знать,
-// если серверная инвалидация не удалась (иначе logout-театр при падении Redis).
 func (h *AuthHandler) Logout(c *gin.Context) {
+	clearAuthCookies(c)
+
 	var req struct {
 		RefreshToken string `json:"refresh_token"`
 	}
-	_ = c.ShouldBindJSON(&req)
-	if req.RefreshToken == "" {
-		if cookie, err := c.Cookie("refresh_token"); err == nil {
-			req.RefreshToken = cookie
-		}
-	}
-	var revokeErrs []string
-	// отозвать access jti из Authorization/cookie для мгновенной инвалидации
-	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
-		if err := h.service.RevokeAccessToken(authHeader); err != nil {
-			log.Printf("Logout: RevokeAccessToken failed: %v", err)
-			revokeErrs = append(revokeErrs, "access revocation failed")
-		}
-	} else if cookie, err := c.Cookie("access_token"); err == nil && cookie != "" {
-		if err := h.service.RevokeAccessToken("Bearer " + cookie); err != nil {
-			log.Printf("Logout: RevokeAccessToken failed: %v", err)
-			revokeErrs = append(revokeErrs, "access revocation failed")
-		}
-	}
-	if req.RefreshToken != "" {
-		if err := h.service.Logout(req.RefreshToken); err != nil {
-			log.Printf("Logout: refresh revocation failed: %v", err)
-			revokeErrs = append(revokeErrs, "refresh revocation failed")
-		}
-	}
-	// clear cookies всегда — локальный выход гарантирован.
-	// F7: Secure обязан совпадать с установленным (иначе https-cookie не сотрётся).
-	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("access_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie(middleware.CSRFCookie, "", -1, "/", "", isSecure, false)
-
-	if len(revokeErrs) > 0 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"message": "Logged out locally",
-			"warning": "server-side revocation failed, session may still be usable until expiry",
-			"errors":  revokeErrs,
-		})
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	refreshToken := strings.TrimSpace(req.RefreshToken)
+	if refreshToken == "" {
+		if cookie, err := c.Cookie("refresh_token"); err == nil {
+			refreshToken = strings.TrimSpace(cookie)
+		}
+	}
+	accessToken := ""
+	if header := strings.TrimSpace(c.GetHeader("Authorization")); strings.HasPrefix(strings.ToUpper(header), "BEARER ") {
+		accessToken = strings.TrimSpace(header[7:])
+	}
+	if accessToken == "" {
+		if cookie, err := c.Cookie("access_token"); err == nil {
+			accessToken = strings.TrimSpace(cookie)
+		}
+	}
+
+	revoke := func(raw string) (bool, error) {
+		if raw == "" {
+			return false, nil
+		}
+		if h.service == nil {
+			return true, errors.New("auth service is unavailable")
+		}
+		return h.service.LogoutToken(c.Request.Context(), raw)
+	}
+	recognized := false
+	if refreshToken != "" {
+		var err error
+		recognized, err = revoke(refreshToken)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"message": "Logged out locally",
+				"warning": "server-side session revocation failed",
+			})
+			return
+		}
+	}
+	if !recognized && accessToken != "" {
+		if _, err := revoke(accessToken); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"message": "Logged out locally",
+				"warning": "server-side session revocation failed",
+			})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
