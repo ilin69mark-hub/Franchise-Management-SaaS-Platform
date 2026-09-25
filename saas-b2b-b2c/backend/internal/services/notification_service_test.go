@@ -12,11 +12,13 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+var testNotifyUserID = uuid.New()
+
 type MockNotificationRepo struct {
 	mock.Mock
 }
 
-func (m *MockNotificationRepo) GetByTenant(ctx context.Context, tenantID uuid.UUID, limit int) ([]models.Notification, error) {
+func (m *MockNotificationRepo) GetByTenant(ctx context.Context, tenantID, userID uuid.UUID, limit int) ([]models.Notification, error) {
 	args := m.Called(ctx, tenantID, limit)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -51,7 +53,7 @@ func TestNotificationService_GetNotifications_Success(t *testing.T) {
 
 	mockRepo.On("GetByTenant", mock.Anything, tenantID, 20).Return(expected, nil)
 
-	result, err := service.GetNotifications(context.Background(), tenantID)
+	result, err := service.GetNotifications(context.Background(), tenantID, testNotifyUserID)
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 2)
@@ -66,7 +68,7 @@ func TestNotificationService_GetNotifications_Empty(t *testing.T) {
 
 	mockRepo.On("GetByTenant", mock.Anything, tenantID, 20).Return([]models.Notification{}, nil)
 
-	result, err := service.GetNotifications(context.Background(), tenantID)
+	result, err := service.GetNotifications(context.Background(), tenantID, testNotifyUserID)
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 0)
@@ -81,7 +83,7 @@ func TestNotificationService_GetNotifications_Error(t *testing.T) {
 
 	mockRepo.On("GetByTenant", mock.Anything, tenantID, 20).Return(nil, errors.New("db error"))
 
-	result, err := service.GetNotifications(context.Background(), tenantID)
+	result, err := service.GetNotifications(context.Background(), tenantID, testNotifyUserID)
 
 	assert.Error(t, err)
 	assert.Nil(t, result)

@@ -49,14 +49,23 @@ func (r *goalRepo) GetUserTenant(ctx context.Context, userID string) (*uuid.UUID
 	if err != nil {
 		return nil, err
 	}
-	var tenantID *uuid.UUID
-	if err := r.db.WithContext(ctx).Table("users").Select("tenant_id").Where("id = ?", uid).Scan(&tenantID).Error; err != nil {
+	// REAUDIT-4: Scan в *uuid.UUID на Postgres отдаёт "converting driver.Value
+	// type string ... to a uint8", из-за чего создание целей падало 500.
+	// Читаем сканируемую строку и парсим UUID сами.
+	var row struct {
+		TenantID *string `gorm:"column:tenant_id"`
+	}
+	if err := r.db.WithContext(ctx).Table("users").Select("tenant_id").Where("id = ?", uid).Take(&row).Error; err != nil {
 		return nil, err
 	}
-	if tenantID == nil {
+	if row.TenantID == nil || *row.TenantID == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
-	return tenantID, nil
+	parsed, err := uuid.Parse(*row.TenantID)
+	if err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &parsed, nil
 }
 
 func (r *goalRepo) GetByID(ctx context.Context, id string) (*models.Goal, error) {

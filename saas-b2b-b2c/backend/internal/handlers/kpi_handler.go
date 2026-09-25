@@ -545,7 +545,12 @@ func (h *KPIHandler) GetSalesRepHistory(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
-	if caller.Role != models.RoleSuperAdmin && caller.TenantID != nil {
+	// REAUDIT-3: nil tenant = отказ (раньше проверка просто пропускалась).
+	if caller.Role != models.RoleSuperAdmin {
+		if caller.TenantID == nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden: tenant required"})
+			return
+		}
 		if targetUser.TenantID == nil || *targetUser.TenantID != *caller.TenantID {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
@@ -1095,7 +1100,8 @@ func (h *KPIHandler) GetFranchiserAlerts(c *gin.Context) {
 	if user.TenantID != nil {
 		tenantID = *user.TenantID
 	}
-	data, err := notifSvc.GetNotifications(c.Request.Context(), tenantID)
+	// REAUDIT-4: только персональные уведомления + broadcast'ы сети
+	data, err := notifSvc.GetNotifications(c.Request.Context(), tenantID, user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1130,7 +1136,17 @@ func (h *KPIHandler) GetManagerDynamics(c *gin.Context) {
 	months := c.DefaultQuery("months", "6")
 	data, err := h.kpiSvc.GetManagerDynamics(c.Request.Context(), user.ID.String(), managerID, months)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// REAUDIT-3: чужая цель = 403, отсутствующая = 404 (раньше всё было 500).
+		msg := err.Error()
+		if strings.Contains(msg, "another tenant") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "manager not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": msg})
 		return
 	}
 	c.JSON(http.StatusOK, data)
@@ -1484,6 +1500,11 @@ func (h *KPIHandler) SendReport(c *gin.Context) {
 	}
 	err = h.kpiSvc.SendReport(c.Request.Context(), user.ID.String(), req.ReportID, req.Recipients)
 	if err != nil {
+		// REAUDIT-3: чужой/несуществующий отчёт — 404 (не 500 и не phantom success).
+		if strings.Contains(err.Error(), "report not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "report not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -170,7 +170,7 @@ entries:
     no_expiry: true
   - id: "E13"
     file: "saas-b2b-b2c/backend/internal/services/auth_service.go"
-    line: 39
+    line: 42
     pattern: "CAPTCHA_SECRET"
     title: "CAPTCHA-провайдер заводит человек (fail-open без ключей)"
     risk: "Medium"

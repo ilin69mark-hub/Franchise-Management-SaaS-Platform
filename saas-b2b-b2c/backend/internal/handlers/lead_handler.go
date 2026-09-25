@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"franchise-saas-backend/internal/models"
@@ -47,6 +48,13 @@ func (h *LeadHandler) CreateLead(c *gin.Context) {
 	var req models.CreateLeadRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// REAUDIT-4: лид привязан к салону менеджера; отсутствие салона — ошибка
+	// запроса, а не внутренняя ошибка сервера.
+	if currentUser.SalonID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user is not linked to a salon"})
 		return
 	}
 
@@ -106,6 +114,11 @@ func (h *LeadHandler) UpdateLeadStatus(c *gin.Context) {
 	}
 
 	if err := h.service.UpdateStatus(c.Request.Context(), currentUser.ID, leadID, req.Status); err != nil {
+		// REAUDIT-4: недопустимый статус/переход — ошибка запроса (400), не 500.
+		if errors.Is(err, services.ErrInvalidLeadStatus) || errors.Is(err, services.ErrInvalidLeadTransition) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

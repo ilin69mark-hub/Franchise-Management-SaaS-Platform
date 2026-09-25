@@ -71,6 +71,23 @@ func applyFilters(query *gorm.DB, status, priority string, isArchive bool) *gorm
 	return query
 }
 
+// FindTenant — чек-листы конкретного tenant'а (REAUDIT-3: FindAll отдавал все
+// сети всем авторизованным пользователям, включая чужие tenant_id).
+func (r *ChecklistRepository) FindTenant(ctx context.Context, tenantID uuid.UUID, status, priority string) ([]models.Checklist, error) {
+	var checklists []models.Checklist
+	query := r.db.WithContext(ctx).Where("tenant_id = ?", tenantID)
+
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if priority != "" {
+		query = query.Where("priority = ?", priority)
+	}
+
+	err := query.Order("created_at desc").Find(&checklists).Error
+	return checklists, err
+}
+
 // FindAll (старый метод, оставим для совместимости)
 func (r *ChecklistRepository) FindAll(ctx context.Context, status, priority string) ([]models.Checklist, error) {
 	var checklists []models.Checklist

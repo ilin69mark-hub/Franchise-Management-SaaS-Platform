@@ -20,10 +20,15 @@ func (r *NotificationRepository) Create(ctx context.Context, n *models.Notificat
 	return r.db.WithContext(ctx).Create(n).Error
 }
 
-func (r *NotificationRepository) GetByTenant(ctx context.Context, tenantID uuid.UUID, limit int) ([]models.Notification, error) {
+// GetByTenant — REAUDIT-4: возвращает ТОЛЬКО персональные уведомления
+// пользователя плюс явные broadcast'ы (user_id IS NULL). Раньше фильтр был
+// только по tenant_id, поэтому любой сотрудник сети читал чужие личные
+// уведомления (доказано живым прогоном: dealer увидел 'PRIVATE OF A').
+func (r *NotificationRepository) GetByTenant(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, limit int) ([]models.Notification, error) {
 	var notifications []models.Notification
 	err := r.db.WithContext(ctx).
 		Where("tenant_id = ?", tenantID).
+		Where("(user_id = ? OR user_id IS NULL)", userID).
 		Order("created_at desc").
 		Limit(limit).
 		Find(&notifications).Error

@@ -129,6 +129,25 @@ func (s *AlertService) MarkAsReadNotification(ctx context.Context, userID, alert
 		Update("is_read", true).Error
 }
 
+// createNotificationOnce — REAUDIT-4: идемпотентная вставка. Раньше каждый GET
+// /alerts генерировал новые уведомления заново (без dedup-ключа), поэтому один
+// и тот же просроченный лид плодил уведомления каждые пару минут.
+func (s *AlertService) createNotificationOnce(ctx context.Context, n *models.Notification, dedupKey string) error {
+	if n == nil {
+		return errors.New("nil notification")
+	}
+	var existing int64
+	if err := s.db.WithContext(ctx).Model(&models.Notification{}).
+		Where("user_id = ? AND title = ? AND data->>'dedup_key' = ?", n.UserID, n.Title, dedupKey).
+		Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	return s.db.WithContext(ctx).Create(n).Error
+}
+
 func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UUID) error {
 	var user models.User
 	if err := s.db.First(&user, userID).Error; err != nil {
@@ -152,7 +171,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		alert := models.Notification{
 			ID:        uuid.New(),
 			UserID:    &userID,
-			TenantID:  salonID,
+			TenantID:  tenantIDPtr(user.TenantID),
 			Type:      models.NotificationTypeSystem,
 			Title:     "Просроченный замер",
 			Message:   "Замер для " + lead.FullName + " просрочен более 3 дней",
@@ -160,7 +179,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 			Data:      mustJson(map[string]string{"lead_id": lead.ID.String(), "type": "overdue_measurement"}),
 			CreatedAt: now,
 		}
-		s.db.Create(&alert)
+		_ = s.createNotificationOnce(ctx, &alert, "overdue_measurement:"+lead.ID.String())
 	}
 
 	fiveDaysAgo := now.AddDate(0, 0, -5)
@@ -173,7 +192,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 		alert := models.Notification{
 			ID:        uuid.New(),
 			UserID:    &userID,
-			TenantID:  salonID,
+			TenantID:  tenantIDPtr(user.TenantID),
 			Type:      models.NotificationTypeSystem,
 			Title:     "Брошенное КП",
 			Message:   "КП для " + lead.FullName + " без ответа более 5 дней",
@@ -181,7 +200,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 			Data:      mustJson(map[string]string{"lead_id": lead.ID.String(), "type": "abandoned_kp"}),
 			CreatedAt: now,
 		}
-		s.db.Create(&alert)
+		_ = s.createNotificationOnce(ctx, &alert, "abandoned_kp:"+lead.ID.String())
 	}
 
 	var avgConversion float64
@@ -202,7 +221,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 			alert := models.Notification{
 				ID:        uuid.New(),
 				UserID:    &userID,
-				TenantID:  salonID,
+				TenantID:  tenantIDPtr(user.TenantID),
 				Type:      models.NotificationTypeSystem,
 				Title:     "Падение конверсии",
 				Message:   "Конверсия упала на " + formatFloat(drop) + " относительно среднего",
@@ -210,7 +229,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 				Data:      mustJson(map[string]string{"type": "conversion_drop"}),
 				CreatedAt: now,
 			}
-			s.db.Create(&alert)
+			_ = s.createNotificationOnce(ctx, &alert, "conversion_drop:"+now.Format("2006-01-02"))
 		}
 	}
 
@@ -234,7 +253,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 			alert := models.Notification{
 				ID:        uuid.New(),
 				UserID:    &userID,
-				TenantID:  salonID,
+				TenantID:  tenantIDPtr(user.TenantID),
 				Type:      models.NotificationTypeSystem,
 				Title:     "Падение трафика",
 				Message:   "Трафик упал на " + formatFloat(drop) + " относительно среднего",
@@ -242,7 +261,7 @@ func (s *AlertService) GenerateAlertsForUser(ctx context.Context, userID uuid.UU
 				Data:      mustJson(map[string]string{"type": "traffic_drop"}),
 				CreatedAt: now,
 			}
-			s.db.Create(&alert)
+			_ = s.createNotificationOnce(ctx, &alert, "traffic_drop:"+now.Format("2006-01-02"))
 		}
 	}
 
@@ -256,4 +275,12 @@ func mustJson(v interface{}) string {
 
 func formatFloat(v float64) string {
 	return strconv.FormatFloat(v, 'f', 0, 64) + "%"
+}
+
+// tenantIDPtr — безопасно приводит *uuid.UUID к значению (nil → uuid.Nil).
+func tenantIDPtr(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }

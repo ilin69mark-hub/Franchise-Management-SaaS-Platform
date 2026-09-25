@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/services"
@@ -133,7 +134,20 @@ func (h *UserHandler) CreateEmployee(c *gin.Context) {
 	user, err := h.service.CreateEmployee(req, targetTenantID, currentUser.ID, string(currentUser.Role))
 	if err != nil {
 		log.Printf("ERROR CreateEmployee: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// REAUDIT-3: отказ по правам/дубль email = 403/409, а не 500.
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "permission denied"), strings.Contains(msg, "invalid role"):
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		case strings.Contains(msg, "limit reached"):
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": msg})
+		case strings.Contains(msg, "already"), strings.Contains(msg, "duplicate"):
+			// REAUDIT-4: нейтральный ответ (409 без признака "email занят" —
+			// иначе сотрудник любого тенанта перечислял чужие email'ы).
+			c.JSON(http.StatusConflict, gin.H{"error": "could not create employee"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "could not create employee"})
+		}
 		return
 	}
 	c.JSON(http.StatusCreated, user)
@@ -164,8 +178,17 @@ func (h *UserHandler) UpdateEmployee(c *gin.Context) {
 		return
 	}
 
-	user, err := h.service.UpdateEmployee(userID, tid, req, string(currentUser.Role))
+	user, err := h.service.UpdateEmployee(currentUser.ID, userID, tid, req, string(currentUser.Role))
 	if err != nil {
+		// REAUDIT-3: отказ по правам = 403, а не 500.
+		if strings.Contains(err.Error(), "permission denied") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -192,7 +215,16 @@ func (h *UserHandler) DeleteEmployee(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.DeleteEmployee(userID, tid, string(currentUser.Role)); err != nil {
+	if err := h.service.DeleteEmployee(currentUser.ID, userID, tid, string(currentUser.Role)); err != nil {
+		// REAUDIT-3: отказ по правам = 403, отсутствие цели = 404.
+		if strings.Contains(err.Error(), "permission denied") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if strings.Contains(err.Error(), "not found") {
+			c.JSON(http.StatusNotFound, gin.H{"error": "employee not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -314,7 +346,8 @@ func (h *UserHandler) UpdateSalon(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Salon not found"})
 		return
 	}
-	if currentUser.Role != "super_admin" && currentUser.TenantID != nil && salonCheck.TenantID != *currentUser.TenantID {
+	// REAUDIT-3: nil tenant = отказ (раньше проверка просто пропускалась).
+	if currentUser.Role != "super_admin" && (currentUser.TenantID == nil || salonCheck.TenantID != *currentUser.TenantID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -328,8 +361,13 @@ func (h *UserHandler) UpdateSalon(c *gin.Context) {
 		return
 	}
 
-	salon, err := h.service.UpdateSalon(c.Request.Context(), salonID, req.Name, req.Address)
+	salon, err := h.service.UpdateSalon(c.Request.Context(), salonID, callerTenantID(currentUser), req.Name, req.Address)
 	if err != nil {
+		// REAUDIT-3: tenant-скоуп даёт 403, а не 500.
+		if strings.Contains(err.Error(), "forbidden") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -350,14 +388,30 @@ func (h *UserHandler) DeleteSalon(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Salon not found"})
 		return
 	}
-	if currentUser.Role != "super_admin" && currentUser.TenantID != nil && salonCheck.TenantID != *currentUser.TenantID {
+	// REAUDIT-3: nil tenant = отказ (раньше проверка просто пропускалась).
+	if currentUser.Role != "super_admin" && (currentUser.TenantID == nil || salonCheck.TenantID != *currentUser.TenantID) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 
-	if err := h.service.DeleteSalon(c.Request.Context(), salonID); err != nil {
+	if err := h.service.DeleteSalon(c.Request.Context(), salonID, callerTenantID(currentUser)); err != nil {
+		// REAUDIT-3: tenant-скоуп даёт 403, а не 500.
+		if strings.Contains(err.Error(), "forbidden") {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Salon deleted"})
+}
+
+// callerTenantID — tenant вызывающего; uuid.Nil = нет tenant (super_admin/legacy),
+// и тогда tenant-скоуп в сервисе трактуется как "проверять нечего" и вызывающий
+// обязан быть super_admin (это проверяет RequireRole).
+func callerTenantID(user *models.User) uuid.UUID {
+	if user.TenantID == nil {
+		return uuid.Nil
+	}
+	return *user.TenantID
 }

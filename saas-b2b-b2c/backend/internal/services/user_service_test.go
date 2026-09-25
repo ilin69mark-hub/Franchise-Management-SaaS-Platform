@@ -391,7 +391,7 @@ func TestUserService_UpdateEmployee_Success(t *testing.T) {
 	mockRepo.On("UpdateUserFields", mock.Anything, userID, mock.Anything).Return(nil)
 	mockRepo.On("GetUserByID", mock.Anything, userID).Return(&models.User{ID: userID, FirstName: "John"}, nil)
 
-	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleDealer))
+	user, err := service.UpdateEmployee(userID, userID, tenantID, req, string(models.RoleDealer))
 
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
@@ -408,7 +408,7 @@ func TestUserService_UpdateEmployee_NotFound(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
 
-	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleFranchisor))
+	user, err := service.UpdateEmployee(userID, userID, tenantID, req, string(models.RoleFranchisor))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -427,7 +427,7 @@ func TestUserService_UpdateEmployee_InvalidRole(t *testing.T) {
 	// S8: super_admin грузит цель напрямую через GetUserByID.
 	mockRepo.On("GetUserByID", mock.Anything, userID).Return(&models.User{ID: userID}, nil)
 
-	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleSuperAdmin))
+	user, err := service.UpdateEmployee(userID, userID, tenantID, req, string(models.RoleSuperAdmin))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid role")
@@ -445,7 +445,7 @@ func TestUserService_DeleteEmployee_Success(t *testing.T) {
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealer}, nil)
 	mockRepo.On("DeleteUser", mock.Anything, userID).Return(nil)
 
-	err := service.DeleteEmployee(userID, tenantID, string(models.RoleFranchisor))
+	err := service.DeleteEmployee(userID, userID, tenantID, string(models.RoleFranchisor))
 
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
@@ -460,7 +460,7 @@ func TestUserService_DeleteEmployee_NotFound(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(nil, errors.New("not found"))
 
-	err := service.DeleteEmployee(userID, tenantID, string(models.RoleFranchisor))
+	err := service.DeleteEmployee(userID, userID, tenantID, string(models.RoleFranchisor))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -477,7 +477,7 @@ func TestUserService_UpdateEmployee_EscalationDenied(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealerManager}, nil)
 
-	user, err := service.UpdateEmployee(userID, tenantID, req, string(models.RoleDealer))
+	user, err := service.UpdateEmployee(userID, userID, tenantID, req, string(models.RoleDealer))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
@@ -494,7 +494,7 @@ func TestUserService_DeleteEmployee_EscalationDenied(t *testing.T) {
 
 	mockRepo.On("FindUserByIDAndTenant", mock.Anything, userID, tenantID).Return(&models.User{ID: userID, Role: models.RoleDealer}, nil)
 
-	err := service.DeleteEmployee(userID, tenantID, string(models.RoleDealerManager))
+	err := service.DeleteEmployee(userID, userID, tenantID, string(models.RoleDealerManager))
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
@@ -522,7 +522,7 @@ func TestUserService_SuperAdminManagesAnyTenant(t *testing.T) {
 	mockRepo.On("GetUserByID", mock.Anything, userID).Return(target, nil)
 	mockRepo.On("UpdateUserFields", mock.Anything, userID, mock.Anything).Return(nil)
 
-	updated, err := service.UpdateEmployee(userID, uuid.Nil, models.UpdateEmployeeRequest{FirstName: "SA"}, string(models.RoleSuperAdmin))
+	updated, err := service.UpdateEmployee(uuid.New(), userID, uuid.Nil, models.UpdateEmployeeRequest{FirstName: "SA"}, string(models.RoleSuperAdmin))
 
 	require.NoError(t, err, "S8: super_admin без сети управляет любым tenant")
 	require.NotNil(t, updated)
@@ -540,6 +540,6 @@ func TestUserService_SuperAdminDeletesAnyTenant(t *testing.T) {
 	mockRepo.On("GetUserByID", mock.Anything, userID).Return(target, nil)
 	mockRepo.On("DeleteUser", mock.Anything, userID).Return(nil)
 
-	require.NoError(t, service.DeleteEmployee(userID, uuid.Nil, string(models.RoleSuperAdmin)))
+	require.NoError(t, service.DeleteEmployee(uuid.New(), userID, uuid.Nil, string(models.RoleSuperAdmin)))
 	mockRepo.AssertExpectations(t)
 }

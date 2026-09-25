@@ -3,6 +3,8 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 	"gorm.io/driver/postgres"
@@ -50,8 +52,15 @@ func ConnectDB() (*gorm.DB, error) {
 
 	log.Println("Database migrated")
 
-	if err := SeedUsers(DB); err != nil {
-		log.Printf("Warning: SeedUsers failed: %v", err)
+	// REAUDIT-4: SEED_DEMO больше не перекрывает production-режим. Раньше гейт
+	// жил только в main() (после ConnectDB), поэтому APP_ENV=production +
+	// SEED_DEMO=true всё равно создавал демо-аккаунты (доказано в аудите).
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("SEED_DEMO")), "true") && !seedAllowedInThisEnv() {
+		if err := SeedUsers(DB); err != nil {
+			log.Printf("Warning: SeedUsers failed: %v", err)
+		}
+	} else {
+		log.Println("demo users skipped (set SEED_DEMO=true to enable)")
 	}
 
 	return DB, nil
@@ -163,7 +172,11 @@ func migrateUsers(db *gorm.DB) error {
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_phone VARCHAR(50)`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_email_visible BOOLEAN DEFAULT TRUE`)
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_phone_visible BOOLEAN DEFAULT TRUE`)
-	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_whatsapp VARCHAR(50)`)
+	// W1: каноническое имя — contacts_whatsapp (совпадает с JSON-контрактом
+	// и с SQL-миграциями); модель теперь указывает column: явно.
+	if err := db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_whatsapp VARCHAR(50)`).Error; err != nil {
+		return err
+	}
 	db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS contacts_working_hours VARCHAR(100)`)
 	// S4: email уникален регистронезависимо (иначе User@x и user@x — два аккаунта,
 	// один lockout-ключ на двоих). Старый UNIQUE(email) остаётся как есть.
@@ -302,12 +315,17 @@ func migrateChecklists(db *gorm.DB) error {
 			status VARCHAR(50) DEFAULT 'pending',
 			priority VARCHAR(50) DEFAULT 'normal',
 			assigned_to UUID,
+			recurrence VARCHAR(20) DEFAULT '',
 			start_date TIMESTAMP,
 			end_date TIMESTAMP,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`).Error; err != nil {
+		return err
+	}
+	// W1: модель Checklist пишет recurrence, в схеме колонки не было — POST падал 500.
+	if err := db.Exec(`ALTER TABLE checklists ADD COLUMN IF NOT EXISTS recurrence VARCHAR(20) DEFAULT ''`).Error; err != nil {
 		return err
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_checklists_tenant ON checklists(tenant_id)`)
@@ -365,7 +383,8 @@ func migrateInvoices(db *gorm.DB) error {
 		CREATE TABLE IF NOT EXISTS invoices (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			tenant_id UUID NOT NULL,
-			amount DECIMAL(10,2) DEFAULT 0,
+			amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+			description TEXT,
 			status VARCHAR(50) DEFAULT 'pending',
 			due_date TIMESTAMP,
 			paid_at TIMESTAMP,
@@ -373,6 +392,14 @@ func migrateInvoices(db *gorm.DB) error {
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)
 	`).Error; err != nil {
+		return err
+	}
+	// W1: модели раньше не соответствовали схеме — description отсутствовал,
+	// amount был DECIMAL(10,2) против numeric(12,2) в модели.
+	if err := db.Exec(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT`).Error; err != nil {
+		return err
+	}
+	if err := db.Exec(`ALTER TABLE invoices ALTER COLUMN amount TYPE DECIMAL(12,2)`).Error; err != nil {
 		return err
 	}
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id)`)
@@ -931,4 +958,23 @@ func migrateSalonsGeo(db *gorm.DB) error {
 
 func GetDB() *gorm.DB {
 	return DB
+}
+
+// seedAllowedInThisEnv — жёсткий запрет демо-сидов в production. Проверяются
+// все индикаторы prod-режима, потому что в k8s APP_ENV/GIN_MODE не заданы.
+func seedAllowedInThisEnv() bool {
+	if isProdLikeEnv() {
+		return false
+	}
+	return true
+}
+
+func isProdLikeEnv() bool {
+	for _, key := range []string{"APP_ENV", "GIN_MODE", "ENV", "ENVIRONMENT", "NODE_ENV"} {
+		v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+		if v == "production" || v == "prod" || v == "release" {
+			return true
+		}
+	}
+	return false
 }

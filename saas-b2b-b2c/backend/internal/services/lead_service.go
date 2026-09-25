@@ -6,6 +6,7 @@ import (
 	"fmt" // Добавлен импорт для форматирования ошибок
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -54,13 +55,51 @@ func (s *LeadService) GetMyLeads(ctx context.Context, managerID uuid.UUID) ([]mo
 	return s.repo.GetLeadsByManager(ctx, managerID)
 }
 
+// REAUDIT-4: типизированные ошибки статуса, чтобы хендлер отдавал 400, а не 500.
+var (
+	ErrInvalidLeadStatus     = errors.New("invalid lead status")
+	ErrInvalidLeadTransition = errors.New("invalid lead status transition")
+)
+
+// validLeadStatuses — REAUDIT-4: домен статусов лида. Раньше принималась любая
+// строка, а KPI считали "выручку" по набору разных статусов в разных отчётах.
+var validLeadStatuses = map[string]bool{
+	"new": true, "contact": true, "meeting": true, "wait": true,
+	"sale": true, "paid": true, "contract": true,
+	"archive": true, "cancelled": true, "other": true,
+}
+
+// leadStatusTransitions — куда можно переходить (обратный ход запрещён).
+var leadStatusTransitions = map[string]map[string]bool{
+	"new":       {"contact": true, "meeting": true, "archive": true, "cancelled": true, "other": true},
+	"contact":   {"meeting": true, "wait": true, "sale": true, "archive": true, "cancelled": true, "other": true},
+	"meeting":   {"wait": true, "sale": true, "archive": true, "cancelled": true, "other": true},
+	"wait":      {"contact": true, "meeting": true, "sale": true, "archive": true, "cancelled": true, "other": true},
+	"sale":      {"paid": true, "contract": true, "archive": true, "other": true},
+	"paid":      {"archive": true},
+	"contract":  {"paid": true, "archive": true},
+	"cancelled": {"new": true},
+	"archive":   {},
+	"other":     {"archive": true},
+}
+
 func (s *LeadService) UpdateStatus(ctx context.Context, managerID, leadID uuid.UUID, status string) error {
 	// Проверяем, что лид принадлежит этому менеджеру (безопасность)
-	_, err := s.repo.GetLeadByID(ctx, leadID, managerID)
+	lead, err := s.repo.GetLeadByID(ctx, leadID, managerID)
 	if err != nil {
 		return err // Ошибка доступа или лид не найден
 	}
-	return s.repo.UpdateLeadStatus(ctx, leadID, status)
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if !validLeadStatuses[normalized] {
+		return fmt.Errorf("%w: %s", ErrInvalidLeadStatus, status)
+	}
+	current := strings.ToLower(strings.TrimSpace(lead.Status))
+	if allowed, known := leadStatusTransitions[current]; known && current != normalized {
+		if !allowed[normalized] {
+			return fmt.Errorf("%w: %s -> %s", ErrInvalidLeadTransition, current, normalized)
+		}
+	}
+	return s.repo.UpdateLeadStatus(ctx, leadID, normalized)
 }
 
 func (s *LeadService) AddActivity(ctx context.Context, userID, leadID uuid.UUID, req models.AddLeadActivityRequest) error {

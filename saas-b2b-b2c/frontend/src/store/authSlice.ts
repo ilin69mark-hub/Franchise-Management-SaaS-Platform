@@ -44,6 +44,26 @@ function clearUserCache() {
   // Legacy-ключи эпохи токенов — зачищаем при выходе/старте.
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
+  // REAUDIT-4: persisted-сторы тенанта/алертов/задач НЕ очищались, поэтому
+  // следующий пользователь того же браузера видел KPI и алерты предыдущего.
+  [
+    'franchiser-storage',
+    'franchiser-alert-storage',
+    'alert-storage',
+    'dealer-dashboard-storage',
+    'territory-manager-storage',
+    'goal-storage',
+    'saas-metrics-storage',
+    'super-admin-storage',
+    'tenants-storage',
+    'salon_alerts_unread',
+  ].forEach((key) => localStorage.removeItem(key));
+  // in-memory Zustand-сторы
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* noop */
+  }
 }
 
 /* ---------- Асинхронные Thunk‑ы ---------- */
@@ -141,14 +161,15 @@ const authSlice = createSlice({
     });
     builder.addCase(register.fulfilled, (state, { payload }) => {
       state.loading = false;
-      const user = (payload as AuthResponse).user;
+      // REAUDIT-3: бэкенд отвечает одинаковым 202 {"message"} и при успехе,
+      // и при занятом email (защита от перечисления пользователей) — профиля в
+      // ответе может не быть, и это НЕ ошибка. Сессия уже установлена в cookie.
+      const user = (payload as AuthResponse | undefined)?.user;
       if (user && user.id) {
         state.user = user;
         state.isAuthenticated = true;
         cacheUser(user);
       } else {
-        logger.error('User not found in register response', payload);
-        state.error = 'Ошибка регистрации: профиль не получен';
         state.isAuthenticated = false;
       }
     });

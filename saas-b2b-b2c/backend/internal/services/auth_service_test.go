@@ -242,11 +242,16 @@ func TestAuthService_RefreshTokens_StaleChainDenied(t *testing.T) {
 	defer viper.Set("jwt_secret", "")
 
 	svc := NewAuthServiceWithInterface(nil, nil)
+	// REAUDIT-3: refresh-токен помечен token_use=refresh, а абсолютный возраст
+	// цепочки задаётся chain_iat (не переносится при ротации).
 	stale := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": uuid.New().String(),
-		"jti":     uuid.New().String(),
-		"iat":     time.Now().Add(-31 * 24 * time.Hour).Unix(),
-		"exp":     time.Now().Add(time.Hour).Unix(),
+		"token_use": "refresh",
+		"user_id":   uuid.New().String(),
+		"jti":       uuid.New().String(),
+		"cid":       uuid.New().String(),
+		"chain_iat": time.Now().Add(-31 * 24 * time.Hour).Unix(),
+		"iat":       time.Now().Add(-31 * 24 * time.Hour).Unix(),
+		"exp":       time.Now().Add(time.Hour).Unix(),
 	})
 	staleStr, err := stale.SignedString([]byte(secret))
 	require.NoError(t, err)

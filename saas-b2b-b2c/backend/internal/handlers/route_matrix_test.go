@@ -37,13 +37,18 @@ func setupMatrixDB(t *testing.T) *gorm.DB {
 		display_name TEXT, position TEXT, bio TEXT, quote TEXT, avatar_url TEXT,
 		user_status TEXT, available_for_questions INTEGER, achievements TEXT,
 		contacts_email_visible INTEGER, contacts_phone_visible INTEGER,
-		contacts_phone TEXT, contacts_telegram TEXT, contacts_whats_app TEXT,
+		contacts_phone TEXT, contacts_telegram TEXT, contacts_whatsapp TEXT,
 		contacts_working_hours TEXT,
 		deleted_at DATETIME, created_at DATETIME, updated_at DATETIME)`).Error)
 	require.NoError(t, db.Exec(`CREATE TABLE plans (
 		id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
 		name TEXT, price NUMERIC, max_salons INTEGER, max_users INTEGER,
 		created_at DATETIME, updated_at DATETIME, deleted_at DATETIME)`).Error)
+	// REAUDIT-4: квота лицензий читает tenants (+plans), поэтому таблица нужна в фикстуре.
+	require.NoError(t, db.Exec(`CREATE TABLE tenants (
+		id TEXT PRIMARY KEY, name TEXT, status TEXT, plan_id TEXT,
+		max_users INTEGER DEFAULT 10, paid_until DATETIME, grace_period_days INTEGER DEFAULT 7,
+		deleted_at DATETIME, created_at DATETIME, updated_at DATETIME)`).Error)
 	return db
 }
 
@@ -157,6 +162,10 @@ func TestRouteMatrix_UsersDealerCreatesInOwnTenant(t *testing.T) {
 	require.NoError(t, db.Exec(
 		`INSERT INTO users (id, email, role, tenant_id, first_name) VALUES (?, ?, ?, ?, ?)`,
 		dealerID.String(), "dealer@t.com", string(models.RoleDealer), tenantA.String(), "D").Error)
+	// REAUDIT-4: enforceUserQuota читает tenants, поэтому tenant должен существовать.
+	require.NoError(t, db.Exec(
+		`INSERT INTO tenants (id, name, status, max_users) VALUES (?, ?, 'active', 100)`,
+		tenantA.String(), "Tenant A").Error)
 
 	planSvc := services.NewPlanService(repository.NewPlanRepository(db))
 	userSvc := services.NewUserService(db)

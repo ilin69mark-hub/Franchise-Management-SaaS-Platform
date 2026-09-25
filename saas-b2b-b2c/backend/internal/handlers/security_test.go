@@ -73,7 +73,8 @@ func TestSecurity_JWT_ExpiredRejected(t *testing.T) {
 func TestSecurity_JWT_MissingJtiRejected(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	// F12: токен без jti нельзя отозвать — должен быть отвергнут.
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "exp": time.Now().Add(time.Hour).Unix()}
+	// token_use есть, jti намеренно отсутствует — проверяем именно jti-гейт.
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -88,7 +89,7 @@ func TestSecurity_JWT_MissingJtiRejected(t *testing.T) {
 
 func TestSecurity_JWT_ValidAccepted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "jti": "00000000-0000-0000-0000-000000000099", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "role": "dealer", "jti": "00000000-0000-0000-0000-000000000099", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -102,7 +103,7 @@ func TestSecurity_JWT_ValidAccepted(t *testing.T) {
 
 func TestSecurity_AuthMiddleware_TrimSpaceBearer(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000098", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000098", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()
@@ -167,7 +168,7 @@ func TestSecurity_RateLimit_XFFIgnoredWhenTrusted(t *testing.T) {
 
 func TestSecurity_CookieFallback(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	claims := jwt.MapClaims{"user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000097", "exp": time.Now().Add(time.Hour).Unix()}
+	claims := jwt.MapClaims{"token_use": "access", "user_id": "00000000-0000-0000-0000-000000000001", "jti": "00000000-0000-0000-0000-000000000097", "iat": time.Now().Unix(), "exp": time.Now().Add(time.Hour).Unix()}
 	str := signToken(claims, jwt.SigningMethodHS256)
 	w := httptest.NewRecorder()
 	r := gin.New()

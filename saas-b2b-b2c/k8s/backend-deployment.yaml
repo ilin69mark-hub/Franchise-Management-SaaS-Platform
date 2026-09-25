@@ -23,15 +23,22 @@ spec:
           image: ghcr.io/saas-b2b-b2c/franchise-saas/backend:latest
           ports:
             - containerPort: 8080
+          # REAUDIT-4: подключаем ВЕСЬ ConfigMap. Раньше читался только DB_HOST,
+          # поэтому REDIS_ADDR/CORS_ALLOWED_ORIGINS/DB_PORT/DB_NAME не доходили
+          # до приложения: Redis шёл в localhost (нет общего revocation/rate-limit),
+          # CORS и DB_SSLMODE оставались дефолтными.
           envFrom:
             - secretRef:
                 name: franchise-secrets
+            - configMapRef:
+                name: franchise-config
           env:
-            - name: DB_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: franchise-config
-                  key: DB_HOST
+            # Продакшн-режим фиксируется явно: без него isProdEnv()=false,
+            # Gin debug, sslmode=disable и т.п.
+            - name: GIN_MODE
+              value: "release"
+            - name: APP_ENV
+              value: "production"
           livenessProbe:
             httpGet:
               path: /health

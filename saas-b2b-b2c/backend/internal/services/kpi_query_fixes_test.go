@@ -380,9 +380,11 @@ func TestKPIService_SetManagerPlans_CrossTenantSkipped(t *testing.T) {
 	require.Error(t, err, "частичный батч — не молчаливый успех")
 	require.Contains(t, err.Error(), "skipped 1")
 
+	// REAUDIT-4: батч атомарен — если хоть один план невалиден, не пишется НИЧЕГО
+	// (раньше валидная часть применялась, а хендлер отвечал ошибкой).
 	var n int64
 	require.NoError(t, db.Table("goals").Count(&n).Error)
-	require.Equal(t, int64(1), n, "валидный план применён")
+	require.Equal(t, int64(0), n, "частичное применение запрещено")
 }
 
 func TestKPIService_GetFranchiserDealers_TenantIsolation(t *testing.T) {

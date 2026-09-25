@@ -30,6 +30,9 @@ import (
 // пользователя. Хендлер маппит его в HTTP 403.
 var ErrUserBlocked = errors.New("account is blocked")
 
+// ErrTenantSubscriptionExpired - оплаченный период истёк (включая grace).
+var ErrTenantSubscriptionExpired = errors.New("tenant subscription expired")
+
 // ErrCaptchaRequired - после captcha-порога вход без валидного токена запрещён.
 var ErrCaptchaRequired = errors.New("captcha required")
 
@@ -126,6 +129,20 @@ func (s *AuthService) checkTenantAccess(ctx context.Context, user *models.User) 
 	}
 	if tenantAccessDenied(tenant.Status) {
 		return ErrTenantBlocked
+	}
+	// REAUDIT-3: оплаченный период — тоже условие доступа. Раньше paid_until/
+	// grace_period_days вообще не проверялись: истёкший tenant продолжал входить.
+	// REAUDIT-4: grace_period_days <= 0 означает "без отсрочки" (раньше
+	// подставлялось 7 дней, и нулевой лимит не соблюдался). paid_until IS NULL —
+	// сознательно «безлимит» (так создаются новые tenant'ы до первой оплаты).
+	if tenant.PaidUntil != nil {
+		grace := 0
+		if tenant.GracePeriodDays > 0 {
+			grace = tenant.GracePeriodDays
+		}
+		if time.Now().After(tenant.PaidUntil.AddDate(0, 0, grace)) {
+			return ErrTenantSubscriptionExpired
+		}
 	}
 	return nil
 }
@@ -313,10 +330,14 @@ const (
 type AuthService struct {
 	userRepo   repository.UserRepositoryInterface
 	tenantRepo repository.TenantRepositoryInterface
+	// db — nil в юнит-тестах с моками; в проде нужен для транзакционной
+	// регистрации (tenant+owner атомарно).
+	db *gorm.DB
 }
 
 func NewAuthService(db *gorm.DB) *AuthService {
 	return &AuthService{
+		db:         db,
 		userRepo:   repository.NewUserRepository(db),
 		tenantRepo: repository.NewTenantRepository(db),
 	}
@@ -355,6 +376,35 @@ func (s *AuthService) CreateUserWithTenant(user *models.User, password string, c
 	tenant := &models.Tenant{Name: companyName, Status: "active"}
 	// RE-AUDIT: берём ID из возвращённого значения, а не из мутации входа
 	// (моки/обёртки ID не проставляют — компенсация чистила бы Nil).
+	// REAUDIT-4: в проде tenant+owner создаются в одной транзакции (раньше
+	// tenant коммитился первым, и падение вставки пользователя оставляло
+	// «сеть без владельца»). В юнит-тестах БД нет — работает старый путь
+	// с компенсацией на моках.
+	if s.db != nil {
+		createdTenant := &models.Tenant{}
+		if err := s.db.Transaction(func(tx *gorm.DB) error {
+			created, err := repository.NewTenantRepository(tx).CreateTenant(ctx, tenant)
+			if err != nil {
+				return err
+			}
+			if created == nil {
+				return errors.New("failed to create company: empty tenant")
+			}
+			createdTenant = created
+			user.TenantID = &createdTenant.ID
+			user.Role = models.RoleFranchisor
+			user.CreatedAt = time.Now()
+			user.UpdatedAt = time.Now()
+			return repository.NewUserRepository(tx).CreateUser(ctx, user)
+		}); err != nil {
+			if isDuplicateKeyErr(err) {
+				return nil, ErrEmailTaken
+			}
+			return nil, fmt.Errorf("failed to register franchise owner: %w", err)
+		}
+		return user, nil
+	}
+
 	createdTenant, err := s.tenantRepo.CreateTenant(ctx, tenant)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create company: %w", err)
@@ -485,11 +535,11 @@ func (s *AuthService) Authenticate(ctx context.Context, email, password, clientI
 
 // GenerateTokens - Генерация токенов (новая цепочка: cid = свежий uuid).
 func (s *AuthService) GenerateTokens(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID) (string, string, error) {
-	return s.generateTokensWithChain(userID, email, role, tenantID, salonID, uuid.New().String())
+	return s.generateTokensWithChain(userID, email, role, tenantID, salonID, uuid.New().String(), time.Now().Unix())
 }
 
 // generateTokensWithChain — ротация в рамках той же цепочки (cid carried).
-func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID, chainID string) (string, string, error) {
+func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, role models.Role, tenantID *uuid.UUID, salonID *uuid.UUID, chainID string, chainStart int64) (string, string, error) {
 	secret := viper.GetString("jwt_secret")
 	if secret == "" {
 		return "", "", errors.New("jwt_secret is not configured")
@@ -521,6 +571,7 @@ func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, ro
 	}
 	now := time.Now()
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"token_use": "access",
 		"user_id":   userID.String(),
 		"email":     email,
 		"role":      role,
@@ -536,11 +587,15 @@ func (s *AuthService) generateTokensWithChain(userID uuid.UUID, email string, ro
 		chainID = jti
 	}
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id": userID.String(),
-		"jti":     jti,
-		"cid":     chainID,
-		"iat":     now.Unix(),
-		"exp":     now.Add(refreshLifetime).Unix(),
+		"token_use": "refresh",
+		"user_id":   userID.String(),
+		"jti":       jti,
+		"cid":       chainID,
+		// REAUDIT-3: chain_iat — начало цепочки, не переносится при ротации.
+		// Раньше iat перезаписывался, и «потолок 30 дней» можно было продлевать.
+		"chain_iat": chainStart,
+		"iat":       now.Unix(),
+		"exp":       now.Add(refreshLifetime).Unix(),
 	})
 
 	accessStr, err := accessToken.SignedString([]byte(secret))
@@ -582,16 +637,37 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 		return "", "", errors.New("user_id not found in token")
 	}
 
+	// REAUDIT-3: access-токен нельзя обменять на refresh (иначе 24h → 7d).
+	if use, _ := claims["token_use"].(string); use != "refresh" {
+		return "", "", errors.New("not a refresh token")
+	}
+
 	tokenID, _ := claims["jti"].(string)
 	if tokenID == "" {
 		return "", "", errors.New("refresh token missing jti")
 	}
-	// F12: абсолютный предел цепочки — iat первого refresh + 30d.
-	// Токены без iat (выпущенные до патча) grandfathered: ротация выдаст с iat.
-	if iatVal, ok := claims["iat"].(float64); ok {
-		if time.Since(time.Unix(int64(iatVal), 0)) > maxRefreshChainLifetime {
-			return "", "", errors.New("refresh token chain expired, re-login required")
-		}
+	// REAUDIT-4: REAUDIT-4: эпоха сессий проверяется и здесь — раньше отзыв
+	// (смена пароля/роли) гасил только access-токен, а refresh его игнорировал,
+	// и украденный refresh-токен выдавал новую сессию после смены пароля.
+	iatVal, hasIat := claims["iat"].(float64)
+	if !hasIat || iatVal <= 0 {
+		return "", "", errors.New("refresh token missing iat")
+	}
+	if revokedAfter := cache.UserSessionsRevokedAfter(context.Background(), userIDStr); revokedAfter > 0 && int64(iatVal) <= revokedAfter {
+		_ = cache.RevokeRefreshToken(context.Background(), tokenID)
+		return "", "", errors.New("session revoked, re-login required")
+	}
+	// F12 + REAUDIT-3: абсолютный предел цепочки считается от chain_iat
+	// (время выдачи ПЕРВОГО токена цепочки). Раньше брался iat текущего токена,
+	// который перезаписывался при каждой ротации, и «30 дней» продлевались вечно.
+	chainStart, hasChainStart := claims["chain_iat"].(float64)
+	if !hasChainStart || chainStart <= 0 {
+		// REAUDIT-4: токен без начала цепочки отвергаем — иначе "потолок 30 дней"
+		// обходился токеном без chain_iat/iat (проверка просто пропускалась).
+		return "", "", errors.New("refresh token missing chain_iat, re-login required")
+	}
+	if time.Since(time.Unix(int64(chainStart), 0)) > maxRefreshChainLifetime {
+		return "", "", errors.New("refresh token chain expired, re-login required")
 	}
 	// RE-AUDIT: атомарный claim вместо check-then-act (гонка давала две пары)
 	// + kill-chain при reuse (подозрение на кражу — вся цепочка умирает).
@@ -637,7 +713,7 @@ func (s *AuthService) RefreshTokens(oldRefreshToken string) (string, string, err
 		return "", "", err
 	}
 
-	return s.generateTokensWithChain(user.ID, user.Email, user.Role, user.TenantID, user.SalonID, chainID)
+	return s.generateTokensWithChain(user.ID, user.Email, user.Role, user.TenantID, user.SalonID, chainID, int64(chainStart))
 }
 
 // Logout - отзывает refresh-токен, извлекая его jti.

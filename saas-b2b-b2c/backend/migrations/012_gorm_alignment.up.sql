@@ -10,13 +10,16 @@
 CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
-    amount DECIMAL(10,2) DEFAULT 0,
+    amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    description TEXT,
     status VARCHAR(50) DEFAULT 'pending',
     due_date TIMESTAMP,
     paid_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE invoices ALTER COLUMN amount TYPE DECIMAL(12,2);
 
 CREATE TABLE IF NOT EXISTS checklists (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -27,11 +30,13 @@ CREATE TABLE IF NOT EXISTS checklists (
     status VARCHAR(50) DEFAULT 'pending',
     priority VARCHAR(50) DEFAULT 'normal',
     assigned_to UUID,
+    recurrence VARCHAR(20) DEFAULT '',
     start_date TIMESTAMP,
     end_date TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE checklists ADD COLUMN IF NOT EXISTS recurrence VARCHAR(20) DEFAULT '';
 
 -- Tenants: GORM-расширения (legal_entity/inn/paid_until) отсутствуют в 001-002
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS legal_entity TEXT;

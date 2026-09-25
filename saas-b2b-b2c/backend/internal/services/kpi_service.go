@@ -42,7 +42,100 @@ func (s *KPIService) getSettingFloat(key string, def float64) float64 {
 }
 
 // SetGoal - обертка для репозитория
+
+// formatDueDate — nil-safe форматирование даты (REAUDIT-3: t.DueDate.Format()
+// паникой ронял эндпоинт задач при NULL due_date).
+func formatDueDate(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}
+
 // nowFor — S11: текущее время в зоне тенанта пользователя (границы суток).
+// scopeDealers — дилеры, видимые вызывающему (REAUDIT-3).
+// super_admin видит всех; остальные — только свой tenant (nil tenant = пусто,
+// fail-closed: раньше nil tenant давал глобальную выдачу).
+func (s *KPIService) scopeDealers(ctx context.Context, userID string) ([]models.User, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, err
+	}
+	q := s.DB.Where("role = ?", models.RoleDealer)
+	if caller, err := s.callerScoped(ctx, uid); err == nil && caller.Role == models.RoleSuperAdmin {
+		// глобальный доступ только у супер-админа
+	} else if caller.Role == models.RoleSuperAdmin {
+		//ignore
+	} else {
+		if caller.TenantID == nil {
+			return []models.User{}, nil
+		}
+		q = q.Where("tenant_id = ?", *caller.TenantID)
+	}
+	var dealers []models.User
+	err = q.Limit(100).Find(&dealers).Error
+	return dealers, err
+}
+
+// assertTargetInCallerScope — super_admin видит всех, остальные — только свой tenant.
+func (s *KPIService) assertTargetInCallerScope(ctx context.Context, callerID string, targetID uuid.UUID) error {
+	callerUUID, err := uuid.Parse(callerID)
+	if err != nil {
+		return err
+	}
+	caller, err := s.callerScoped(ctx, callerUUID)
+	if err != nil {
+		return err
+	}
+	if caller.Role == models.RoleSuperAdmin {
+		return nil
+	}
+	if caller.TenantID == nil {
+		return errors.New("forbidden: tenant required")
+	}
+	var target models.User
+	if err := s.DB.Select("id, tenant_id, role").Where("id = ?", targetID).First(&target).Error; err != nil {
+		return err
+	}
+	if target.TenantID == nil || *target.TenantID != *caller.TenantID {
+		return errors.New("forbidden: target is in another tenant")
+	}
+	return nil
+}
+
+// callerTenant — tenant вызывающего; uuid.Nil = глобальный доступ (super_admin).
+func (s *KPIService) callerTenant(ctx context.Context, userID string) (uuid.UUID, error) {
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	caller, err := s.callerScoped(ctx, uid)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if caller.Role == models.RoleSuperAdmin || caller.TenantID == nil {
+		return uuid.Nil, nil
+	}
+	return *caller.TenantID, nil
+}
+
+// scopeSalonsQuery — сужает запрос по salons до tenant вызывающего.
+func scopeSalonsQuery(db *gorm.DB, tenantID uuid.UUID) *gorm.DB {
+	if tenantID == uuid.Nil {
+		return db
+	}
+	return db.Where("salons.tenant_id = ?", tenantID)
+}
+
+// callerScoped — пользователь вызывающего (для проверки super_admin).
+func (s *KPIService) callerScoped(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	var u models.User
+	if err := s.DB.Select("id, tenant_id, role").Where("id = ?", userID).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
 func (s *KPIService) nowFor(ctx context.Context, userID uuid.UUID) time.Time {
 	return time.Now().In(repository.TenantLocationForUser(ctx, s.DB, &userID))
 }
@@ -325,7 +418,7 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// 1. ПЛАН И ФАКТ НА МЕСЯЦ
 	// ====================
 	firstOfMonth := time.Date(targetDate.Year(), targetDate.Month(), 1, 0, 0, 0, 0, targetDate.Location())
-	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	lastOfMonth := firstOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond) // конец последнего дня месяца
 
 	// План на месяц (сумма goals по пользователю)
 	// Используем assignee_id для поиска плана, так как в goals нет salon_id
@@ -414,8 +507,16 @@ func (s *KPIService) GetDashboardMain(ctx context.Context, userID uuid.UUID, dat
 	// ====================
 	// Среднедневные продажи
 	daysInMonth := targetDate.Day()
+	if daysInMonth < 1 {
+		daysInMonth = 1
+	}
 	avgDaily := monthFact / float64(daysInMonth)
-	daysLeft := lastOfMonth.Day() - targetDate.Day() + 1
+	// REAUDIT-3: осталось дней ПОСЛЕ выбранного дня (было +1 — текущий день
+	// учитывался дважды, т.е. систематически завышенный прогноз).
+	daysLeft := lastOfMonth.Day() - targetDate.Day()
+	if daysLeft < 0 {
+		daysLeft = 0
+	}
 	forecast := monthFact + (avgDaily * float64(daysLeft))
 	if monthPlan > 0 {
 		resp.Forecast = int((forecast / monthPlan) * 100)
@@ -1301,7 +1402,7 @@ func (s *KPIService) GetDealerSummary(ctx context.Context, userID uuid.UUID, dat
 	// Общий план через goals (для дилеров - ищем по assignee_id = userID)
 	var totalPlan float64
 	s.DB.Model(&models.Goal{}).
-		Where("assignee_id = ? AND period = 'monthly'", userID).
+		Where("assignee_id = ? AND period = 'month'", userID).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
 
 	// Процент выполнения
@@ -1415,9 +1516,13 @@ func (s *KPIService) GetDealerFinance(ctx context.Context, userID uuid.UUID, dat
 
 	// Прогноз — динамически по длине месяца, с защитой от отрицательной экстраполяции
 	daysInMonth := targetDate.Day()
-	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
-	daysLeft := lastOfMonth.Day() - daysInMonth + 1
-	if resp.NetProfit <= 0 {
+	lastOfMonth := firstOfMonth.AddDate(0, 1, 0).Add(-time.Nanosecond) // конец последнего дня месяца
+	// REAUDIT-3: без +1 (текущий день уже учтён в факте).
+	daysLeft := lastOfMonth.Day() - daysInMonth
+	if daysLeft < 0 {
+		daysLeft = 0
+	}
+	if resp.NetProfit <= 0 || daysInMonth < 1 {
 		resp.NetProfitForecast = resp.NetProfit
 	} else {
 		dailyAvg := resp.NetProfit / float64(daysInMonth)
@@ -1544,8 +1649,10 @@ func (s *KPIService) GetDealerFunnel(ctx context.Context, userID uuid.UUID, peri
 		saleLeads = m["sale"] + m["paid"]
 	}
 
+	// REAUDIT-3: трафик = уникальная когорта лидов, contact уже входит в newLeads
+	// (раньше он складывался повторно — воронка завышала вход в ~1.2-1.3 раза).
 	resp.Stages = []models.FunnelStage{
-		{Stage: "traffic", Label: "Трафик", Count: int(newLeads + contactLeads), Conversion: 100},
+		{Stage: "traffic", Label: "Трафик", Count: int(newLeads), Conversion: 100},
 		{Stage: "consultation", Label: "Консультация", Count: int(contactLeads), Conversion: 0},
 		{Stage: "measurement", Label: "Замер", Count: int(meetingLeads), Conversion: 0},
 		{Stage: "kp", Label: "КП", Count: int(waitLeads), Conversion: 0},
@@ -1785,7 +1892,7 @@ func (s *KPIService) GetFranchiserSummary(ctx context.Context, userID uuid.UUID,
 	// Общий план из goals
 	var totalPlan float64
 	s.DB.Model(&models.Goal{}).
-		Where("assignee_id = ? AND period = 'monthly'", userID).
+		Where("assignee_id = ? AND period = 'month'", userID).
 		Select("COALESCE(SUM(sales_plan), 0)").Scan(&totalPlan)
 
 	// Процент плана
@@ -2176,7 +2283,11 @@ func (s *KPIService) GetTerritorySummary(ctx context.Context, userID uuid.UUID, 
 
 	// Находим всех дилеров, которыми управляет территориальный менеджер
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
+	terQ := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if tTenant, terr := s.callerTenant(ctx, userID.String()); terr == nil && tTenant != uuid.Nil {
+		terQ = terQ.Where("tenant_id = ?", tTenant)
+	}
+	if err := terQ.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2264,7 +2375,11 @@ func (s *KPIService) GetTerritoryFunnel(ctx context.Context, userID uuid.UUID, p
 	resp := &models.TerritoryFunnelResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
+	terQ := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if tTenant, terr := s.callerTenant(ctx, userID.String()); terr == nil && tTenant != uuid.Nil {
+		terQ = terQ.Where("tenant_id = ?", tTenant)
+	}
+	if err := terQ.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2306,7 +2421,11 @@ func (s *KPIService) GetTerritoryPlanFact(ctx context.Context, userID uuid.UUID,
 	resp := &models.TerritoryPlanFactResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
+	terQ := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if tTenant, terr := s.callerTenant(ctx, userID.String()); terr == nil && tTenant != uuid.Nil {
+		terQ = terQ.Where("tenant_id = ?", tTenant)
+	}
+	if err := terQ.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2380,7 +2499,11 @@ func (s *KPIService) GetTerritoryCommunications(ctx context.Context, userID uuid
 
 	// Задачи (от franchiser_manager к дилерам)
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
+	terQ := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if tTenant, terr := s.callerTenant(ctx, userID.String()); terr == nil && tTenant != uuid.Nil {
+		terQ = terQ.Where("tenant_id = ?", tTenant)
+	}
+	if err := terQ.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2401,14 +2524,14 @@ func (s *KPIService) GetTerritoryCommunications(ctx context.Context, userID uuid
 			Title:      task.Title,
 			Status:     task.Status,
 			AssignedTo: task.AssignedTo,
-			DueDate:    task.DueDate.Format("2006-01-02"),
+			DueDate:    formatDueDate(task.DueDate),
 		})
 	}
 
 	// Непрочитанные сообщения
 	var messagesCount int64
 	s.DB.Model(&models.Notification{}).
-		Where("user_id = ? AND read_at IS NULL", userID).
+		Where("user_id = ? AND is_read = false", userID).
 		Count(&messagesCount)
 	resp.UnreadMessages = int(messagesCount)
 
@@ -2420,7 +2543,11 @@ func (s *KPIService) GetTerritoryBenchmarks(ctx context.Context, userID uuid.UUI
 	resp := &models.TerritoryBenchmarksResponse{}
 
 	var dealers []models.User
-	if err := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID).Limit(100).Find(&dealers).Error; err != nil {
+	terQ := s.DB.Where("role = ? AND managed_by = ?", models.RoleDealer, userID)
+	if tTenant, terr := s.callerTenant(ctx, userID.String()); terr == nil && tTenant != uuid.Nil {
+		terQ = terQ.Where("tenant_id = ?", tTenant)
+	}
+	if err := terQ.Limit(100).Find(&dealers).Error; err != nil {
 		return nil, err
 	}
 
@@ -2505,7 +2632,7 @@ func (s *KPIService) GetDealerTasks(ctx context.Context, userID uuid.UUID) (*mod
 			Description: t.Description,
 			Status:      t.Status,
 			Priority:    t.Priority,
-			DueDate:     t.DueDate.Format("2006-01-02"),
+			DueDate:     formatDueDate(t.DueDate),
 			IsOverdue:   isOverdue,
 		})
 	}
@@ -2888,6 +3015,11 @@ func (s *KPIService) GetManagerDynamics(ctx context.Context, userID, managerID, 
 		_ = err
 	}
 
+	// REAUDIT-3: цель обязана быть в той же сети (раньше подставлялся любой UUID).
+	if err := s.assertTargetInCallerScope(ctx, userID, mgrUUID); err != nil {
+		return nil, err
+	}
+
 	for i := 0; i < m; i++ {
 		date := time.Now().AddDate(0, -i, 0)
 		firstOfMonth := time.Date(date.Year(), date.Month(), 1, 0, 0, 0, 0, date.Location())
@@ -3044,6 +3176,15 @@ func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter
 		return err
 	}
 	var skipped []string
+	// REAUDIT-4: сначала валидируем и собираем цели, потом пишем всё в одной
+	// транзакции. Раньше delete+create шли по одному менеджеру без транзакции:
+	// падение на середине оставляло часть батча применённой, часть — нет.
+	type pendingGoal struct {
+		mgrID   uuid.UUID
+		plan    float64
+		dealers int
+	}
+	pending := make([]pendingGoal, 0, len(plans))
 	for _, p := range plans {
 		mgrID, err := uuid.Parse(p.ManagerID)
 		if err != nil {
@@ -3071,31 +3212,37 @@ func (s *KPIService) SetManagerPlans(ctx context.Context, userID string, quarter
 			skipped = append(skipped, p.ManagerID)
 			continue
 		}
-		// upsert: delete existing for this assignee+quarter then insert
-		if err := s.DB.Where("assignee_id = ? AND period = ? AND start_date = ?", mgrID, "quarter", qStart).Delete(&models.Goal{}).Error; err != nil {
-			return err
-		}
-		goal := models.Goal{
-			AssignerID: franchiserID,
-			AssigneeID: mgrID,
-			Role:       string(models.RoleFranchisorManager),
-			SalesPlan:  p.PlanAmount,
-			LeadsPlan:  p.TargetDealers,
-			Period:     "quarter",
-			StartDate:  qStart,
-			EndDate:    qEnd,
-			TargetDate: qStart,
-			TenantID:   franchiser.TenantID,
-		}
-		if err := s.DB.Create(&goal).Error; err != nil {
-			return err
-		}
+		pending = append(pending, pendingGoal{mgrID: mgrID, plan: p.PlanAmount, dealers: p.TargetDealers})
 	}
 	// S6: тихих частичных применений больше нет — вызывающий видит, что пропущено.
 	if len(skipped) > 0 {
 		return fmt.Errorf("skipped %d invalid plans", len(skipped))
 	}
-	return nil
+
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		for _, pg := range pending {
+			if err := tx.Where("assignee_id = ? AND period = ? AND start_date = ?", pg.mgrID, "quarter", qStart).
+				Delete(&models.Goal{}).Error; err != nil {
+				return err
+			}
+			goal := models.Goal{
+				AssignerID: franchiserID,
+				AssigneeID: pg.mgrID,
+				Role:       string(models.RoleFranchisorManager),
+				SalesPlan:  pg.plan,
+				LeadsPlan:  pg.dealers,
+				Period:     "quarter",
+				StartDate:  qStart,
+				EndDate:    qEnd,
+				TargetDate: qStart,
+				TenantID:   franchiser.TenantID,
+			}
+			if err := tx.Create(&goal).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func parseQuarter(q string) (time.Time, time.Time, error) {
@@ -3186,9 +3333,9 @@ func getPeriodBounds(period string) (time.Time, time.Time) {
 // GetDealersHealth - сегментация дилеров ABCD A≥100 B80-99 C50-79 D<50
 func (s *KPIService) GetDealersHealth(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
 	start, end := getPeriodBounds(period)
-	// франчайзер -> все дилеры (role dealer) limit 100
-	var dealers []models.User
-	if err := s.DB.Where("role = ?", models.RoleDealer).Limit(100).Find(&dealers).Error; err != nil {
+	// REAUDIT-3: дилеры только своего tenant (глобально — лишь super_admin).
+	dealers, err := s.scopeDealers(ctx, userID)
+	if err != nil {
 		return nil, err
 	}
 	segA := []map[string]interface{}{}
@@ -3318,12 +3465,37 @@ func (s *KPIService) GetSystemIssues(ctx context.Context, userID string, status 
 		Status      string    `gorm:"column:status"`
 		CreatedAt   time.Time `gorm:"column:created_at"`
 	}
+	// REAUDIT-3: alerts/заявки/контракты — только своего tenant (был глобальный读).
+	gTenant, err := s.callerTenant(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	tenantJoin := func(db *gorm.DB) *gorm.DB {
+		if gTenant == uuid.Nil {
+			return db
+		}
+		return db.Where("tenant_id = ?", gTenant)
+	}
+	tenantViaUser := func(db *gorm.DB) *gorm.DB {
+		if gTenant == uuid.Nil {
+			return db
+		}
+		return db.Where("dealer_id IN (SELECT id FROM users WHERE tenant_id = ?)", gTenant)
+	}
+	tenantViaSalon := func(db *gorm.DB) *gorm.DB {
+		if gTenant == uuid.Nil {
+			return db
+		}
+		return db.Where("salon_id IN (SELECT id FROM salons WHERE tenant_id = ?)", gTenant)
+	}
 	var alerts []AlertRow
-	q := s.DB.Table("alerts").Limit(50).Order("created_at DESC")
+	q := tenantJoin(s.DB.Table("alerts")).Limit(50).Order("created_at DESC")
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
-	q.Find(&alerts)
+	if err := q.Find(&alerts).Error; err != nil {
+		return nil, err
+	}
 	for _, a := range alerts {
 		issues = append(issues, map[string]interface{}{"id": a.ID.String(), "type": "alert", "title": a.Title, "message": a.Description, "severity": a.Severity, "status": a.Status, "created_at": a.CreatedAt})
 	}
@@ -3336,13 +3508,17 @@ func (s *KPIService) GetSystemIssues(ctx context.Context, userID string, status 
 		CreatedAt   time.Time `gorm:"column:created_at"`
 	}
 	var reqs []Req
-	s.DB.Table("dealer_requests").Where("status = ?", "pending").Limit(20).Find(&reqs)
+	if err := tenantViaUser(s.DB.Table("dealer_requests")).Where("status = ?", "pending").Limit(20).Find(&reqs).Error; err != nil {
+		return nil, err
+	}
 	for _, r := range reqs {
 		issues = append(issues, map[string]interface{}{"id": r.ID.String(), "type": "request", "title": "Заявка " + r.Type, "message": r.Description, "severity": "medium", "status": r.Status, "created_at": r.CreatedAt})
 	}
 	// просроченные контракты
 	var overdue []models.Contract
-	s.DB.Where("status = ? AND deadline_date < ?", "pending", time.Now()).Limit(20).Find(&overdue)
+	if err := tenantViaSalon(s.DB.Model(&models.Contract{})).Where("status = ? AND deadline_date < ?", "pending", time.Now()).Limit(20).Find(&overdue).Error; err != nil {
+		return nil, err
+	}
 	for _, c := range overdue {
 		issues = append(issues, map[string]interface{}{"id": c.ID.String(), "type": "contract", "title": "Просрочен контракт " + c.ClientName, "severity": "high", "status": c.Status, "deadline": c.DeadlineDate})
 	}
@@ -3357,7 +3533,13 @@ func (s *KPIService) GetDealersGeography(ctx context.Context, userID string) ([]
 		Count  int    `gorm:"column:cnt"`
 	}
 	var rows []Row
-	s.DB.Table("salons").Select("COALESCE(region,'Не указан') as region, COALESCE(city,'') as city, COUNT(*) as cnt").Group("region, city").Limit(100).Scan(&rows)
+	// REAUDIT-3: только салоны своего tenant.
+	gTenant, err := s.callerTenant(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	sq := scopeSalonsQuery(s.DB.Table("salons"), gTenant)
+	sq.Select("COALESCE(region,'Не указан') as region, COALESCE(city,'') as city, COUNT(*) as cnt").Group("region, city").Limit(100).Scan(&rows)
 	res := make([]map[string]interface{}, 0, len(rows))
 	for _, r := range rows {
 		res = append(res, map[string]interface{}{"region": r.Region, "city": r.City, "dealers": r.Count})
@@ -3365,7 +3547,7 @@ func (s *KPIService) GetDealersGeography(ctx context.Context, userID string) ([]
 	// fallback: если region пусто — группируем по address LIKE
 	if len(res) == 0 {
 		var salons []models.Salon
-		s.DB.Limit(100).Find(&salons)
+		scopeSalonsQuery(s.DB, gTenant).Limit(100).Find(&salons)
 		countByAddr := map[string]int{}
 		for _, s := range salons {
 			key := "Не указан"
@@ -3388,17 +3570,38 @@ func (s *KPIService) GetDealersGeography(ctx context.Context, userID string) ([]
 // GetMarketingROI - ROI маркетинга (gain-cost)/cost*100
 func (s *KPIService) GetMarketingROI(ctx context.Context, userID string, period string) (map[string]interface{}, error) {
 	start, end := getPeriodBounds(period)
+	// REAUDIT-3: бюджеты/расходы/лиды ограничиваем салонами tenant'а вызывающего.
+	gTenant, err := s.callerTenant(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// REAUDIT-4: marketing_budgets/dealer_expenses привязаны к dealer_id
+	// (user), а не к salon_id — прежний фильтр по salon_id ронял SQL и ROI был 0.
+	scopeSalonsSub := func(db *gorm.DB) *gorm.DB {
+		if gTenant == uuid.Nil {
+			return db
+		}
+		return db.Where("dealer_id IN (SELECT id FROM users WHERE tenant_id = ?)", gTenant)
+	}
 	// cost: marketing_budgets used_amount + dealer_expenses category marketing
 	var cost float64
-	s.DB.Table("marketing_budgets").Select("COALESCE(SUM(used_amount),0)").Scan(&cost)
+	if err := scopeSalonsSub(s.DB.Table("marketing_budgets")).Select("COALESCE(SUM(used_amount),0)").Scan(&cost).Error; err != nil {
+		return nil, err
+	}
 	var expCost float64
-	s.DB.Table("dealer_expenses").Where("category = ? AND period = ?", "marketing", period).Select("COALESCE(SUM(amount),0)").Scan(&expCost)
+	if err := scopeSalonsSub(s.DB.Table("dealer_expenses")).Where("category = ? AND period = ?", "marketing", period).Select("COALESCE(SUM(amount),0)").Scan(&expCost).Error; err != nil {
+		return nil, err
+	}
 	if expCost > 0 {
 		cost += expCost
 	}
 	// gain: сумма бюджетов закрытых лидов за период
 	var gain float64
-	s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&gain)
+	if gTenant == uuid.Nil {
+		s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&gain)
+	} else {
+		s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ? AND salon_id IN (SELECT id FROM salons WHERE tenant_id = ?)", []string{"sale", "paid"}, start, end, gTenant).Select("COALESCE(SUM(budget),0)").Scan(&gain)
+	}
 	roi := 0.0
 	if cost > 0 {
 		roi = (gain - cost) / cost * 100
@@ -3436,20 +3639,43 @@ func (s *KPIService) AssignAlert(ctx context.Context, callerID, alertID, targetU
 }
 
 // GetAlertSettings - настройки алертов
+// GetAlertSettings — REAUDIT-4: сохранённые настройки пользователя + дефолты.
 func (s *KPIService) GetAlertSettings(ctx context.Context, userID string) (map[string]interface{}, error) {
-	return map[string]interface{}{
+	defaults := map[string]interface{}{
 		"thresholds": map[string]interface{}{
 			"network_forecast_critical": 90,
 			"churn_rate_critical":       5,
 			"manager_kpi_critical":      70,
 		},
 		"channels": []string{"in_app", "email"},
-	}, nil
+	}
+	var raw string
+	if err := s.DB.Raw(`SELECT value FROM system_settings WHERE key = ?`, "alert_settings:"+userID).Scan(&raw).Error; err == nil && raw != "" {
+		var saved map[string]interface{}
+		if err := json.Unmarshal([]byte(raw), &saved); err == nil {
+			// значения пользователя перекрывают дефолты
+			for k, v := range saved {
+				defaults[k] = v
+			}
+		}
+	}
+	return defaults, nil
 }
 
 // UpdateAlertSettings - обновить настройки алертов
+// UpdateAlertSettings — REAUDIT-4: настройки сохраняются (раньше был no-op:
+// UI показывал "сохранено", а значения всегда возвращались дефолтными).
 func (s *KPIService) UpdateAlertSettings(ctx context.Context, userID string, settings map[string]interface{}) error {
-	return nil
+	if len(settings) == 0 {
+		return errors.New("empty settings")
+	}
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		return err
+	}
+	return s.DB.Exec(
+		`INSERT INTO system_settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+		"alert_settings:"+userID, string(payload)).Error
 }
 
 // GetReportData - данные для отчёта (агрегат реальных блоков)
@@ -3461,12 +3687,31 @@ func (s *KPIService) GetReportData(ctx context.Context, userID string, period, d
 	issues, _ := s.GetSystemIssues(ctx, userID, "")
 	// plan_fact
 	start, end := getPeriodBounds(period)
+	gTenant, err := s.callerTenant(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	// REAUDIT-3: plan/fact и счётчик tenant'ов — в рамках сети вызывающего.
+	scopeSub := func(db *gorm.DB) *gorm.DB {
+		if gTenant == uuid.Nil {
+			return db
+		}
+		return db.Where("tenant_id = ?", gTenant)
+	}
 	var totalPlan, totalFact float64
-	s.DB.Table("goals").Where("period = ? AND start_date = ?", period, start).Select("COALESCE(SUM(sales_plan),0)").Scan(&totalPlan)
-	s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&totalFact)
-	// network growth: tenants count
+	scopeSub(s.DB.Table("goals")).Where("period = ? AND start_date = ?", period, start).Select("COALESCE(SUM(sales_plan),0)").Scan(&totalPlan)
+	if gTenant == uuid.Nil {
+		s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ?", []string{"sale", "paid"}, start, end).Select("COALESCE(SUM(budget),0)").Scan(&totalFact)
+	} else {
+		s.DB.Table("leads").Where("status IN ? AND created_at BETWEEN ? AND ? AND salon_id IN (SELECT id FROM salons WHERE tenant_id = ?)", []string{"sale", "paid"}, start, end, gTenant).Select("COALESCE(SUM(budget),0)").Scan(&totalFact)
+	}
+	// network growth: tenant сам считает себя одним
 	var tenantCount int64
-	s.DB.Table("tenants").Count(&tenantCount)
+	if gTenant == uuid.Nil {
+		s.DB.Table("tenants").Count(&tenantCount)
+	} else {
+		tenantCount = 1
+	}
 	return map[string]interface{}{
 		"executive_summary": map[string]interface{}{"period": period, "date": date, "total_plan": totalPlan, "total_fact": totalFact, "tenants": tenantCount},
 		"plan_fact_dynamics": map[string]interface{}{"total_plan": totalPlan, "total_fact": totalFact, "percent": func() int {
@@ -3494,10 +3739,11 @@ func (s *KPIService) GeneratePDF(ctx context.Context, userID string, blocks []st
 	// recipients пусто на генерации
 	id := uuid.New()
 	pdfURL := fmt.Sprintf("/reports/%s.pdf", id.String())
-	// idempotent insert via Exec
-	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url, blocks, comment) VALUES (?, ?, ?, ?::jsonb, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL, string(blocksJSON), comment)
-	// fallback for older schema (reports created with only pdf_url/recipients) — second insert no-op if first succeeded
-	s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL)
+	// REAUDIT-4: раньше обе вставки игнорировали ошибку и возвращали
+	// несуществующий pdf_url (phantom success). Теперь — явная ошибка.
+	if err := s.DB.Exec(`INSERT INTO reports (id, franchiser_id, pdf_url, blocks, comment) VALUES (?, ?, ?, ?::jsonb, ?) ON CONFLICT (id) DO NOTHING`, id, uid, pdfURL, string(blocksJSON), comment).Error; err != nil {
+		return nil, err
+	}
 	return map[string]interface{}{"pdf_url": pdfURL, "report_id": id.String()}, nil
 }
 
@@ -3508,7 +3754,21 @@ func (s *KPIService) SendReport(ctx context.Context, userID string, reportID str
 		return err
 	}
 	recJSON, _ := json.Marshal(recipients)
-	s.DB.Exec(`UPDATE reports SET recipients = ?::jsonb, updated_at = NOW() WHERE id = ?`, string(recJSON), rid)
+	// REAUDIT-3: отчёт принадлежит вызывающему — UPDATE по чужому report_id
+	// раньше проходил молча (tenancy bypass через подставляемый ID).
+	// Диалект-специфичный SQL: jsonb/NOW() есть только в PostgreSQL
+	// (тесты гоняются на sqlite, где эквиваленты — просто TEXT/CURRENT_TIMESTAMP).
+	setExpr := "recipients = ?::jsonb, updated_at = NOW()"
+	if s.DB.Dialector.Name() != "postgres" {
+		setExpr = "recipients = ?, updated_at = CURRENT_TIMESTAMP"
+	}
+	res := s.DB.Exec("UPDATE reports SET "+setExpr+" WHERE id = ? AND franchiser_id = ?", string(recJSON), rid, userID)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return errors.New("report not found")
+	}
 	return nil
 }
 

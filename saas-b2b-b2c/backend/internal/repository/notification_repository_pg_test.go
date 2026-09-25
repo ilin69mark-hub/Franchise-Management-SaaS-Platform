@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testUserID = uuid.New()
+
 func TestNotificationRepository_Create_Postgres(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping PostgreSQL test in short mode")
@@ -58,7 +60,7 @@ func TestNotificationRepository_GetByTenant_Postgres(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	result, err := repo.GetByTenant(context.Background(), tenantID, 10)
+	result, err := repo.GetByTenant(context.Background(), tenantID, testUserID, 10)
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
@@ -114,7 +116,7 @@ func TestNotificationRepository_MarkAllAsRead_Postgres(t *testing.T) {
 	err := repo.MarkAllAsRead(context.Background(), tenantID)
 	require.NoError(t, err)
 
-	result, err := repo.GetByTenant(context.Background(), tenantID, 10)
+	result, err := repo.GetByTenant(context.Background(), tenantID, testUserID, 10)
 	require.NoError(t, err)
 	for _, n := range result {
 		assert.True(t, n.IsRead)

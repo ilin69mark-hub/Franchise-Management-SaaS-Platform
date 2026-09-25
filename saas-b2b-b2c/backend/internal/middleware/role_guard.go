@@ -29,6 +29,15 @@ func RequireRole(roles ...string) gin.HandlerFunc {
 			return
 		}
 
+		// REAUDIT-3: отсутствие tenant = отказ, а не "пропустить проверку".
+		// Иначе аккаунт с tenant_id=NULL обходил tenant-гейты (салоны, чеклисты,
+		// bulk-операции) и получал доступ к данным других сетей.
+		if role != "super_admin" && c.GetString("tenantID") == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "tenant required"})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }

@@ -20,8 +20,10 @@ func NewChecklistHandler(service *services.ChecklistService) *ChecklistHandler {
 	return &ChecklistHandler{service: service}
 }
 
-// checklistOwnedByCaller — true, если вызывающий пользователь владеет чек-листом
-// (создатель, исполнитель или тот же тенант). super_admin видит всё.
+// checklistOwnedByCaller — REAUDIT-4: авторизация на ЗАПИСЬ строго по
+// владению (создатель или исполнитель). Раньше правило "тот же tenant" давало
+// любому сотруднику сети менять/завершать/удалять чужие чеклисты (доказано
+// живым прогоном). Tenant-скоуп остаётся только для ЧТЕНИЯ списка.
 func checklistOwnedByCaller(user *models.User, chk *models.Checklist) bool {
 	if user == nil || chk == nil {
 		return false
@@ -32,13 +34,24 @@ func checklistOwnedByCaller(user *models.User, chk *models.Checklist) bool {
 	if chk.UserID == user.ID {
 		return true
 	}
+	// исполнитель — только если он действительно в той же сети
 	if chk.AssignedTo != nil && *chk.AssignedTo == user.ID {
-		return true
-	}
-	if chk.TenantID != nil && user.TenantID != nil && *chk.TenantID == *user.TenantID {
-		return true
+		if chk.TenantID == nil || user.TenantID == nil || *chk.TenantID == *user.TenantID {
+			return true
+		}
 	}
 	return false
+}
+
+// checklistReadableByCaller — чтение: владелец, исполнитель или та же сеть.
+func checklistReadableByCaller(user *models.User, chk *models.Checklist) bool {
+	if checklistOwnedByCaller(user, chk) {
+		return true
+	}
+	if user == nil || chk == nil || user.Role == models.RoleSuperAdmin {
+		return false
+	}
+	return chk.TenantID != nil && user.TenantID != nil && *chk.TenantID == *user.TenantID
 }
 
 func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
@@ -56,7 +69,7 @@ func (h *ChecklistHandler) GetChecklists(c *gin.Context) {
 	if currentUser.Role == models.RoleSuperAdmin {
 		items, err = h.service.GetAllGlobal(c.Request.Context(), status, priority)
 	} else {
-		items, err = h.service.GetAllChecklists(c.Request.Context(), status, priority)
+		items, err = h.service.GetAllChecklists(c.Request.Context(), currentUser.TenantID, status, priority)
 	}
 
 	if err != nil {
@@ -76,6 +89,12 @@ func (h *ChecklistHandler) CreateChecklist(c *gin.Context) {
 	currentUser, err := getCurrentUser(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+
+	// REAUDIT-3: исполнитель обязан быть в том же tenant.
+	if err := h.service.ValidateAssignee(c.Request.Context(), req.AssignedTo, currentUser.TenantID); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -150,7 +169,7 @@ func (h *ChecklistHandler) GetChecklistByID(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 		return
 	}
-	if !checklistOwnedByCaller(user, item) {
+	if !checklistReadableByCaller(user, item) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
@@ -176,9 +195,19 @@ func (h *ChecklistHandler) UpdateChecklist(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
 		return
 	}
+	// REAUDIT-4: изменение — это запись, читать могут все в сети, писать — только
+	// создатель/исполнитель (иначе коллега переписывал чужие задачи, live 200).
 	if !checklistOwnedByCaller(user, existing) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
+	}
+
+	// REAUDIT-3: новый исполнитель — тоже внутри tenant (проверяем до мутации).
+	if req.AssignedTo != nil {
+		if err := h.service.ValidateAssignee(c.Request.Context(), req.AssignedTo, user.TenantID); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
 	}
 
 	if req.Title != "" {
@@ -193,6 +222,10 @@ func (h *ChecklistHandler) UpdateChecklist(c *gin.Context) {
 	}
 	if req.Priority != "" {
 		existing.Priority = req.Priority
+	}
+	// W1: recurrence раньше молча терялся при обновлении.
+	if req.Recurrence != "" {
+		existing.Recurrence = req.Recurrence
 	}
 	existing.UpdatedAt = time.Now()
 

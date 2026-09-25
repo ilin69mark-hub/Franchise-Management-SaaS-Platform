@@ -9,7 +9,7 @@ import (
 
 type NotificationRepositoryInterface interface {
 	Create(ctx context.Context, n *models.Notification) error
-	GetByTenant(ctx context.Context, tenantID uuid.UUID, limit int) ([]models.Notification, error)
+	GetByTenant(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, limit int) ([]models.Notification, error)
 	MarkAsRead(ctx context.Context, id uuid.UUID) error
 	MarkAllAsRead(ctx context.Context, tenantID uuid.UUID) error
 }

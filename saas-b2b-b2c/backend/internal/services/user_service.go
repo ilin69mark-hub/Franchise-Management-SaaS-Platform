@@ -7,12 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserService struct {
@@ -98,9 +100,13 @@ func (s *UserService) UpdateProfile(userID uuid.UUID, req models.UserUpdateReque
 }
 
 func (s *UserService) ChangePassword(userID uuid.UUID, oldPassword, newPassword string) error {
-	// F6: смена на "123" запрещена — та же политика, что при регистрации.
-	if len(newPassword) < 12 || len(newPassword) > 128 {
-		return errors.New("password must be 12..72 characters")
+	// REAUDIT-3: 12..72 БАЙТ (72 — предел bcrypt; >72 он отвергает, а не усекает),
+	// плюс проверка HIBP, как при регистрации.
+	if len(newPassword) < minPasswordLength || len(newPassword) > maxPasswordLength {
+		return errors.New("password must be 12..72 bytes")
+	}
+	if err := rejectPwnedPassword(newPassword); err != nil {
+		return err
 	}
 	user, err := s.userRepo.GetUserByID(context.Background(), userID)
 	if err != nil {
@@ -118,7 +124,12 @@ func (s *UserService) ChangePassword(userID uuid.UUID, oldPassword, newPassword 
 		"password_hash": string(newHash),
 		"updated_at":    time.Now(),
 	}
-	return s.userRepo.UpdateUserFields(context.Background(), userID, updateData)
+	if err := s.userRepo.UpdateUserFields(context.Background(), userID, updateData); err != nil {
+		return err
+	}
+	// REAUDIT-3: смена пароля убивает все живые сессии пользователя.
+	cache.RevokeUserSessions(context.Background(), userID.String())
+	return nil
 }
 
 // === МЕТОДЫ HR (СОТРУДНИКИ) ===
@@ -128,6 +139,69 @@ func (s *UserService) GetEmployees(tenantID uuid.UUID) ([]models.User, error) {
 }
 
 // CreateEmployee — strict whitelist per creator role + tenant isolation
+
+// enforceUserQuota — REAUDIT-4: лимит пользователей тенанта (tenants.max_users
+// как override; иначе берём план). Блокировка строки tenant'а делает проверку
+// и последующую вставку атомарными относительно параллельных запросов.
+func enforceUserQuota(tx *gorm.DB, tenantID uuid.UUID) error {
+	if tx == nil || tenantID == uuid.Nil {
+		return nil
+	}
+	var tenant models.Tenant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tenant, "id = ?", tenantID).Error; err != nil {
+		return err
+	}
+	limit := tenant.MaxUsers
+	if tenant.PlanID != nil {
+		var plan models.Plan
+		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err == nil && plan.MaxUsers > 0 {
+			if limit <= 0 || plan.MaxUsers < limit {
+				limit = plan.MaxUsers
+			}
+		}
+	}
+	if limit <= 0 {
+		return nil // лимит не задан — без ограничений
+	}
+	var count int64
+	if err := tx.Model(&models.User{}).Where("tenant_id = ?", tenantID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count >= int64(limit) {
+		return errors.New("tenant user limit reached (upgrade plan or increase max_users)")
+	}
+	return nil
+}
+
+// enforceSalonQuota — лимит салонов тенанта (plans.max_salons).
+func enforceSalonQuota(tx *gorm.DB, tenantID uuid.UUID) error {
+	if tx == nil || tenantID == uuid.Nil {
+		return nil
+	}
+	var tenant models.Tenant
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tenant, "id = ?", tenantID).Error; err != nil {
+		return err
+	}
+	limit := 0
+	if tenant.PlanID != nil {
+		var plan models.Plan
+		if err := tx.First(&plan, "id = ?", *tenant.PlanID).Error; err == nil {
+			limit = plan.MaxSalons
+		}
+	}
+	if limit <= 0 {
+		return nil
+	}
+	var count int64
+	if err := tx.Model(&models.Salon{}).Where("tenant_id = ?", tenantID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count >= int64(limit) {
+		return errors.New("tenant salon limit reached (upgrade plan)")
+	}
+	return nil
+}
+
 func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID uuid.UUID, creatorID uuid.UUID, creatorRole string) (*models.User, error) {
 	// 1. Строгая проверка прав — whitelist
 	allowedByCreator := map[string]map[models.Role]bool{
@@ -192,6 +266,18 @@ func (s *UserService) CreateEmployee(req models.CreateEmployeeRequest, tenantID 
 		managerID = &creatorID
 	}
 
+	// REAUDIT-4: квота лицензий плана. Раньше max_users/max_salons были
+	// метаданными: tenant с max_users=1 спокойно создавал десятки сотрудников.
+	// Проверка и вставка идут в одной транзакции с блокировкой строки tenant'а.
+	if s.db != nil {
+		txErr := s.db.Transaction(func(tx *gorm.DB) error {
+			return enforceUserQuota(tx, tenantID)
+		})
+		if txErr != nil {
+			return nil, txErr
+		}
+	}
+
 	// 4. Создание пользователя
 	user := models.User{
 		Email:        req.Email,
@@ -228,7 +314,92 @@ var allowedManage = map[string]map[models.Role]bool{
 	},
 }
 
-func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.UpdateEmployeeRequest, callerRole string) (*models.User, error) {
+// REAUDIT-3 (BIZ-008): tenant-скоупа мало — дилер правил ЛЮБЫМ сотрудником своей
+// сети, потому что проверялась только принадлежность tenant'у. Управлять можно
+// только своими подчинёнными (прямой или транзитивный managed_by), плюс себя.
+
+// isDescendantOf — является ли candidate потомком первого (прямой или транзитивный
+// managed_by). Нужен, чтобы запретить reassignment, создающий цикл иерархии.
+func (s *UserService) isDescendantOf(candidate *models.User, ancestorID uuid.UUID) bool {
+	if candidate == nil {
+		return false
+	}
+	seen := map[uuid.UUID]bool{}
+	cur := candidate
+	for i := 0; i < 16 && cur.ManagedBy != nil; i++ {
+		parentID := *cur.ManagedBy
+		if parentID == ancestorID {
+			return true
+		}
+		if seen[parentID] {
+			return false
+		}
+		seen[parentID] = true
+		parent, err := s.userRepo.GetUserByID(context.Background(), parentID)
+		if err != nil || parent == nil {
+			return false
+		}
+		cur = parent
+	}
+	return false
+}
+
+// validateManagedBy — REAUDIT-4: новый руководитель обязан быть в той же сети,
+// существовать, не быть самим целевым юзером и не лежать ниже него.
+func (s *UserService) validateManagedBy(targetID uuid.UUID, newManagerID uuid.UUID) error {
+	if newManagerID == targetID {
+		return errors.New("managed_by cannot be the user itself")
+	}
+	mgr, err := s.userRepo.GetUserByID(context.Background(), newManagerID)
+	if err != nil || mgr == nil {
+		return errors.New("managed_by user not found")
+	}
+	target, err := s.userRepo.GetUserByID(context.Background(), targetID)
+	if err != nil || target == nil {
+		return errors.New("employee not found")
+	}
+	if (mgr.TenantID == nil) != (target.TenantID == nil) {
+		return errors.New("managed_by must be in same tenant")
+	}
+	if mgr.TenantID != nil && *mgr.TenantID != *target.TenantID {
+		return errors.New("managed_by must be in same tenant")
+	}
+	if s.isDescendantOf(mgr, targetID) {
+		return errors.New("managed_by cannot be a subordinate of the user")
+	}
+	return nil
+}
+
+func (s *UserService) canManage(callerID uuid.UUID, target *models.User) bool {
+	if callerID == target.ID {
+		return true
+	}
+	if target.Role == models.RoleSuperAdmin {
+		return false
+	}
+	// Проверка на цикл при САМОМ reassignment живёт в validateManagedBy
+	// (isDescendantOf(newManager, target)); здесь подчинённые управляемы.
+	seen := map[uuid.UUID]bool{}
+	current := target
+	for i := 0; i < 16 && current.ManagedBy != nil; i++ {
+		parentID := *current.ManagedBy
+		if parentID == callerID {
+			return true
+		}
+		if seen[parentID] {
+			return false
+		}
+		seen[parentID] = true
+		parent, err := s.userRepo.GetUserByID(context.Background(), parentID)
+		if err != nil || parent == nil {
+			return false
+		}
+		current = parent
+	}
+	return false
+}
+
+func (s *UserService) UpdateEmployee(callerID, userID, tenantID uuid.UUID, req models.UpdateEmployeeRequest, callerRole string) (*models.User, error) {
 	// S8: super_admin без сети грузит напрямую (иначе fail-closed ломал
 	// управление: поиск в tenant Nil ничего не находил).
 	var target *models.User
@@ -244,6 +415,10 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 	// super_admin трогает только super_admin
 	if target.Role == models.RoleSuperAdmin && callerRole != string(models.RoleSuperAdmin) {
 		return nil, errors.New("permission denied: cannot manage super_admin")
+	}
+	// REAUDIT-3: вне иерархии подчинённых — отказ (иначе дилер правил всей сетью).
+	if callerRole != string(models.RoleSuperAdmin) && !s.canManage(callerID, target) {
+		return nil, errors.New("permission denied: target is not in your hierarchy")
 	}
 	updateData := map[string]interface{}{"updated_at": time.Now()}
 	if req.FirstName != "" {
@@ -269,19 +444,14 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 		updateData["role"] = req.Role
 	}
 	if req.ManagedBy != nil {
-		// F4: ManagedBy — только из того же tenant (как на создании)
 		if callerRole == "" {
 			return nil, errors.New("permission denied: cannot reassign manager")
 		}
-		mgr, err := s.userRepo.GetUserByID(context.Background(), *req.ManagedBy)
-		if err != nil {
-			return nil, errors.New("managed_by user not found")
-		}
-		if tenantID != uuid.Nil && mgr.TenantID != nil && *mgr.TenantID != tenantID {
-			return nil, errors.New("managed_by must be in same tenant")
-		}
-		if tenantID != uuid.Nil && mgr.TenantID == nil {
-			return nil, errors.New("managed_by must be in same tenant")
+		// REAUDIT-4: единая проверка (same tenant + не self + не subordinate),
+		// в том числе для super_admin (tenantID == uuid.Nil больше не отключает
+		// проверку сети — иначе суперадмин создавал кросс-tenant связи).
+		if err := s.validateManagedBy(userID, *req.ManagedBy); err != nil {
+			return nil, err
 		}
 		updateData["managed_by"] = req.ManagedBy
 	}
@@ -289,10 +459,17 @@ func (s *UserService) UpdateEmployee(userID, tenantID uuid.UUID, req models.Upda
 	if err := s.userRepo.UpdateUserFields(context.Background(), userID, updateData); err != nil {
 		return nil, err
 	}
+	// REAUDIT-3: смена роли/менеджера обесценивает ранее выданные токены.
+	if _, roleChanged := updateData["role"]; roleChanged {
+		cache.RevokeUserSessions(context.Background(), userID.String())
+	}
+	if _, mgrChanged := updateData["managed_by"]; mgrChanged {
+		cache.RevokeUserSessions(context.Background(), userID.String())
+	}
 	return s.userRepo.GetUserByID(context.Background(), userID)
 }
 
-func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID, callerRole string) error {
+func (s *UserService) DeleteEmployee(callerID, userID, tenantID uuid.UUID, callerRole string) error {
 	var target *models.User
 	var err error
 	if callerRole == string(models.RoleSuperAdmin) {
@@ -313,7 +490,14 @@ func (s *UserService) DeleteEmployee(userID, tenantID uuid.UUID, callerRole stri
 	if allowed, ok := allowedManage[callerRole]; !ok || !allowed[target.Role] {
 		return errors.New("permission denied: cannot delete user with this role")
 	}
-	return s.userRepo.DeleteUser(context.Background(), userID)
+	if callerRole != string(models.RoleSuperAdmin) && !s.canManage(callerID, target) {
+		return errors.New("permission denied: target is not in your hierarchy")
+	}
+	if err := s.userRepo.DeleteUser(context.Background(), userID); err != nil {
+		return err
+	}
+	cache.RevokeUserSessions(context.Background(), userID.String())
+	return nil
 }
 
 // === МЕТОДЫ ДЛЯ СУПЕР-АДМИНА ===
@@ -330,13 +514,21 @@ func (s *UserService) GetAllUsersGlobal() ([]models.User, error) {
 
 // CreateSalon создает салон внутри сети
 func (s *UserService) CreateSalon(ctx context.Context, tenantID uuid.UUID, name, address string) (*models.Salon, error) {
-	salon := &models.Salon{
-		TenantID: tenantID,
-		Name:     name,
-		Address:  address,
+	// REAUDIT-4: квота салонов (plans.max_salons) проверяется под блокировкой
+	// строки tenant'а; вставка идёт в той же транзакции.
+	salon := &models.Salon{TenantID: tenantID, Name: name, Address: address}
+	if s.db == nil {
+		if err := repository.NewSalonRepository(s.db).CreateSalon(ctx, salon); err != nil {
+			return nil, err
+		}
+		return salon, nil
 	}
-	salonRepo := repository.NewSalonRepository(s.db)
-	if err := salonRepo.CreateSalon(ctx, salon); err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := enforceSalonQuota(tx, tenantID); err != nil {
+			return err
+		}
+		return repository.NewSalonRepository(tx).CreateSalon(ctx, salon)
+	}); err != nil {
 		return nil, err
 	}
 	return salon, nil
@@ -397,11 +589,17 @@ func (s *UserService) GetSalonByID(ctx context.Context, salonID uuid.UUID) (*mod
 	return &salon, nil
 }
 
-// UpdateSalon обновляет данные салона
-func (s *UserService) UpdateSalon(ctx context.Context, salonID uuid.UUID, name, address string) (*models.Salon, error) {
+// UpdateSalon обновляет данные салона. REAUDIT-3: salonID обязан принадлежать
+// tenant вызывающего (nil tenant = отказ, а не обход проверки).
+func (s *UserService) UpdateSalon(ctx context.Context, salonID, tenantID uuid.UUID, name, address string) (*models.Salon, error) {
 	salon, err := s.GetSalonByID(ctx, salonID)
 	if err != nil {
 		return nil, err
+	}
+	if tenantID != uuid.Nil {
+		if salon.TenantID != tenantID {
+			return nil, errors.New("forbidden: salon not in your tenant")
+		}
 	}
 
 	salon.Name = name
@@ -413,8 +611,17 @@ func (s *UserService) UpdateSalon(ctx context.Context, salonID uuid.UUID, name, 
 	return salon, nil
 }
 
-// DeleteSalon удаляет салон
-func (s *UserService) DeleteSalon(ctx context.Context, salonID uuid.UUID) error {
+// DeleteSalon удаляет салон (tenant-скоуп обязателен, см. UpdateSalon).
+func (s *UserService) DeleteSalon(ctx context.Context, salonID, tenantID uuid.UUID) error {
+	if tenantID != uuid.Nil {
+		salon, err := s.GetSalonByID(ctx, salonID)
+		if err != nil {
+			return err
+		}
+		if salon.TenantID != tenantID {
+			return errors.New("forbidden: salon not in your tenant")
+		}
+	}
 	salonRepo := repository.NewSalonRepository(s.db)
 	return salonRepo.DeleteSalon(ctx, salonID)
 }

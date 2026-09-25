@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"franchise-saas-backend/internal/cache"
 	"franchise-saas-backend/internal/models"
 	"franchise-saas-backend/internal/repository"
 
@@ -269,12 +271,36 @@ func (s *AdminService) UpdateTenant(id uuid.UUID, name string, planID *uuid.UUID
 
 // BlockTenant - заблокировать
 func (s *AdminService) BlockTenant(id uuid.UUID) error {
-	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "blocked").Error
+	res := s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "blocked")
+	if res.Error != nil {
+		return res.Error
+	}
+	// REAUDIT-4: блокировка сети обязана убивать живые access-токены её
+	// пользователей — иначе tenant работал ещё до 24 часов после block.
+	s.revokeTenantSessions(id)
+	return nil
+}
+
+// revokeTenantSessions — гасит сессии всех пользователей tenant'а.
+func (s *AdminService) revokeTenantSessions(tenantID uuid.UUID) {
+	var ids []uuid.UUID
+	if err := s.db.Model(&models.User{}).Where("tenant_id = ?", tenantID).Pluck("id", &ids).Error; err != nil {
+		log.Printf("WARNING: cannot list tenant users for session revocation: %v", err)
+		return
+	}
+	for _, uid := range ids {
+		cache.RevokeUserSessions(context.Background(), uid.String())
+	}
 }
 
 // UnblockTenant - разблокировать
 func (s *AdminService) UnblockTenant(id uuid.UUID) error {
-	return s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "active").Error
+	res := s.db.Model(&models.Tenant{}).Where("id = ?", id).Update("status", "active")
+	if res.Error != nil {
+		return res.Error
+	}
+	// Разблокировка = новый вход; старые токены остаются отозванными (эпоха).
+	return nil
 }
 
 // SuspendTenant - приостановить тенант

@@ -261,6 +261,9 @@ var (
 
 const fbMaxEntries = 100000
 
+// fbSessionsRevoked — process-local fallback для отзыва сессий при недоступном Redis.
+var fbSessionsRevoked = map[string]int64{}
+
 func fbRevoke(tokenID string, ttl time.Duration) {
 	if tokenID == "" {
 		return
@@ -373,6 +376,60 @@ func InvalidateUserSession(ctx context.Context, userID string) error {
 	}
 	key := "session:" + userID
 	return Client.Del(ctx, key).Err()
+}
+
+// sessionEpochTTL — отзыв должен переживать самый длинный живой токен пользователя:
+// refresh-цепочка живёт до 30 дней, поэтому маркер держим 31 день.
+const sessionEpochTTL = 31 * 24 * time.Hour
+
+// RevokeUserSessions — REAUDIT-3: гасит ВСЕ токены пользователя (смена пароля,
+// смена роли, блокировка). Реализация через "эпоху": метка времени, токены с
+// iat <= метки считаются отозванными.
+//
+// REAUDIT-4: маркер ВСЕГДА дублируется в process-local карту, даже если запись
+// в Redis прошла успешно. Раньше при падении Redis fallback был пуст, и ранее
+// отозванный токен снова проходил проверку (fail-open, доказано в аудите).
+func RevokeUserSessions(ctx context.Context, userID string) {
+	if userID == "" {
+		return
+	}
+	now := time.Now().Unix()
+	fbMu.Lock()
+	prev := fbSessionsRevoked[userID]
+	if now > prev {
+		fbSessionsRevoked[userID] = now
+	}
+	fbMu.Unlock()
+
+	if Client != nil {
+		// ошибку не глотаем: локальный маркер уже записан, но логируем потерянную
+		// межрепличную синхронизацию
+		if err := Client.Set(ctx, "sessions_revoked_after:"+userID, now, sessionEpochTTL).Err(); err != nil {
+			log.Printf("WARNING: session revocation for %s not persisted to Redis: %v (local marker only)", userID, err)
+		}
+	}
+}
+
+// UserSessionsRevokedAfter — время, начиная с которого все токены недействительны
+// (0 — отзывов не было). Берётся максимум из Redis и локальной карты, чтобы
+// отзыв не «исчезал» при деградации Redis.
+func UserSessionsRevokedAfter(ctx context.Context, userID string) int64 {
+	if userID == "" {
+		return 0
+	}
+	var redisVal int64
+	if Client != nil {
+		if v, err := Client.Get(ctx, "sessions_revoked_after:"+userID).Int64(); err == nil {
+			redisVal = v
+		}
+	}
+	fbMu.Lock()
+	local := fbSessionsRevoked[userID]
+	fbMu.Unlock()
+	if local > redisVal {
+		return local
+	}
+	return redisVal
 }
 
 func Close() error {

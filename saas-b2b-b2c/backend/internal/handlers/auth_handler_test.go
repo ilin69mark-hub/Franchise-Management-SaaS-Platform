@@ -299,13 +299,15 @@ func TestRegister_RejectsEmptyCredentials(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
 
-// TestRegister_RoleWhitelist проверяет сам whitelist допустимых ролей.
+// TestRegister_RoleWhitelist проверяет whitelist публичной саморегистрации.
+// REAUDIT-3: только franchiser — остальные роли внутренние (иначе tenantless-аккаунт
+// с fail-open доступом к чужим tenant'ам).
 func TestRegister_RoleWhitelist(t *testing.T) {
 	assert.True(t, isAllowedRegisterRole(models.RoleFranchisor))
-	assert.True(t, isAllowedRegisterRole(models.RoleFranchisorManager))
-	assert.True(t, isAllowedRegisterRole(models.RoleDealer))
-	assert.True(t, isAllowedRegisterRole(models.RoleDealerManager))
 
+	assert.False(t, isAllowedRegisterRole(models.RoleFranchisorManager))
+	assert.False(t, isAllowedRegisterRole(models.RoleDealer))
+	assert.False(t, isAllowedRegisterRole(models.RoleDealerManager))
 	assert.False(t, isAllowedRegisterRole(models.RoleSuperAdmin))
 	assert.False(t, isAllowedRegisterRole("hacker"))
 	assert.False(t, isAllowedRegisterRole(""))

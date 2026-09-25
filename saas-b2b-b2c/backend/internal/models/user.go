@@ -46,7 +46,7 @@ type User struct {
 	ContactsPhoneVisible bool   `json:"contacts_phone_visible" gorm:"default:true"`
 	ContactsPhone        string `json:"contacts_phone" gorm:"type:varchar(50)"`
 	ContactsTelegram     string `json:"contacts_telegram" gorm:"type:varchar(100)"`
-	ContactsWhatsApp     string `json:"contacts_whatsapp" gorm:"type:varchar(50)"`
+	ContactsWhatsApp     string `json:"contacts_whatsapp" gorm:"column:contacts_whatsapp;type:varchar(50)"`
 	ContactsWorkingHours string `json:"contacts_working_hours" gorm:"type:varchar(100)"`
 
 	// Soft Delete

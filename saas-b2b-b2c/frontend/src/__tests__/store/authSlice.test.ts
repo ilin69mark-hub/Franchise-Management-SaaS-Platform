@@ -226,13 +226,15 @@ describe('authSlice', () => {
       expect(store.getState().auth.error).toBe('Email already exists');
     });
 
-    it('sets isAuthenticated = false when user missing in response', async () => {
-      mockApiClient.post.mockResolvedValue({ data: {} });
+    it('не считает отсутствие user ошибкой (анти-enumeration ответ 202)', async () => {
+      // REAUDIT-3: бэкенд отвечает одинаковым 202 {"message"} и при успехе,
+      // и при занятом email, чтобы нельзя было перечислить пользователей.
+      mockApiClient.post.mockResolvedValue({ data: { message: 'If this email is available, the account has been created' } });
 
       await store.dispatch(register({ email: 'new@example.com', password: 'password' }));
 
       expect(store.getState().auth.isAuthenticated).toBe(false);
-      expect(store.getState().auth.error).toBe('Ошибка регистрации: профиль не получен');
+      expect(store.getState().auth.error).toBeNull();
     });
   });
 });

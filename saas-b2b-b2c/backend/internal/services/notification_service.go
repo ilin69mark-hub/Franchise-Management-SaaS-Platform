@@ -24,8 +24,10 @@ type notificationOwnerLookup interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Notification, error)
 }
 
-func (s *NotificationService) GetNotifications(ctx context.Context, tenantID uuid.UUID) ([]models.Notification, error) {
-	return s.repo.GetByTenant(ctx, tenantID, 20)
+// GetNotifications — REAUDIT-4: персональные уведомления пользователя +
+// broadcast'ы его tenant'а (чужие личные больше не выдаются).
+func (s *NotificationService) GetNotifications(ctx context.Context, tenantID, userID uuid.UUID) ([]models.Notification, error) {
+	return s.repo.GetByTenant(ctx, tenantID, userID, 20)
 }
 
 // MarkAsRead помечает уведомление прочитанным. Если передан userID, то
@@ -55,7 +57,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, id uuid.UUID, user
 func (s *NotificationService) MarkAllAsRead(ctx context.Context, tenantID uuid.UUID, userID ...uuid.UUID) error {
 	if len(userID) > 0 {
 		uid := userID[0]
-		notifications, err := s.repo.GetByTenant(ctx, tenantID, 1000)
+		notifications, err := s.repo.GetByTenant(ctx, tenantID, uid, 1000)
 		if err != nil {
 			return err
 		}

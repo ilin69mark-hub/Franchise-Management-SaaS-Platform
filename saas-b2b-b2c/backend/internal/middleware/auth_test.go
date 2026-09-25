@@ -87,11 +87,16 @@ func TestAuthMiddleware_InvalidFormat(t *testing.T) {
 func TestRequireRole_AllowsAndRejects(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	// REAUDIT-3: роль без tenant = 403 (fail-closed), поэтому в тестах tenant
+	// проставляется явно; кейсы без tenant вынесены отдельно.
 	newRouter := func(role string, allowed ...string) *gin.Engine {
 		r := gin.New()
 		r.Use(func(c *gin.Context) {
 			if role != "" {
 				c.Set("role", role)
+				if role != "super_admin" {
+					c.Set("tenantID", "11111111-1111-1111-1111-111111111111")
+				}
 			}
 			c.Next()
 		})
@@ -112,6 +117,7 @@ func TestRequireRole_AllowsAndRejects(t *testing.T) {
 		{"rejects wrong role", "dealer", []string{"franchiser", "super_admin"}, http.StatusForbidden},
 		{"rejects super_admin when not listed", "super_admin", []string{"franchiser"}, http.StatusForbidden},
 		{"rejects empty role", "", []string{"dealer"}, http.StatusForbidden},
+		{"allows super_admin without tenant", "super_admin", []string{"super_admin"}, http.StatusOK},
 	}
 
 	for _, tt := range tests {
@@ -127,4 +133,22 @@ func TestRequireRole_AllowsAndRejects(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRequireRole_NilTenantForbidden — REAUDIT-3: роль без tenant = 403.
+func TestRequireRole_NilTenantForbidden(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("role", "dealer")
+		c.Next()
+	})
+	r.GET("/resource", RequireRole("dealer"), func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"access": "granted"})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/resource", nil)
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusForbidden, w.Code, "tenantless caller must be rejected")
 }

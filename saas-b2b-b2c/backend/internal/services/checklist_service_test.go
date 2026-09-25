@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"franchise-saas-backend/internal/mocks"
 	"franchise-saas-backend/internal/models"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type MockChecklistRepo struct {
@@ -27,6 +29,15 @@ func (m *MockChecklistRepo) FindAllGlobal(ctx context.Context, status, priority 
 
 func (m *MockChecklistRepo) FindUserTasks(ctx context.Context, userID uuid.UUID, status, priority string, isArchive bool) ([]models.Checklist, error) {
 	args := m.Called(ctx, userID, status, priority, isArchive)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Checklist), args.Error(1)
+}
+
+// FindTenant — tenant-скоупный список (REAUDIT-3).
+func (m *MockChecklistRepo) FindTenant(ctx context.Context, tenantID uuid.UUID, status, priority string) ([]models.Checklist, error) {
+	args := m.Called(ctx, tenantID, status, priority)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -135,11 +146,11 @@ func TestChecklistService_GetAllChecklists_Success(t *testing.T) {
 	mockRepo := new(MockChecklistRepo)
 	service := NewChecklistService(mockRepo)
 
-	expected := []models.Checklist{{ID: uuid.New(), Title: "Task 1"}}
+	tenantID := uuid.New()
+	expected := []models.Checklist{{ID: uuid.New(), Title: "Task 1", TenantID: &tenantID}}
+	mockRepo.On("FindTenant", mock.Anything, tenantID, "pending", "high").Return(expected, nil)
 
-	mockRepo.On("FindAll", mock.Anything, "pending", "high").Return(expected, nil)
-
-	result, err := service.GetAllChecklists(context.Background(), "pending", "high")
+	result, err := service.GetAllChecklists(context.Background(), &tenantID, "pending", "high")
 
 	assert.NoError(t, err)
 	assert.Len(t, result, 1)
@@ -317,4 +328,48 @@ func TestChecklistService_DeleteChecklist_Error(t *testing.T) {
 
 	assert.Error(t, err)
 	mockRepo.AssertExpectations(t)
+}
+
+// REAUDIT-3: список чек-листов ограничен tenant'ом вызывающего.
+func TestChecklistService_GetAllChecklists_ScopedToTenant(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	svc := NewChecklistService(mockRepo)
+
+	tenantA := uuid.New()
+	mockRepo.On("FindTenant", mock.Anything, tenantA, "", "").Return([]models.Checklist{
+		{ID: uuid.New(), Title: "own tenant", TenantID: &tenantA},
+	}, nil).Once()
+
+	items, err := svc.GetAllChecklists(context.Background(), &tenantA, "", "")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "own tenant", items[0].Title)
+	mockRepo.AssertExpectations(t)
+	mockRepo.AssertNotCalled(t, "FindAll", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// nil tenant = fail-closed: пустой результат вместо глобальной выдачи.
+func TestChecklistService_GetAllChecklists_NilTenantFailsClosed(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	svc := NewChecklistService(mockRepo)
+	nilTenant := uuid.Nil
+
+	items, err := svc.GetAllChecklists(context.Background(), &nilTenant, "", "")
+	require.NoError(t, err)
+	require.Empty(t, items)
+}
+
+// Назначать чек-лист можно только сотруднику своего tenant.
+func TestChecklistService_ValidateAssignee_CrossTenantRejected(t *testing.T) {
+	mockRepo := new(MockChecklistRepo)
+	userRepo := mocks.NewMockUserRepository()
+	svc := NewChecklistService(mockRepo).WithUserRepository(userRepo)
+
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	assignee := uuid.New()
+	userRepo.On("GetUserByID", mock.Anything, assignee).Return(&models.User{ID: assignee, Role: models.RoleDealer, TenantID: &tenantB}, nil)
+
+	err := svc.ValidateAssignee(context.Background(), &assignee, &tenantA)
+	require.Error(t, err, "REAUDIT-3: cross-tenant assignee must be rejected")
 }

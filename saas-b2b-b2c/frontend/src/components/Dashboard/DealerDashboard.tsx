@@ -106,6 +106,9 @@ setSummary({
   }, [setSummary, setLoading, setLastUpdated]);
 
   const handleLogout = () => {
+    // REAUDIT-4: сначала серверный logout (revoke jti + чистка HttpOnly-cookie),
+    // затем локальная очистка.
+    void apiClient.post('/auth/logout').catch(() => undefined);
     dispatch(logout());
     router.push('/login');
   };

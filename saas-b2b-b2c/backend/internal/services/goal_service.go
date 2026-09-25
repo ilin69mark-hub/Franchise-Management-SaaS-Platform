@@ -202,13 +202,16 @@ func (s *goalService) UpdateGoal(ctx context.Context, id string, dto UpdateGoalD
 	if err != nil {
 		return nil, errors.New("goal not found")
 	}
+	// REAUDIT-4: менять план может ТОЛЬКО тот, кто его назначил (assigner) или
+	// super_admin. Раньше assignee считался "owner" и мог поднять собственную
+	// цель (инфляция KPI/бонусов, доказано в аудите).
 	if requesterRole != string(models.RoleSuperAdmin) {
-		isOwner := goal.AssigneeID.String() == requesterID || goal.AssignerID.String() == requesterID
+		isAssigner := goal.AssignerID.String() == requesterID
 		inTenant := sameGoalTenant(goal.TenantID, tenantID)
-		if !isOwner && !(inTenant && canAssign(requesterRole, goal.Role)) {
+		if !isAssigner && !(inTenant && canAssign(requesterRole, goal.Role)) {
 			return nil, errGoalForbidden
 		}
-		if goal.TenantID != nil && tenantID != "" && !inTenant && !isOwner {
+		if goal.TenantID != nil && tenantID != "" && !inTenant {
 			return nil, errGoalForbidden
 		}
 	}

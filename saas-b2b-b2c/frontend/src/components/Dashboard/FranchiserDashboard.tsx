@@ -17,6 +17,7 @@ import {
 import { useRouter } from 'next/router';
 import { useDispatch } from 'react-redux';
 import { logout } from '@/store/authSlice';
+import apiClient from '@/api/axiosClient';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { useFranchiserStore, FranchiserSummary } from '@/store/franchiserStore';
@@ -62,6 +63,9 @@ const FranchiserDashboard: React.FC<FranchiserDashboardProps> = ({ user, title }
   }, [fetchSummary]);
 
   const handleLogout = () => {
+    // REAUDIT-4: сначала серверный logout (revoke jti + чистка HttpOnly-cookie),
+    // затем локальная очистка.
+    void apiClient.post('/auth/logout').catch(() => undefined);
     dispatch(logout());
     localStorage.removeItem('accessToken');
     router.push('/login');

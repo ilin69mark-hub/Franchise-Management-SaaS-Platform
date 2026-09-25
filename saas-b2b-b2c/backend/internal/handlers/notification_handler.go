@@ -49,7 +49,14 @@ func (h *NotificationHandler) GetMyNotifications(c *gin.Context) {
 		return
 	}
 
-	notifications, err := h.service.GetNotifications(c.Request.Context(), tenantID)
+	// REAUDIT-4: scope = текущий пользователь (иначе читались чужие личные
+	// уведомления tenant'а), tenant берём из БД- identity, а не из claim.
+	user, err := getCurrentUser(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		return
+	}
+	notifications, err := h.service.GetNotifications(c.Request.Context(), tenantID, user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

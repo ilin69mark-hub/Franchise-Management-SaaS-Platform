@@ -20,15 +20,18 @@ func NewAuthHandler(service *services.AuthService) *AuthHandler {
 	return &AuthHandler{service: service}
 }
 
-// allowedRegisterRoles - роли, которые пользователь может выбрать при
-// самостоятельной регистрации. Ни super_admin, ни другие неизвестные роли
-// недопустимы (иначе это privilege escalation).
+// allowedRegisterRoles - роли, доступные на публичной саморегистрации.
+// ТОЛЬКО franchiser: он создаёт себе tenant. Менеджеры/дилеры/управляющие
+// салоном — это внутренние роли: они создаются внутри tenant через POST /users.
+// Раньше любой мог зарегистрироваться как franchiser_manager/dealer/salon_manager
+// и получить аккаунт с tenant_id = NULL, что давало fail-open доступ (REAUDIT-3).
 var allowedRegisterRoles = map[models.Role]bool{
-	models.RoleFranchisor:        true,
-	models.RoleFranchisorManager: true,
-	models.RoleDealer:            true,
-	models.RoleDealerManager:     true,
+	models.RoleFranchisor: true,
 }
+
+// genericRegisterMessage — одинаковый ответ при любом исходе регистрации,
+// чтобы по нему нельзя было перечислить существующие email'ы.
+const genericRegisterMessage = "If this email is available, the account has been created"
 
 func isAllowedRegisterRole(role models.Role) bool {
 	return allowedRegisterRoles[role]
@@ -69,21 +72,21 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		companyName := user.FirstName + " " + user.LastName
 		_, err := h.service.CreateUserWithTenant(user, req.Password, companyName)
 		if err != nil {
-			// F6: дубль email — 409 без текста SQL (enumeration/разведка схемы);
-			// остальное — generic 500, детали в лог.
+			// REAUDIT-3: ответ одинаков для "занят" и прочих ошибок регистрации,
+			// иначе 409/500/201 позволяют перечислить email'ы.
 			if errors.Is(err, services.ErrEmailTaken) {
-				c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+				c.JSON(http.StatusAccepted, gin.H{"message": genericRegisterMessage})
 				return
 			}
 			log.Printf("Register failed for email %q: %v", req.Email, err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+			c.JSON(http.StatusAccepted, gin.H{"message": genericRegisterMessage})
 			return
 		}
 	} else {
 		_, err := h.service.CreateUser(user, req.Password)
 		if err != nil {
 			if errors.Is(err, services.ErrEmailTaken) {
-				c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+				c.JSON(http.StatusAccepted, gin.H{"message": genericRegisterMessage})
 				return
 			}
 			log.Printf("Register failed for email %q: %v", req.Email, err)
@@ -93,16 +96,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// ИСПРАВЛЕНО: Передаем user.SalonID
-	token, refresh, err := h.service.GenerateTokens(user.ID, user.Email, user.Role, user.TenantID, user.SalonID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
-		return
-	}
-	setAuthCookies(c, token, refresh)
-
-	// F7: токенов в теле больше нет — только httpOnly cookie (+ читаемый csrf_token).
-	// XSS больше не может украсть сессию из localStorage/тела ответа.
-	c.JSON(http.StatusCreated, gin.H{"user": *user})
+	// REAUDIT-4: успех НЕ выдаёт cookie-сессию. Раньше успех отличался от
+	// дублика тремя заголовками Set-Cookie — этого было достаточно, чтобы
+	// перечислить email'ы (доказано в аудите). Одинаковый 202 + текст для обоих
+	// исходов, дальше пользователь идёт на /login.
+	c.JSON(http.StatusAccepted, gin.H{"message": genericRegisterMessage})
 }
 
 // setAuthCookies — сессия только в cookie: access/refresh httpOnly,
@@ -140,6 +138,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		}
 		if errors.Is(err, services.ErrTenantBlocked) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "tenant is blocked"})
+			return
+		}
+		// REAUDIT-3: истёкшая подписка = 402 Payment Required.
+		if errors.Is(err, services.ErrTenantSubscriptionExpired) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "subscription expired"})
 			return
 		}
 		// F9: lockout — 429 c Retry-After, без различия "нет юзера/неверный пароль".

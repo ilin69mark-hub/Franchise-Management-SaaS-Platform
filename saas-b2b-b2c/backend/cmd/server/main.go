@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+
+	"franchise-saas-backend/internal/models"
+
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -19,6 +24,7 @@ import (
 	"franchise-saas-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"gorm.io/gorm"
 )
@@ -70,8 +76,12 @@ func main() {
 	// RE-AUDIT: сиды демо-аккаунтов (включая super_admin) — только вне прода.
 	// Раньше выполнялись при каждом старте везде, а сгенерированный пароль
 	// печатался в stderr (credential в логах).
+	// REAUDIT-3: демо-данные (включая super_admin) — только явный SEED_DEMO=true.
+	// Прежний гейт "не prod" включал их в staging/k8s, где APP_ENV/GIN_MODE не заданы.
 	if isProdEnv() {
 		log.Printf("prod mode: skipping demo seeds")
+	} else if !strings.EqualFold(strings.TrimSpace(os.Getenv("SEED_DEMO")), "true") {
+		log.Println("demo seeds skipped (set SEED_DEMO=true to enable)")
 	} else {
 		seedDemoData(db)
 	}
@@ -93,7 +103,7 @@ func main() {
 
 	authService := services.NewAuthService(db)
 	userService := services.NewUserService(db)
-	checklistService := services.NewChecklistService(checklistRepo)
+	checklistService := services.NewChecklistService(checklistRepo).WithUserRepository(userRepo)
 	adminService := services.NewAdminService(db)
 	notifService := services.NewNotificationService(notifRepo)
 	leadService := services.NewLeadService(leadRepo)
@@ -119,6 +129,49 @@ func main() {
 	leadHandler := handlers.NewLeadHandler(leadService)
 	kpiHandler := handlers.NewKPIHandler(db, kpiService, scheduleService, alertService)
 	goalHandler := handlers.NewGoalHandler(goalService)
+
+	// REAUDIT-4: авторизация берёт роль/tenant из БД, а не из JWT-claim.
+	// Без этого понижение роли/перенос в другой tenant действовали до refresh.
+	middleware.SetIdentityResolver(func(ctx context.Context, userID string) (string, string, bool) {
+		uid, err := uuid.Parse(userID)
+		if err != nil {
+			return "", "", false
+		}
+		var u models.User
+		if err := db.WithContext(ctx).Select("id, role, tenant_id, status").First(&u, "id = ?", uid).Error; err != nil {
+			return "", "", false
+		}
+		switch strings.ToLower(strings.TrimSpace(u.Status)) {
+		case "blocked", "suspended", "banned", "disabled", "inactive":
+			return "", "", false
+		}
+		tenant := ""
+		if u.TenantID != nil {
+			// REAUDIT-4: статус и оплата сети проверяются на КАЖДЫЙ запрос.
+			// Раньше block/истечение paid_until действовали только на login/refresh,
+			// и уже выданный access-токен продолжал работать до 24 часов.
+			var tn models.Tenant
+			if err := db.WithContext(ctx).Select("id, status, paid_until, grace_period_days").
+				First(&tn, "id = ?", *u.TenantID).Error; err != nil {
+				return "", "", false
+			}
+			switch strings.ToLower(strings.TrimSpace(tn.Status)) {
+			case "blocked", "suspended":
+				return "", "", false
+			}
+			if tn.PaidUntil != nil {
+				grace := 0
+				if tn.GracePeriodDays > 0 {
+					grace = tn.GracePeriodDays
+				}
+				if time.Now().After(tn.PaidUntil.AddDate(0, 0, grace)) {
+					return "", "", false
+				}
+			}
+			tenant = u.TenantID.String()
+		}
+		return string(u.Role), tenant, true
+	})
 
 	r := gin.Default()
 	// Только доверенные прокси (nginx) могут устанавливать X-Forwarded-For — защита от обхода rate-limit через подделку XFF
